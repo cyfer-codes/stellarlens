@@ -1,6 +1,6 @@
 import { rpc } from "@stellar/stellar-sdk";
 import { createDb } from "@stellarlens/db";
-import { POLL_INTERVAL_MS, SOROBAN_RPC_URL } from "./config.js";
+import { POLL_INTERVAL_MS, SOROBAN_RPC_URL, STELLAR_NETWORK } from "./config.js";
 import { processEventsBatch } from "./events.js";
 import { startRegistryServer } from "./server.js";
 
@@ -13,13 +13,12 @@ async function main() {
   const db = createDb();
 
   startRegistryServer(db);
+  console.log(`indexer starting: network=${STELLAR_NETWORK} rpc=${SOROBAN_RPC_URL} poll=${POLL_INTERVAL_MS}ms`);
 
   for (;;) {
     try {
-      const count = await processEventsBatch(db, server);
-      if (count > 0) {
-        console.log(`indexed ${count} event(s)`);
-      }
+      const { indexedCount, cursor } = await processEventsBatch(db, server);
+      console.log(`poll cycle: indexed ${indexedCount} event(s), cursor=${cursor}`);
     } catch (err) {
       console.error("failed to process events batch:", err);
     }

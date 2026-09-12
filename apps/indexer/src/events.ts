@@ -16,10 +16,15 @@ async function getStoredCursor(db: Database): Promise<string | undefined> {
   return row?.cursor;
 }
 
-export async function processEventsBatch(db: Database, server: rpc.Server): Promise<number> {
+export interface ProcessEventsBatchResult {
+  indexedCount: number;
+  cursor: string | null;
+}
+
+export async function processEventsBatch(db: Database, server: rpc.Server): Promise<ProcessEventsBatchResult> {
   const registeredContracts = await loadRegisteredContracts(db, STELLAR_NETWORK);
   if (registeredContracts.size === 0) {
-    return 0;
+    return { indexedCount: 0, cursor: null };
   }
 
   const cursor = await getStoredCursor(db);
@@ -109,5 +114,5 @@ export async function processEventsBatch(db: Database, server: rpc.Server): Prom
     await deliverWebhooksForEvent(db, payload);
   }
 
-  return indexedCount;
+  return { indexedCount, cursor: response.cursor };
 }

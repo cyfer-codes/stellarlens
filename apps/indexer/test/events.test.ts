@@ -225,13 +225,26 @@ describe("processEventsBatch", () => {
       })
     );
 
-    const indexedCount = await processEventsBatch(db, makeServer());
+    const { indexedCount, cursor } = await processEventsBatch(db, makeServer());
 
     expect(indexedCount).toBe(1);
+    expect(cursor).toBe("CURSOR_FILTER");
     const eventRows = await db.select().from(eventsTable);
     expect(eventRows).toHaveLength(1);
 
     const contractRows = await db.select().from(contracts);
     expect(contractRows.map((c) => c.address)).toEqual(["CONTRACT_REGISTERED"]);
+  });
+
+  it("returns a null cursor and skips the rpc call when no contracts are registered", async () => {
+    const db = getTestDb();
+
+    const getEventsSpy = vi.fn();
+    mswServer.use(mockJsonRpc({ getEvents: getEventsSpy }));
+
+    const result = await processEventsBatch(db, makeServer());
+
+    expect(result).toEqual({ indexedCount: 0, cursor: null });
+    expect(getEventsSpy).not.toHaveBeenCalled();
   });
 });

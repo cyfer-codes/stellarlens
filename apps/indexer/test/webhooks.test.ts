@@ -123,7 +123,7 @@ describe("webhook delivery", () => {
       http.post(WEBHOOK_URL, webhookSpy)
     );
 
-    const indexedCount = await processEventsBatch(db, makeServer());
+    const { indexedCount } = await processEventsBatch(db, makeServer());
 
     expect(indexedCount).toBe(1);
     expect(webhookSpy).toHaveBeenCalledTimes(2);
@@ -153,7 +153,7 @@ describe("webhook delivery", () => {
       })
     );
 
-    const indexedCount = await processEventsBatch(db, makeServer());
+    const { indexedCount } = await processEventsBatch(db, makeServer());
     expect(indexedCount).toBe(1);
 
     const [row] = await db.select().from(contracts).where(eq(contracts.address, "CONTRACT_NO_HOOK"));
