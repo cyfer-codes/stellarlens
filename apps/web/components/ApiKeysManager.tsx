@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useState } from "react";
-import type { ApiKeyRow } from "@/lib/api";
+import type { ApiKeyRow } from "@/lib/apiKeys";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingState } from "@/components/ui/LoadingState";
 
