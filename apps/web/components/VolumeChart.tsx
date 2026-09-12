@@ -2,6 +2,7 @@
 
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { TransferRow } from "@/lib/api";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 function toDayBuckets(transfers: TransferRow[]): { date: string; volume: number }[] {
   const buckets = new Map<string, number>();
@@ -18,7 +19,12 @@ export function VolumeChart({ transfers }: { transfers: TransferRow[] }) {
   const data = toDayBuckets(transfers);
 
   if (data.length === 0) {
-    return <p className="text-sm text-gray-400">No transfer volume to chart yet.</p>;
+    return (
+      <EmptyState
+        title="No transfer volume yet"
+        description="Volume will appear here once transfers are indexed for this contract."
+      />
+    );
   }
 
   return (

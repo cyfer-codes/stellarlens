@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { EventRow } from "@/lib/api";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { LoadingState } from "@/components/ui/LoadingState";
 
 const POLL_INTERVAL_MS = 10000;
 
@@ -61,39 +63,39 @@ export function EventsTable({ contractId }: { contractId: number }) {
   }, [contractId]);
 
   if (loading) {
-    return <p className="text-sm text-gray-400">Loading events…</p>;
+    return <LoadingState label="Loading events…" />;
   }
 
   return (
     <div>
       {error && <p className="mb-2 text-sm text-red-600">Couldn&apos;t refresh events: {error}</p>}
-      <table className="w-full border-collapse text-left text-sm">
-        <thead>
-          <tr className="border-b border-gray-200 text-gray-500">
-            <th className="py-2 font-medium">Ledger</th>
-            <th className="py-2 font-medium">Tx hash</th>
-            <th className="py-2 font-medium">Topic</th>
-            <th className="py-2 font-medium">Decoded data</th>
-          </tr>
-        </thead>
-        <tbody>
-          {events.map((event) => (
-            <tr key={event.id} className="border-b border-gray-100">
-              <td className="py-2">{event.ledger}</td>
-              <td className="py-2 font-mono text-xs">{event.txHash.slice(0, 12)}…</td>
-              <td className="py-2 font-mono text-xs">{formatTopic(event)}</td>
-              <td className="py-2 font-mono text-xs">{formatValue(event)}</td>
+      {events.length === 0 ? (
+        <EmptyState
+          title="No events yet"
+          description="Events will appear here automatically as the indexer picks up activity for this contract."
+        />
+      ) : (
+        <table className="w-full border-collapse text-left text-sm">
+          <thead>
+            <tr className="border-b border-gray-200 text-gray-500">
+              <th className="py-2 font-medium">Ledger</th>
+              <th className="py-2 font-medium">Tx hash</th>
+              <th className="py-2 font-medium">Topic</th>
+              <th className="py-2 font-medium">Decoded data</th>
             </tr>
-          ))}
-          {events.length === 0 && (
-            <tr>
-              <td colSpan={4} className="py-4 text-gray-400">
-                No events indexed yet.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {events.map((event) => (
+              <tr key={event.id} className="border-b border-gray-100">
+                <td className="py-2">{event.ledger}</td>
+                <td className="py-2 font-mono text-xs">{event.txHash.slice(0, 12)}…</td>
+                <td className="py-2 font-mono text-xs">{formatTopic(event)}</td>
+                <td className="py-2 font-mono text-xs">{formatValue(event)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

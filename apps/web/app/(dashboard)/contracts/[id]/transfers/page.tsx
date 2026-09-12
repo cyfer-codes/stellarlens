@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { VolumeChart } from "@/components/VolumeChart";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { ApiNotFoundError, getContract, listTransfers } from "@/lib/api";
 
 const PAGE_SIZE = 20;
@@ -49,35 +50,35 @@ export default async function ContractTransfersPage({
 
       <div>
         <h2 className="mb-3 text-lg font-semibold">All transfers</h2>
-        <table className="w-full border-collapse text-left text-sm">
-          <thead>
-            <tr className="border-b border-gray-200 text-gray-500">
-              <th className="py-2 font-medium">Ledger</th>
-              <th className="py-2 font-medium">From</th>
-              <th className="py-2 font-medium">To</th>
-              <th className="py-2 font-medium">Amount</th>
-              <th className="py-2 font-medium">Tx hash</th>
-            </tr>
-          </thead>
-          <tbody>
-            {transfers.data.map((transfer) => (
-              <tr key={transfer.id} className="border-b border-gray-100">
-                <td className="py-2">{transfer.ledger}</td>
-                <td className="py-2 font-mono text-xs">{transfer.from.slice(0, 10)}…</td>
-                <td className="py-2 font-mono text-xs">{transfer.to.slice(0, 10)}…</td>
-                <td className="py-2">{transfer.amount}</td>
-                <td className="py-2 font-mono text-xs">{transfer.txHash.slice(0, 10)}…</td>
+        {transfers.data.length === 0 ? (
+          <EmptyState
+            title="No transfers yet"
+            description="Transfers will appear here automatically as the indexer picks up activity for this contract."
+          />
+        ) : (
+          <table className="w-full border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 text-gray-500">
+                <th className="py-2 font-medium">Ledger</th>
+                <th className="py-2 font-medium">From</th>
+                <th className="py-2 font-medium">To</th>
+                <th className="py-2 font-medium">Amount</th>
+                <th className="py-2 font-medium">Tx hash</th>
               </tr>
-            ))}
-            {transfers.data.length === 0 && (
-              <tr>
-                <td colSpan={5} className="py-4 text-gray-400">
-                  No transfers indexed yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {transfers.data.map((transfer) => (
+                <tr key={transfer.id} className="border-b border-gray-100">
+                  <td className="py-2">{transfer.ledger}</td>
+                  <td className="py-2 font-mono text-xs">{transfer.from.slice(0, 10)}…</td>
+                  <td className="py-2 font-mono text-xs">{transfer.to.slice(0, 10)}…</td>
+                  <td className="py-2">{transfer.amount}</td>
+                  <td className="py-2 font-mono text-xs">{transfer.txHash.slice(0, 10)}…</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
 
         {transfers.nextCursor !== null && (
           <div className="mt-4">

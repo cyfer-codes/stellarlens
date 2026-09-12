@@ -2,6 +2,8 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 import type { ApiKeyRow } from "@/lib/api";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { LoadingState } from "@/components/ui/LoadingState";
 
 export function ApiKeysManager() {
   const [keys, setKeys] = useState<ApiKeyRow[]>([]);
@@ -102,7 +104,12 @@ export function ApiKeysManager() {
       </form>
 
       {loading ? (
-        <p className="text-sm text-gray-400">Loading api keys…</p>
+        <LoadingState label="Loading api keys…" />
+      ) : keys.length === 0 ? (
+        <EmptyState
+          title="No api keys yet"
+          description="Generate one above to authenticate dashboard requests against the stellarlens api."
+        />
       ) : (
         <table className="w-full border-collapse text-left text-sm">
           <thead>
@@ -138,13 +145,6 @@ export function ApiKeysManager() {
                 </td>
               </tr>
             ))}
-            {keys.length === 0 && (
-              <tr>
-                <td colSpan={4} className="py-4 text-gray-400">
-                  No api keys yet.
-                </td>
-              </tr>
-            )}
           </tbody>
         </table>
       )}
