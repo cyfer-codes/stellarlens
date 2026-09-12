@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "echo \"no tests yet\" && exit 0",
-    "create-user": "tsx scripts/create-user.ts"
+    "create-user": "tsx scripts/create-user.ts",
+    "seed-admin": "tsx scripts/seed-admin.ts"
   },
   "dependencies": {
     "@stellarlens/db": "workspace:*",
