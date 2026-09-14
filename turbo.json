@@ -15,6 +15,10 @@
       "dependsOn": ["^build"],
       "env": ["DATABASE_URL", "SOROBAN_RPC_URL", "STELLAR_NETWORK"]
     },
+    "@stellarlens/indexer#test": {
+      "dependsOn": ["^build", "@stellarlens/api#test"],
+      "env": ["DATABASE_URL", "SOROBAN_RPC_URL", "STELLAR_NETWORK"]
+    },
     "dev": {
       "cache": false,
       "persistent": true
