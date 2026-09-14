@@ -1,5 +1,7 @@
 # stellarlens
 
+**Live:** [stellarlens-web.vercel.app](https://stellarlens-web.vercel.app)
+
 ## Overview
 
 `stellarlens` is a pnpm + Turborepo monorepo. It's a young project — several
