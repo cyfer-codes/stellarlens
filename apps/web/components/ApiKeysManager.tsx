@@ -82,7 +82,7 @@ export function ApiKeysManager() {
         </div>
       )}
 
-      <form onSubmit={handleGenerate} className="flex max-w-sm items-end gap-2">
+      <form onSubmit={handleGenerate} className="flex max-w-sm flex-col gap-2 sm:flex-row sm:items-end">
         <div className="flex-1">
           <label htmlFor="key-name" className="block text-sm font-medium text-gray-700">
             Name <span className="text-gray-400">(optional)</span>
@@ -111,42 +111,44 @@ export function ApiKeysManager() {
           description="Generate one above to authenticate dashboard requests against the stellarlens api."
         />
       ) : (
-        <table className="w-full border-collapse text-left text-sm">
-          <thead>
-            <tr className="border-b border-gray-200 text-gray-500">
-              <th className="py-2 font-medium">Name</th>
-              <th className="py-2 font-medium">Created</th>
-              <th className="py-2 font-medium">Status</th>
-              <th className="py-2 font-medium" />
-            </tr>
-          </thead>
-          <tbody>
-            {keys.map((key) => (
-              <tr key={key.id} className="border-b border-gray-100">
-                <td className="py-2">{key.name ?? "—"}</td>
-                <td className="py-2">{new Date(key.createdAt).toLocaleString()}</td>
-                <td className="py-2">
-                  {key.revokedAt ? (
-                    <span className="text-gray-400">Revoked</span>
-                  ) : (
-                    <span className="text-green-700">Active</span>
-                  )}
-                </td>
-                <td className="py-2 text-right">
-                  {!key.revokedAt && (
-                    <button
-                      type="button"
-                      onClick={() => handleRevoke(key.id)}
-                      className="text-xs font-medium text-red-600 hover:underline"
-                    >
-                      Revoke
-                    </button>
-                  )}
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[520px] border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 text-gray-500">
+                <th className="py-2 font-medium">Name</th>
+                <th className="py-2 font-medium">Created</th>
+                <th className="py-2 font-medium">Status</th>
+                <th className="py-2 font-medium" />
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {keys.map((key) => (
+                <tr key={key.id} className="border-b border-gray-100">
+                  <td className="py-2">{key.name ?? "—"}</td>
+                  <td className="py-2">{new Date(key.createdAt).toLocaleString()}</td>
+                  <td className="py-2">
+                    {key.revokedAt ? (
+                      <span className="text-gray-400">Revoked</span>
+                    ) : (
+                      <span className="text-green-700">Active</span>
+                    )}
+                  </td>
+                  <td className="py-2 text-right">
+                    {!key.revokedAt && (
+                      <button
+                        type="button"
+                        onClick={() => handleRevoke(key.id)}
+                        className="text-xs font-medium text-red-600 hover:underline"
+                      >
+                        Revoke
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

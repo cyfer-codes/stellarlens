@@ -75,26 +75,28 @@ export function EventsTable({ contractId }: { contractId: number }) {
           description="Events will appear here automatically as the indexer picks up activity for this contract."
         />
       ) : (
-        <table className="w-full border-collapse text-left text-sm">
-          <thead>
-            <tr className="border-b border-gray-200 text-gray-500">
-              <th className="py-2 font-medium">Ledger</th>
-              <th className="py-2 font-medium">Tx hash</th>
-              <th className="py-2 font-medium">Topic</th>
-              <th className="py-2 font-medium">Decoded data</th>
-            </tr>
-          </thead>
-          <tbody>
-            {events.map((event) => (
-              <tr key={event.id} className="border-b border-gray-100">
-                <td className="py-2">{event.ledger}</td>
-                <td className="py-2 font-mono text-xs">{event.txHash.slice(0, 12)}…</td>
-                <td className="py-2 font-mono text-xs">{formatTopic(event)}</td>
-                <td className="py-2 font-mono text-xs">{formatValue(event)}</td>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 text-gray-500">
+                <th className="py-2 font-medium">Ledger</th>
+                <th className="py-2 font-medium">Tx hash</th>
+                <th className="py-2 font-medium">Topic</th>
+                <th className="py-2 font-medium">Decoded data</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {events.map((event) => (
+                <tr key={event.id} className="border-b border-gray-100">
+                  <td className="py-2">{event.ledger}</td>
+                  <td className="py-2 font-mono text-xs">{event.txHash.slice(0, 12)}…</td>
+                  <td className="py-2 font-mono text-xs">{formatTopic(event)}</td>
+                  <td className="py-2 font-mono text-xs">{formatValue(event)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

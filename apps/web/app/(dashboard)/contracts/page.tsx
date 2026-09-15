@@ -17,28 +17,30 @@ export default async function ContractsPage() {
         <ContractsOnboarding />
       ) : (
         <>
-          <table className="w-full border-collapse text-left text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 text-gray-500">
-                <th className="py-2 font-medium">Address</th>
-                <th className="py-2 font-medium">Name</th>
-                <th className="py-2 font-medium">Network</th>
-              </tr>
-            </thead>
-            <tbody>
-              {contracts.map((contract) => (
-                <tr key={contract.id} className="border-b border-gray-100">
-                  <td className="py-2 font-mono text-xs">
-                    <Link href={`/contracts/${contract.id}`} className="hover:underline">
-                      {contract.address}
-                    </Link>
-                  </td>
-                  <td className="py-2">{contract.name ?? "—"}</td>
-                  <td className="py-2">{contract.network}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[480px] border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 text-gray-500">
+                  <th className="py-2 font-medium">Address</th>
+                  <th className="py-2 font-medium">Name</th>
+                  <th className="py-2 font-medium">Network</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {contracts.map((contract) => (
+                  <tr key={contract.id} className="border-b border-gray-100">
+                    <td className="py-2 font-mono text-xs">
+                      <Link href={`/contracts/${contract.id}`} className="hover:underline">
+                        {contract.address}
+                      </Link>
+                    </td>
+                    <td className="py-2">{contract.name ?? "—"}</td>
+                    <td className="py-2">{contract.network}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           <div>
             <h2 className="mb-3 text-lg font-semibold">Add contract</h2>
