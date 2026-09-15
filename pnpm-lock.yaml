@@ -175,10 +175,23 @@ importers:
         version: 5.9.3
 
   packages/cli:
+    dependencies:
+      '@stellarlens/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      commander:
+        specifier: ^15.0.0
+        version: 15.0.0
     devDependencies:
+      '@types/node':
+        specifier: ^20.19.43
+        version: 20.19.43
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@20.19.43)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))
 
   packages/db:
     dependencies:
