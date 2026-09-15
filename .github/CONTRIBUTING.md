@@ -26,7 +26,7 @@ stellarlens is a pnpm + Turborepo monorepo. You'll need:
 Set up your environment:
 
 ```bash
-git clone https://github.com/cyber-punk112/stellarlens.git
+git clone https://github.com/cyfer-codes/stellarlens.git
 cd stellarlens
 pnpm install
 cp .env.example .env
