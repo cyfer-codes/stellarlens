@@ -184,7 +184,7 @@ importers:
         version: 15.0.0
     devDependencies:
       '@types/node':
-        specifier: ^20.19.43
+        specifier: ^20.0.0
         version: 20.19.43
       typescript:
         specifier: ^5.7.0
