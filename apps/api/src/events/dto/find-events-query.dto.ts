@@ -1,5 +1,6 @@
 import { Type } from "class-transformer";
 import { IsInt, IsISO8601, IsOptional, IsString, Max, Min } from "class-validator";
+import { IsBefore } from "../../common/validators/is-before.validator";
 
 export class FindEventsQueryDto {
   @IsOptional()
@@ -21,6 +22,7 @@ export class FindEventsQueryDto {
 
   @IsOptional()
   @IsISO8601()
+  @IsBefore("to")
   from?: string;
 
   @IsOptional()
