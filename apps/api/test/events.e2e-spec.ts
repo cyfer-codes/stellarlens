@@ -84,4 +84,15 @@ describe("events (e2e)", () => {
     const response = await request(getApp().getHttpServer()).get("/contracts/999999/events").set("x-api-key", apiKey);
     expect(response.status).toBe(404);
   });
+
+  it("returns 400 when 'from' is after 'to'", async () => {
+    const contractId = await registerContract(apiKey, "CONTRACT_EVENTS_D");
+    const response = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/events`)
+      .query({ from: "2026-02-01T00:00:00.000Z", to: "2026-01-01T00:00:00.000Z" })
+      .set("x-api-key", apiKey);
+
+    expect(response.status).toBe(400);
+    expect(JSON.stringify(response.body)).toContain("'from' must be before or equal to 'to'");
+  });
 });
