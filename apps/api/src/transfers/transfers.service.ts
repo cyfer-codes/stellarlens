@@ -20,6 +20,9 @@ export class TransfersService {
     if (query.cursor !== undefined) {
       conditions.push(gt(tokenTransfers.id, query.cursor));
     }
+    if (query.asset !== undefined) {
+      conditions.push(eq(tokenTransfers.asset, query.asset));
+    }
 
     const rows = await this.db
       .select()
