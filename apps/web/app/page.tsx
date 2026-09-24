@@ -28,6 +28,8 @@ export default async function LandingPage() {
     redirect("/contracts");
   }
 
+  const publicDemoEnabled = process.env.PUBLIC_DEMO === "true";
+
   return (
     <main className="min-h-screen">
       <header className="border-b border-gray-200">
@@ -56,7 +58,7 @@ export default async function LandingPage() {
             Sign in
           </Link>
           <a
-            href="#architecture"
+            href={publicDemoEnabled ? "/contracts" : "#architecture"}
             className="rounded border border-gray-300 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
           >
             View demo

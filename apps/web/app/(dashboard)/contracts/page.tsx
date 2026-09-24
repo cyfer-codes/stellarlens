@@ -1,10 +1,13 @@
 import Link from "next/link";
 import { AddContractForm } from "@/components/AddContractForm";
 import { ContractsOnboarding } from "@/components/ContractsOnboarding";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { listContracts } from "@/lib/api";
+import { getSession } from "@/lib/session";
 
 export default async function ContractsPage() {
-  const contracts = await listContracts();
+  const [contracts, session] = await Promise.all([listContracts(), getSession()]);
+  const authenticated = Boolean(session);
 
   return (
     <div className="space-y-10">
@@ -14,7 +17,11 @@ export default async function ContractsPage() {
       </div>
 
       {contracts.length === 0 ? (
-        <ContractsOnboarding />
+        authenticated ? (
+          <ContractsOnboarding />
+        ) : (
+          <EmptyState title="No contracts registered yet" />
+        )
       ) : (
         <>
           <div className="overflow-x-auto">
@@ -42,10 +49,12 @@ export default async function ContractsPage() {
             </table>
           </div>
 
-          <div>
-            <h2 className="mb-3 text-lg font-semibold">Add contract</h2>
-            <AddContractForm />
-          </div>
+          {authenticated && (
+            <div>
+              <h2 className="mb-3 text-lg font-semibold">Add contract</h2>
+              <AddContractForm />
+            </div>
+          )}
         </>
       )}
     </div>

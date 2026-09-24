@@ -9,12 +9,13 @@ const NAV_ITEMS = [
   { href: "/contracts", label: "Contracts" },
   { href: "/events", label: "Events" },
   { href: "/transfers", label: "Transfers" },
-  { href: "/settings", label: "Settings" }
+  { href: "/settings", label: "Settings", requiresAuth: true }
 ];
 
-export function Sidebar() {
+export function Sidebar({ authenticated }: { authenticated: boolean }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const navItems = NAV_ITEMS.filter((item) => authenticated || !item.requiresAuth);
 
   return (
     <>
@@ -63,7 +64,7 @@ export function Sidebar() {
         </div>
 
         <ul className="space-y-1">
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const active = pathname.startsWith(item.href);
             return (
               <li key={item.href}>
@@ -81,11 +82,23 @@ export function Sidebar() {
           })}
         </ul>
 
-        <form action={logout} className="mt-6 border-t border-gray-200 pt-4">
-          <button type="submit" className="w-full rounded px-3 py-2 text-left text-sm text-gray-500 hover:bg-gray-100">
-            Sign out
-          </button>
-        </form>
+        {authenticated ? (
+          <form action={logout} className="mt-6 border-t border-gray-200 pt-4">
+            <button type="submit" className="w-full rounded px-3 py-2 text-left text-sm text-gray-500 hover:bg-gray-100">
+              Sign out
+            </button>
+          </form>
+        ) : (
+          <div className="mt-6 border-t border-gray-200 pt-4">
+            <Link
+              href="/login"
+              onClick={() => setOpen(false)}
+              className="block rounded px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+            >
+              Sign in
+            </Link>
+          </div>
+        )}
       </nav>
     </>
   );

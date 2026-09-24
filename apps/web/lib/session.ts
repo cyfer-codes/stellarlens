@@ -4,6 +4,8 @@
  * Node-runtime Server Actions/Route Handlers without a separate implementation.
  */
 
+import { cookies } from "next/headers";
+
 export const SESSION_COOKIE_NAME = "stellarlens_session";
 export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
@@ -75,4 +77,10 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
   }
 
   return payload;
+}
+
+/** Reads and verifies the session cookie for the current request. Server Components/Actions only. */
+export async function getSession(): Promise<SessionPayload | null> {
+  const token = cookies().get(SESSION_COOKIE_NAME)?.value;
+  return token ? verifySessionToken(token) : null;
 }
