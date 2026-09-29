@@ -36,12 +36,20 @@ async function postWebhook(url: string, body: string, signature: string): Promis
   }
 }
 
+/** A webhook with no eventTypes fires on everything; otherwise the event's topic[0] must be in the list. */
+function matchesEventTypes(webhook: { eventTypes: string[] | null }, payload: WebhookEventPayload): boolean {
+  if (!webhook.eventTypes || webhook.eventTypes.length === 0) {
+    return true;
+  }
+  const eventType = payload.topic[0];
+  return typeof eventType === "string" && webhook.eventTypes.includes(eventType);
+}
+
 /** Best-effort delivery: failures are logged, never thrown, so one bad endpoint can't stall indexing. */
 export async function deliverWebhooksForEvent(db: Database, payload: WebhookEventPayload): Promise<void> {
-  const recipients = await db
-    .select()
-    .from(webhooksTable)
-    .where(eq(webhooksTable.contractId, payload.contractId));
+  const recipients = (
+    await db.select().from(webhooksTable).where(eq(webhooksTable.contractId, payload.contractId))
+  ).filter((webhook) => matchesEventTypes(webhook, payload));
 
   if (recipients.length === 0) {
     return;

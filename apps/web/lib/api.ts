@@ -70,6 +70,22 @@ export interface ListTransfersParams {
   limit?: number;
 }
 
+export interface Webhook {
+  id: number;
+  url: string;
+  eventTypes: string[] | null;
+  createdAt: string;
+}
+
+export interface CreatedWebhook extends Webhook {
+  secret: string;
+}
+
+export interface CreateWebhookInput {
+  url: string;
+  eventTypes?: string[];
+}
+
 export class ApiNotFoundError extends Error {}
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -140,4 +156,19 @@ export function listTransfers(contractId: number, params?: ListTransfersParams):
   }
   const qs = query.toString();
   return apiFetch<TransfersPage>(`/contracts/${contractId}/transfers${qs ? `?${qs}` : ""}`);
+}
+
+export function listWebhooks(contractId: number): Promise<Webhook[]> {
+  return apiFetch<Webhook[]>(`/contracts/${contractId}/webhooks`);
+}
+
+export function createWebhook(contractId: number, input: CreateWebhookInput): Promise<CreatedWebhook> {
+  return apiFetch<CreatedWebhook>(`/contracts/${contractId}/webhooks`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function deleteWebhook(contractId: number, id: number): Promise<void> {
+  return apiFetch<void>(`/contracts/${contractId}/webhooks/${id}`, { method: "DELETE" });
 }

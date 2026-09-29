@@ -35,9 +35,9 @@ function buildLatestLedger(sequence: number) {
   };
 }
 
-async function registerWebhook(contractId: number, secret: string) {
+async function registerWebhook(contractId: number, secret: string, eventTypes?: string[]) {
   const db = getTestDb();
-  await db.insert(webhooksTable).values({ contractId, url: WEBHOOK_URL, secret });
+  await db.insert(webhooksTable).values({ contractId, url: WEBHOOK_URL, secret, eventTypes: eventTypes ?? null });
 }
 
 describe("webhook delivery", () => {
@@ -127,6 +127,72 @@ describe("webhook delivery", () => {
 
     expect(indexedCount).toBe(1);
     expect(webhookSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("skips a webhook whose eventTypes doesn't include the event's topic", async () => {
+    const db = getTestDb();
+    const contract = await registerContract(db, { address: "CONTRACT_HOOK_FILTERED", network: NETWORK });
+    await registerWebhook(contract.id, "filtered-secret", ["mint"]);
+
+    const webhookSpy = vi.fn(() => HttpResponse.json({ ok: true }));
+
+    mswServer.use(
+      mockJsonRpc({
+        getLatestLedger: () => buildLatestLedger(8000),
+        getEvents: () => ({
+          events: [
+            {
+              id: "0000000000000000000-0000000000",
+              ledger: 8005,
+              txHash: "a".repeat(64),
+              contractId: "CONTRACT_HOOK_FILTERED",
+              topic: [symbolXdr("fee")],
+              value: i128Xdr(-1n)
+            }
+          ],
+          cursor: "CURSOR_HOOK_FILTERED",
+          latestLedger: 8005
+        })
+      }),
+      http.post(WEBHOOK_URL, webhookSpy)
+    );
+
+    await processEventsBatch(db, makeServer());
+
+    expect(webhookSpy).not.toHaveBeenCalled();
+  });
+
+  it("fires a webhook whose eventTypes includes the event's topic", async () => {
+    const db = getTestDb();
+    const contract = await registerContract(db, { address: "CONTRACT_HOOK_MATCHED", network: NETWORK });
+    await registerWebhook(contract.id, "matched-secret", ["fee", "mint"]);
+
+    const webhookSpy = vi.fn(() => HttpResponse.json({ ok: true }));
+
+    mswServer.use(
+      mockJsonRpc({
+        getLatestLedger: () => buildLatestLedger(8500),
+        getEvents: () => ({
+          events: [
+            {
+              id: "0000000000000000000-0000000000",
+              ledger: 8505,
+              txHash: "b".repeat(64),
+              contractId: "CONTRACT_HOOK_MATCHED",
+              topic: [symbolXdr("fee")],
+              value: i128Xdr(-1n)
+            }
+          ],
+          cursor: "CURSOR_HOOK_MATCHED",
+          latestLedger: 8505
+        })
+      }),
+      http.post(WEBHOOK_URL, webhookSpy)
+    );
+
+    await processEventsBatch(db, makeServer());
+
+    expect(webhookSpy).toHaveBeenCalledTimes(1);
   });
 
   it("does not throw when a webhook contract has no registered endpoints", async () => {

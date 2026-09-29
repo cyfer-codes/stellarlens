@@ -10,6 +10,7 @@ export const webhooks = pgTable(
       .references(() => contracts.id),
     url: text("url").notNull(),
     secret: text("secret").notNull(),
+    eventTypes: text("event_types").array(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
   },
   (table) => [index("webhooks_contract_id_idx").on(table.contractId)]

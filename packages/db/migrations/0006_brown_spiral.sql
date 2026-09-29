@@ -1,0 +1,1 @@
+ALTER TABLE "webhooks" ADD COLUMN "event_types" text[];

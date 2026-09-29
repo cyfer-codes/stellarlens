@@ -17,9 +17,10 @@ export class WebhooksService {
     await this.contractsService.findOne(contractId);
 
     const secret = randomBytes(32).toString("hex");
+    const eventTypes = dto.eventTypes && dto.eventTypes.length > 0 ? dto.eventTypes : null;
     const [webhook] = await this.db
       .insert(webhooks)
-      .values({ contractId, url: dto.url, secret })
+      .values({ contractId, url: dto.url, secret, eventTypes })
       .returning();
     return webhook;
   }
@@ -28,7 +29,7 @@ export class WebhooksService {
     await this.contractsService.findOne(contractId);
 
     return this.db
-      .select({ id: webhooks.id, url: webhooks.url, createdAt: webhooks.createdAt })
+      .select({ id: webhooks.id, url: webhooks.url, eventTypes: webhooks.eventTypes, createdAt: webhooks.createdAt })
       .from(webhooks)
       .where(eq(webhooks.contractId, contractId));
   }

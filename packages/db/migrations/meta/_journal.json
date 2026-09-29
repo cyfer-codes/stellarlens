@@ -43,6 +43,13 @@
       "when": 1789178878607,
       "tag": "0005_smart_mac_gargan",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790658429158,
+      "tag": "0006_brown_spiral",
+      "breakpoints": true
     }
   ]
 }
