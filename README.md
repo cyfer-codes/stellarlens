@@ -1,5 +1,10 @@
 # stellarlens
 
+[![CI](https://github.com/cyfer-codes/stellarlens/actions/workflows/ci.yml/badge.svg)](https://github.com/cyfer-codes/stellarlens/actions/workflows/ci.yml)
+
+**Status:** CI passing on `main` — lint, typecheck, build, and the api/indexer/web test suites are all
+green (see the badge above for the current state).
+
 - **Live:** [stellarlens-web.vercel.app](https://stellarlens-web.vercel.app)
 - **Live demo:** [stellarlens-web.vercel.app/contracts](https://stellarlens-web.vercel.app/contracts) —
   browse real indexed contracts, events, and transfers with no sign-in required.

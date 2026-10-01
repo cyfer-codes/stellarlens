@@ -1,6 +1,6 @@
 # Seed issues — good first issue backlog
 
-35 well-scoped issues to paste into GitHub manually, spread across the six areas of the
+40 well-scoped issues to paste into GitHub manually, spread across the six areas of the
 monorepo. Each one is grounded in the current code (file paths included) so a first-time
 contributor can find their footing quickly.
 
@@ -12,7 +12,12 @@ signals relative sizing, roughly: trivial = a focused single-file change with an
 fix, medium = touches a few files and/or needs a migration or new test, high = a real
 feature slice or something that needs a design decision along the way.
 
-Mix across this batch: 15 trivial, 16 medium, 4 high.
+Mix across this batch: 18 trivial, 18 medium, 4 high.
+
+**Note on #17 and #31:** both have since landed (webhooks management UI, commit `929c184`;
+3 of 6 README screenshots, commit `4f698a0`) — left in place as a historical record rather
+than renumbering, but don't paste either into GitHub as-is. #31's remaining scope (login,
+onboarding, settings screenshots) is still open.
 
 ---
 
@@ -668,3 +673,119 @@ bodies.
       doc explains how to reach it.
 
 **Files to look at:** `apps/api/src/**/*.controller.ts`, `apps/api/src/**/dto/*.ts`
+
+---
+
+## area:web — webhooks & demo mode
+
+Five more, grounded in the webhooks management UI and `PUBLIC_DEMO` read-only mode added
+after the original 35 (commits `929c184` and `077d407`/`4f698a0`).
+
+### 36. Return 404, not 502, from the webhooks/events list proxy routes for an unknown contract
+**Complexity:** trivial
+
+**Scope:** `apps/web/app/api/contracts/[id]/webhooks/route.ts`'s `GET` handler (and the
+sibling `apps/web/app/api/contracts/[id]/events/route.ts`) catch every error from the api
+generically and respond 502 — even when the underlying `apps/api` 404s because the
+contract doesn't exist. `ApiNotFoundError` is already exported from `apps/web/lib/api.ts`
+and already used this way by the webhooks `DELETE` route
+(`apps/web/app/api/contracts/[id]/webhooks/[webhookId]/route.ts`); apply the same `catch`
+pattern to both `GET` handlers.
+
+**Acceptance criteria:**
+- [ ] `GET /api/contracts/:id/webhooks` for a nonexistent contract id returns 404, not 502.
+- [ ] `GET /api/contracts/:id/events` for a nonexistent contract id returns 404, not 502.
+- [ ] Existing successful-list behavior is unchanged.
+
+**Files to look at:** `apps/web/app/api/contracts/[id]/webhooks/route.ts`, `apps/web/app/api/contracts/[id]/events/route.ts`, `apps/web/lib/api.ts`
+
+---
+
+### 37. Add a "send test event" action for registered webhooks
+**Complexity:** medium
+
+**Scope:** Once a webhook is registered (`apps/api/src/webhooks/webhooks.service.ts`),
+there's no way to confirm the receiving endpoint actually works until a real contract
+event fires one — which, on testnet, can be minutes or hours away. Add a
+`POST /contracts/:contractId/webhooks/:id/test` endpoint that builds a synthetic
+`WebhookEventPayload`-shaped body, signs it with the webhook's stored secret using the same
+HMAC scheme as `apps/indexer/src/webhooks.ts`'s `postWebhook`, and POSTs it immediately —
+then wire a "Send test event" button into `WebhooksManager.tsx` that calls it and shows the
+result.
+
+**Acceptance criteria:**
+- [ ] `POST /contracts/:contractId/webhooks/:id/test` delivers one signed test payload to
+      the webhook's URL and reports success/failure (status code, or timeout) back to the
+      caller.
+- [ ] The signature uses the same header and HMAC construction as real event deliveries.
+- [ ] `WebhooksManager` shows a "Send test event" button per webhook and surfaces the
+      result inline.
+- [ ] A test covers both a successful delivery and a failing one (e.g. mocked fetch
+      returning a non-2xx status).
+
+**Files to look at:** `apps/api/src/webhooks/webhooks.controller.ts`, `apps/api/src/webhooks/webhooks.service.ts`, `apps/indexer/src/webhooks.ts` (signing pattern to reuse), `apps/web/components/WebhooksManager.tsx`
+
+---
+
+### 38. Suggest known event names in the webhook "Events" field
+**Complexity:** trivial
+
+**Scope:** `WebhooksManager.tsx`'s "Events" input (`apps/web/components/WebhooksManager.tsx`)
+is a blind comma-separated text field — there's no way to know what event names (`topic[0]`,
+e.g. `"transfer"`, `"mint"`, `"approve"`) this contract has actually emitted without
+checking the Events table separately. Wire up an HTML `<datalist>` populated from this
+contract's already-indexed events (see `EventsTable.tsx`'s `formatTopic` for how `topic[0]`
+is already extracted) so the field autocompletes against real event names.
+
+**Acceptance criteria:**
+- [ ] Typing in the Events field shows autocomplete suggestions drawn from this contract's
+      actually-indexed event topics.
+- [ ] Typing a name not in the list is still accepted — the suggestions are a convenience,
+      not a restriction.
+- [ ] No new npm dependency introduced.
+
+**Files to look at:** `apps/web/components/WebhooksManager.tsx`, `apps/web/components/EventsTable.tsx` (topic-extraction pattern), `apps/web/lib/api.ts`
+
+---
+
+### 39. Rate-limit or cache anonymous `PUBLIC_DEMO` read traffic
+**Complexity:** medium
+
+**Scope:** When `PUBLIC_DEMO=true`, `apps/web/middleware.ts` lets any unauthenticated
+visitor hit the read-only contracts/events/transfers/webhooks routes with no throttling at
+all — unlike `apps/api`'s api-key traffic, which already goes through
+`ApiKeyThrottlerGuard`. A public demo link posted anywhere (see the README's "Live demo"
+link) could generate enough traffic to run up the api's request volume unnecessarily. Add
+either a lightweight per-IP rate limit in `middleware.ts` for the `PUBLIC_DEMO` paths, or a
+short-lived cache (a few seconds) on the proxy routes under
+`apps/web/app/api/contracts/[id]/` — whichever fits the existing stack better, and document
+the tradeoff you picked in the PR.
+
+**Acceptance criteria:**
+- [ ] Unauthenticated requests to a `PUBLIC_DEMO` read route are measurably throttled or
+      cached under repeated rapid requests from the same client.
+- [ ] Authenticated/non-demo traffic is unaffected.
+- [ ] The chosen approach (rate limit vs. cache) and its parameters are explained in the PR
+      description.
+
+**Files to look at:** `apps/web/middleware.ts`, `apps/web/app/api/contracts/[id]/`, `apps/api/src/auth/guards/api-key-throttler.guard.ts` (pattern to reference)
+
+---
+
+### 40. Pause `EventsTable`'s background polling for hidden tabs
+**Complexity:** trivial
+
+**Scope:** `EventsTable.tsx`'s 10-second `setInterval` poll
+(`apps/web/components/EventsTable.tsx`) keeps firing even when its tab is backgrounded or
+minimized — wasted load, especially for anonymous `PUBLIC_DEMO` visitors who may leave a
+tab open indefinitely. Use the Page Visibility API (`document.visibilityState` /
+`visibilitychange`) to pause polling while the tab is hidden and resume — with an immediate
+refresh — when it becomes visible again.
+
+**Acceptance criteria:**
+- [ ] No network requests fire from `EventsTable` while its tab is hidden.
+- [ ] Returning to the tab triggers an immediate refresh and resumes the normal polling
+      cadence.
+- [ ] No new npm dependency introduced.
+
+**Files to look at:** `apps/web/components/EventsTable.tsx`
