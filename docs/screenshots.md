@@ -1,26 +1,26 @@
 # Screenshots for the README
 
-Demo screenshots aren't captured yet — this is a checklist of what to grab and where they'll live once
-the README gets a visuals section.
+Checklist of what to grab for the README's visuals section, and where they live.
 
 ## Setup
 
 - Seed a little real data first (a contract or two, a few indexed events/transfers, one api key) so the
-  screenshots show the populated states, not just empty tables.
+  screenshots show the populated states, not just empty tables. `pnpm --filter @stellarlens/web seed-demo`
+  does this for contracts/events/transfers.
 - Browser window at **1440×900**, light mode (the app doesn't have a dark theme).
 - Save as PNG under `docs/screenshots/`, named per the list below.
 
 ## Shots to capture
 
-| File | Page | State |
-|---|---|---|
-| `login.png` | `/login` | Signed out |
-| `onboarding.png` | `/contracts` | Zero contracts registered (the onboarding screen) |
-| `contracts-list.png` | `/contracts` | One or more contracts registered |
-| `contract-detail.png` | `/contracts/:id` | Stats cards + live events table populated |
-| `contract-transfers.png` | `/contracts/:id/transfers` | Volume chart + transfers table populated |
+| File | Page | State | Status |
+|---|---|---|---|
+| `login.png` | `/login` | Signed out | not yet captured |
+| `onboarding.png` | `/contracts` | Zero contracts registered (the onboarding screen) | not yet captured |
+| `contracts-list.png` | `/contracts` | One or more contracts registered | captured, in README |
+| `contract-detail.png` | `/contracts/:id` | Stats cards + live events table populated | captured, in README |
+| `contract-transfers.png` | `/contracts/:id/transfers` | Volume chart + transfers table populated | captured, in README |
 | `settings.png` | `/settings` | Api keys list, ideally right after generating one (showing the
-  one-time reveal banner) |
+  one-time reveal banner) | not yet captured |
 
 ## Before publishing
 

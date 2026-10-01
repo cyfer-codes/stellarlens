@@ -1,6 +1,8 @@
 # stellarlens
 
-**Live:** [stellarlens-web.vercel.app](https://stellarlens-web.vercel.app)
+- **Live:** [stellarlens-web.vercel.app](https://stellarlens-web.vercel.app)
+- **Live demo:** [stellarlens-web.vercel.app/contracts](https://stellarlens-web.vercel.app/contracts) —
+  browse real indexed contracts, events, and transfers with no sign-in required.
 
 ## What is stellarlens?
 
@@ -11,6 +13,62 @@ smart contracts on Stellar. Register a contract address, and stellarlens:
 - detects SEP-41 token transfers and tracks volume/sender/receiver stats,
 - fires signed webhooks to your own endpoints as new events land,
 - and surfaces all of it in a login-gated web dashboard, a REST api, a typed SDK, and a CLI.
+
+## Screenshots
+
+<table>
+<tr>
+<td align="center">Contracts</td>
+<td align="center">Contract detail (events)</td>
+<td align="center">Transfers</td>
+</tr>
+<tr>
+<td><a href="docs/screenshots/contracts-list.png"><img src="docs/screenshots/contracts-list.png" width="320"></a></td>
+<td><a href="docs/screenshots/contract-detail.png"><img src="docs/screenshots/contract-detail.png" width="320"></a></td>
+<td><a href="docs/screenshots/contract-transfers.png"><img src="docs/screenshots/contract-transfers.png" width="320"></a></td>
+</tr>
+</table>
+
+Taken from a `PUBLIC_DEMO` deployment — no login required. See
+[docs/screenshots.md](docs/screenshots.md) for the full capture checklist (a few more views — login,
+onboarding, settings — are still outstanding).
+
+## Quickstart
+
+```bash
+git clone https://github.com/cyfer-codes/stellarlens.git
+cd stellarlens
+pnpm install
+cp .env.example .env
+docker compose up -d postgres redis   # Postgres on localhost:5433, Redis on 6379
+
+pnpm --filter @stellarlens/db db:migrate
+pnpm --filter @stellarlens/web seed-admin   # SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD env vars
+
+pnpm dev   # starts every app in watch mode
+```
+
+Then open the web dashboard (default `:3000` — see the per-workspace table below for exact ports and
+env vars each app needs), log in with the seeded admin account, and generate your first api key from
+**Settings**.
+
+| Workspace | Dev command | Notes |
+|---|---|---|
+| `apps/api` | `pnpm --filter @stellarlens/api dev` | Listens on `:3000` by default (`PORT` overrides). `GET /health` is public |
+| `apps/web` | `pnpm --filter @stellarlens/web dev` | Also defaults to `:3000` — run with a different `PORT` if both are up. Needs `API_URL`, `API_KEY`, `DATABASE_URL`, `SESSION_SECRET` (see `apps/web/.env.example`) |
+| `apps/indexer` | `pnpm --filter @stellarlens/indexer dev` | Needs `DATABASE_URL`, `SOROBAN_RPC_URL`, `STELLAR_NETWORK` |
+| `packages/sdk` | `pnpm --filter @stellarlens/sdk dev` | `tsup --watch` |
+| `packages/cli` | `pnpm --filter @stellarlens/cli dev` | Needs `STELLARLENS_API_URL` / `STELLARLENS_API_KEY` to actually run the built binary — see `packages/cli/README.md` |
+| `packages/db` | n/a (library) | `db:generate` / `db:migrate` / `db:studio` wrap `drizzle-kit`; needs `DATABASE_URL` and Postgres running |
+
+Full pipeline check before opening a PR:
+
+```bash
+pnpm lint
+pnpm typecheck
+pnpm build
+pnpm test
+```
 
 ## Architecture
 
@@ -75,46 +133,9 @@ docker-compose.yml   Local Postgres + Redis
 
 Workspaces are `apps/*` and `packages/*` (see `pnpm-workspace.yaml`), scoped as `@stellarlens/<name>`.
 
-## Quickstart
-
-```bash
-git clone https://github.com/cyfer-codes/stellarlens.git
-cd stellarlens
-pnpm install
-cp .env.example .env
-docker compose up -d postgres redis   # Postgres on localhost:5433, Redis on 6379
-
-pnpm --filter @stellarlens/db db:migrate
-pnpm --filter @stellarlens/web seed-admin   # SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD env vars
-
-pnpm dev   # starts every app in watch mode
-```
-
-Then open the web dashboard (default `:3000` — see the per-workspace table below for exact ports and
-env vars each app needs), log in with the seeded admin account, and generate your first api key from
-**Settings**.
-
-| Workspace | Dev command | Notes |
-|---|---|---|
-| `apps/api` | `pnpm --filter @stellarlens/api dev` | Listens on `:3000` by default (`PORT` overrides). `GET /health` is public |
-| `apps/web` | `pnpm --filter @stellarlens/web dev` | Also defaults to `:3000` — run with a different `PORT` if both are up. Needs `API_URL`, `API_KEY`, `DATABASE_URL`, `SESSION_SECRET` (see `apps/web/.env.example`) |
-| `apps/indexer` | `pnpm --filter @stellarlens/indexer dev` | Needs `DATABASE_URL`, `SOROBAN_RPC_URL`, `STELLAR_NETWORK` |
-| `packages/sdk` | `pnpm --filter @stellarlens/sdk dev` | `tsup --watch` |
-| `packages/cli` | `pnpm --filter @stellarlens/cli dev` | Needs `STELLARLENS_API_URL` / `STELLARLENS_API_KEY` to actually run the built binary — see `packages/cli/README.md` |
-| `packages/db` | n/a (library) | `db:generate` / `db:migrate` / `db:studio` wrap `drizzle-kit`; needs `DATABASE_URL` and Postgres running |
-
-Full pipeline check before opening a PR:
-
-```bash
-pnpm lint
-pnpm typecheck
-pnpm build
-pnpm test
-```
-
 ## Docs
 
-- [docs/screenshots.md](docs/screenshots.md) — what to capture for the README's (forthcoming) visuals section
+- [docs/screenshots.md](docs/screenshots.md) — capture checklist for the README's screenshots
 - Deployment: see the Render + Vercel runbook shared separately (ask if you need it re-sent)
 
 ## Coding conventions
