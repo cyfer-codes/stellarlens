@@ -83,22 +83,35 @@ export default async function LandingPage() {
         <h2 className="text-xs font-medium uppercase tracking-wide text-gray-500">Architecture at a glance</h2>
 
         <div className="mt-4 overflow-x-auto rounded border border-gray-200 p-6">
-          <div className="flex min-w-[640px] items-center justify-center gap-3 text-sm">
+          <div className="flex flex-col items-center gap-3 text-sm md:min-w-[640px] md:flex-row md:justify-center">
             <div className="rounded border border-gray-300 px-3 py-2 text-center">Soroban RPC</div>
-            <span className="text-gray-400">→</span>
+            <span className="text-gray-400" aria-hidden="true">
+              <span className="md:hidden">↓</span>
+              <span className="hidden md:inline">→</span>
+            </span>
             <div className="rounded border border-gray-900 bg-gray-900 px-3 py-2 text-center text-white">Indexer</div>
-            <span className="text-gray-400">→</span>
+            <span className="text-gray-400" aria-hidden="true">
+              <span className="md:hidden">↓</span>
+              <span className="hidden md:inline">→</span>
+            </span>
             <div className="rounded border border-gray-300 px-3 py-2 text-center">Postgres</div>
-            <span className="text-gray-400">↔</span>
+            <span className="text-gray-400" aria-hidden="true">
+              <span className="md:hidden">↓</span>
+              <span className="hidden md:inline">↔</span>
+            </span>
             <div className="rounded border border-gray-300 px-3 py-2 text-center">API</div>
-            <span className="text-gray-400">→</span>
+            <span className="text-gray-400" aria-hidden="true">
+              <span className="md:hidden">↓</span>
+              <span className="hidden md:inline">→</span>
+            </span>
             <div className="rounded border border-gray-300 px-3 py-2 text-center">Dashboard / SDK / CLI</div>
           </div>
-          <div className="mt-3 flex min-w-[640px] justify-center text-sm">
-            <div className="flex items-center gap-3">
-              <span className="text-gray-400">↳</span>
-              <div className="rounded border border-gray-300 px-3 py-2 text-center">Your webhook endpoints</div>
-            </div>
+          <div className="mt-3 flex flex-col items-center gap-3 text-sm md:min-w-[640px] md:flex-row md:justify-center">
+            <span className="text-gray-400" aria-hidden="true">
+              <span className="md:hidden">↓</span>
+              <span className="hidden md:inline">↳</span>
+            </span>
+            <div className="rounded border border-gray-300 px-3 py-2 text-center">Your webhook endpoints</div>
           </div>
         </div>
 
