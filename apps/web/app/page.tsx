@@ -57,12 +57,14 @@ export default async function LandingPage() {
           >
             Sign in
           </Link>
-          <a
-            href={publicDemoEnabled ? "/contracts" : "#architecture"}
-            className="rounded border border-gray-300 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
-          >
-            View demo
-          </a>
+          {publicDemoEnabled ? (
+            <a
+              href="/contracts"
+              className="rounded border border-gray-300 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+            >
+              View demo
+            </a>
+          ) : null}
         </div>
       </section>
 

@@ -36,6 +36,9 @@ export async function middleware(request: NextRequest) {
   const session = token ? await verifySessionToken(token) : null;
 
   if (!session) {
+    if (request.nextUrl.pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
