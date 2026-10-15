@@ -14,6 +14,54 @@ function makeClient(fetchMock: typeof fetch, baseUrl = "https://api.example.com"
 }
 
 describe("StellarLensClient", () => {
+  describe.each(["listEvents", "listTransfers"] as const)("%s pagination", (method) => {
+    it.each([0, -1, 101, 1.5, NaN, Infinity, -Infinity])(
+      "rejects invalid limit %s without making a request",
+      async (limit) => {
+        const fetchMock = vi.fn(async () =>
+          jsonResponse({ data: [], nextCursor: null })
+        ) as unknown as typeof fetch;
+
+        await expect(makeClient(fetchMock)[method](1, { limit })).rejects.toThrow(
+          "limit must be an integer between 1 and 100"
+        );
+
+        expect(fetchMock).not.toHaveBeenCalled();
+      }
+    );
+
+    it.each([1, 20, 100])("passes valid limit %s through unchanged", async (limit) => {
+      const fetchMock = vi.fn(async () =>
+        jsonResponse({ data: [], nextCursor: null })
+      ) as unknown as typeof fetch;
+
+      await makeClient(fetchMock)[method](1, { limit });
+
+      const path = method === "listEvents" ? "events" : "transfers";
+      expect(fetchMock).toHaveBeenCalledWith(
+        `https://api.example.com/contracts/1/${path}?limit=${limit}`,
+        expect.any(Object)
+      );
+    });
+
+    it.each([undefined, {}, { limit: undefined }])(
+      "omits an unspecified limit (%j)",
+      async (params) => {
+        const fetchMock = vi.fn(async () =>
+          jsonResponse({ data: [], nextCursor: null })
+        ) as unknown as typeof fetch;
+
+        await makeClient(fetchMock)[method](1, params);
+
+        const path = method === "listEvents" ? "events" : "transfers";
+        expect(fetchMock).toHaveBeenCalledWith(
+          `https://api.example.com/contracts/1/${path}`,
+          expect.any(Object)
+        );
+      }
+    );
+  });
+
   it("sends the api key header and parses a successful response", async () => {
     const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
       expect(String(url)).toBe("https://api.example.com/contracts");
@@ -54,7 +102,10 @@ describe("StellarLensClient", () => {
       return jsonResponse({ id: 1, address: "C1", name: null, network: "testnet" }, 201);
     }) as unknown as typeof fetch;
 
-    const contract = await makeClient(fetchMock).registerContract({ address: "C1", network: "testnet" });
+    const contract = await makeClient(fetchMock).registerContract({
+      address: "C1",
+      network: "testnet"
+    });
     expect(contract.id).toBe(1);
   });
 
@@ -72,7 +123,9 @@ describe("StellarLensClient", () => {
   });
 
   it("throws StellarLensApiError with raw text when the error body isn't json", async () => {
-    const fetchMock = vi.fn(async () => new Response("internal error", { status: 500 })) as unknown as typeof fetch;
+    const fetchMock = vi.fn(
+      async () => new Response("internal error", { status: 500 })
+    ) as unknown as typeof fetch;
 
     await expect(makeClient(fetchMock).getContract(1)).rejects.toMatchObject({
       status: 500,
