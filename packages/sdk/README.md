@@ -40,6 +40,9 @@ const same = await client.getContract(contract.id);
 
 ### Paginated events and transfers
 
+`limit` must be an integer from 1 to 100; invalid limits reject before making a request. Omit it to use
+the API's default page size of 20.
+
 Both `listEvents` and `listTransfers` use cursor-based pagination, oldest first. Keep passing the previous
 page's `nextCursor` until it comes back `null`:
 
@@ -90,14 +93,14 @@ try {
 
 ## API reference
 
-| Method | Description |
-|---|---|
-| `registerContract(input)` | Register a contract, or update name/network if the address is already registered |
-| `listContracts()` | List all registered contracts |
-| `getContract(id)` | Fetch a single contract by id |
-| `listEvents(contractId, params?)` | Cursor-paginated events for a contract (`cursor`, `limit`, `topic`, `from`, `to`) |
-| `listTransfers(contractId, params?)` | Cursor-paginated token transfers for a contract (`cursor`, `limit`) |
-| `getStats(contractId, params?)` | Transfer summary stats for a contract (`from`, `to`) |
+| Method                               | Description                                                                       |
+| ------------------------------------ | --------------------------------------------------------------------------------- |
+| `registerContract(input)`            | Register a contract, or update name/network if the address is already registered  |
+| `listContracts()`                    | List all registered contracts                                                     |
+| `getContract(id)`                    | Fetch a single contract by id                                                     |
+| `listEvents(contractId, params?)`    | Cursor-paginated events for a contract (`cursor`, `limit`, `topic`, `from`, `to`) |
+| `listTransfers(contractId, params?)` | Cursor-paginated token transfers for a contract (`cursor`, `limit`)               |
+| `getStats(contractId, params?)`      | Transfer summary stats for a contract (`from`, `to`)                              |
 
 All request/response types are exported from the package root (`Contract`, `EventRecord`, `TransferRecord`,
 `ContractStats`, `Page<T>`, etc.).

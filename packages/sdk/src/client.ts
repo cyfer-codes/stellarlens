@@ -20,6 +20,12 @@ export interface StellarLensClientOptions {
   fetch?: typeof fetch;
 }
 
+function validateLimit(limit: number | undefined): void {
+  if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 100)) {
+    throw new RangeError("limit must be an integer between 1 and 100");
+  }
+}
+
 function buildQuery(params?: object): string {
   if (!params) {
     return "";
@@ -90,13 +96,20 @@ export class StellarLensClient {
   }
 
   /** Cursor-paginated events for a contract, oldest first. */
-  listEvents(contractId: number, params?: ListEventsParams): Promise<Page<EventRecord>> {
+  async listEvents(contractId: number, params?: ListEventsParams): Promise<Page<EventRecord>> {
+    validateLimit(params?.limit);
     return this.request<Page<EventRecord>>(`/contracts/${contractId}/events${buildQuery(params)}`);
   }
 
   /** Cursor-paginated token transfers for a contract, oldest first. */
-  listTransfers(contractId: number, params?: ListTransfersParams): Promise<Page<TransferRecord>> {
-    return this.request<Page<TransferRecord>>(`/contracts/${contractId}/transfers${buildQuery(params)}`);
+  async listTransfers(
+    contractId: number,
+    params?: ListTransfersParams
+  ): Promise<Page<TransferRecord>> {
+    validateLimit(params?.limit);
+    return this.request<Page<TransferRecord>>(
+      `/contracts/${contractId}/transfers${buildQuery(params)}`
+    );
   }
 
   /** Transfer summary stats for a contract, optionally scoped to a time window. */

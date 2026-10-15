@@ -38,6 +38,7 @@ export interface EventRecord {
 
 export interface ListEventsParams {
   cursor?: number;
+  /** Page size: an integer from 1 to 100. The API defaults to 20 when omitted. */
   limit?: number;
   topic?: string;
   from?: string;
@@ -58,6 +59,7 @@ export interface TransferRecord {
 
 export interface ListTransfersParams {
   cursor?: number;
+  /** Page size: an integer from 1 to 100. The API defaults to 20 when omitted. */
   limit?: number;
 }
 
