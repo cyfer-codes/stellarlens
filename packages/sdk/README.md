@@ -88,6 +88,11 @@ try {
 }
 ```
 
+The optional `retryAfterSeconds` field contains the response's `Retry-After` delay
+in seconds. Both delay values and HTTP dates are supported; missing or invalid
+headers leave it `undefined`, and dates in the past produce `0`. Callers can use
+it to decide how long to back off after a `429` and control when to retry.
+
 ## API reference
 
 | Method | Description |
