@@ -1,4 +1,4 @@
-import { UnauthorizedException, type ExecutionContext } from "@nestjs/common";
+import { ForbiddenException, UnauthorizedException, type ExecutionContext } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { apiKeys } from "@stellarlens/db";
 import { describe, expect, it } from "vitest";
@@ -10,12 +10,14 @@ import { getTestDb } from "./setup";
 class TestController {
   protected() {}
 
+  mutate() {}
+
   @Public()
   open() {}
 }
 
-function contextFor(handler: () => void, headers: Record<string, string> = {}) {
-  const request: Record<string, unknown> = { headers };
+function contextFor(handler: () => void, headers: Record<string, string> = {}, method = "GET") {
+  const request: Record<string, unknown> = { headers, method };
   const context = {
     getHandler: () => handler,
     getClass: () => TestController,
@@ -52,6 +54,20 @@ describe("ApiKeyGuard", () => {
 
     await expect(guard().canActivate(context)).resolves.toBe(true);
     expect(request.apiKey).toBeDefined();
+  });
+
+  it("accepts a read-scoped key on a GET route", async () => {
+    const apiKey = await createApiKey(getTestDb(), { scope: "read" });
+    const { context } = contextFor(TestController.prototype.protected, { "x-api-key": apiKey }, "GET");
+
+    await expect(guard().canActivate(context)).resolves.toBe(true);
+  });
+
+  it("rejects a read-scoped key on a mutating route", async () => {
+    const apiKey = await createApiKey(getTestDb(), { scope: "read" });
+    const { context } = contextFor(TestController.prototype.mutate, { "x-api-key": apiKey }, "POST");
+
+    await expect(guard().canActivate(context)).rejects.toThrow(ForbiddenException);
   });
 
   it("skips the check entirely for a @Public() route", async () => {
