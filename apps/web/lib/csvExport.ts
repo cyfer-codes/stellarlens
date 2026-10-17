@@ -1,4 +1,4 @@
-import type { EventRow } from "@/lib/api";
+import type { EventRow, TransferRow } from "@/lib/api";
 
 type CsvRecord = Record<string, string>;
 
@@ -112,13 +112,46 @@ export function escapeCsvCell(raw: string): string {
   return value;
 }
 
-export function toCsv(headers: string[], rows: string[][]): string {
-  return [headers, ...rows].map((row) => row.map(escapeCsvCell).join(",")).join("\r\n");
+export function toCsvRows(rows: string[][]): string {
+  return rows.map((row) => row.map(escapeCsvCell).join(",")).join("\r\n");
 }
 
-export function downloadCsv(filename: string, csv: string): void {
+export function toCsv(headers: string[], rows: string[][]): string {
+  return toCsvRows([headers, ...rows]);
+}
+
+// Matches the columns shown on the contract transfers table.
+export const TRANSFER_CSV_HEADERS = [
+  "Sender",
+  "Receiver",
+  "Amount",
+  "Asset",
+  "Ledger Timestamp",
+  "Tx Hash"
+];
+
+/** Serializes transfers to CSV rows (no header line) in `TRANSFER_CSV_HEADERS` order. */
+export function transfersToCsvRows(transfers: TransferRow[]): string {
+  return toCsvRows(
+    transfers.map((transfer) => [
+      transfer.from,
+      transfer.to,
+      transfer.amount,
+      transfer.asset,
+      transfer.createdAt,
+      transfer.txHash
+    ])
+  );
+}
+
+/**
+ * Downloads `csv` as a file. Accepts pre-chunked text so large exports can be
+ * assembled page by page without concatenating one huge string first.
+ */
+export function downloadCsv(filename: string, csv: string | string[]): void {
   // Prefix a BOM so Excel detects UTF-8.
-  const blob = new Blob(["﻿", csv], { type: "text/csv;charset=utf-8" });
+  const parts = Array.isArray(csv) ? csv : [csv];
+  const blob = new Blob(["﻿", ...parts], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

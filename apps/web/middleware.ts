@@ -16,6 +16,8 @@ const PUBLIC_DEMO_GET_PATTERNS = [
   /^\/events$/,
   /^\/transfers$/,
   /^\/api\/contracts\/\d+\/events$/,
+  /^\/api\/contracts\/\d+\/stats$/,
+  /^\/api\/contracts\/\d+\/transfers$/,
   /^\/api\/contracts\/\d+\/webhooks$/
 ];
 

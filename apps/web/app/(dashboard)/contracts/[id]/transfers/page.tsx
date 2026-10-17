@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ExportTransfersButton } from "@/components/ExportTransfersButton";
 import { VolumeChart } from "@/components/VolumeChart";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ApiNotFoundError, getContract, listTransfers } from "@/lib/api";
@@ -49,7 +50,10 @@ export default async function ContractTransfersPage({
       </div>
 
       <div>
-        <h2 className="mb-3 text-lg font-semibold">All transfers</h2>
+        <div className="mb-3 flex items-center justify-between gap-4">
+          <h2 className="text-lg font-semibold">All transfers</h2>
+          {transfers.data.length > 0 && <ExportTransfersButton contractId={contractId} />}
+        </div>
         {transfers.data.length === 0 ? (
           <EmptyState
             title="No transfers yet"

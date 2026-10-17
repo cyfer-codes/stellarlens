@@ -35,7 +35,7 @@ export default async function ContractDetailPage({ params }: { params: { id: str
     <div className="space-y-8">
       <ContractHeader contract={contract} authenticated={authenticated} />
 
-      <StatsCards stats={stats} />
+      <StatsCards stats={stats} contractId={contractId} />
 
       <Link
         href={`/contracts/${contractId}/transfers`}
