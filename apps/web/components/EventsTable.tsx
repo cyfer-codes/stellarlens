@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import type { EventRow, EventsPage } from "@/lib/api";
 import { downloadCsv, eventsToCsv } from "@/lib/csvExport";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -9,6 +10,8 @@ import { LoadingState } from "@/components/ui/LoadingState";
 const POLL_INTERVAL_MS = 10000;
 // The api caps `limit` at 100, so exports walk the cursor in pages of this size.
 const EXPORT_PAGE_SIZE = 100;
+const DEFAULT_PAGE_SIZE = 20;
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
 function formatTopic(event: EventRow): string {
   const topic = event.decodedData?.decoded?.topic;
@@ -51,6 +54,12 @@ async function fetchAllEvents(
   return all;
 }
 
+type CursorHistory = {
+  // Cursors used to reach each page, index 0 = first page (no cursor).
+  cursors: (number | null)[];
+  index: number;
+};
+
 export function EventsTable({ contractId }: { contractId: number }) {
   const [events, setEvents] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,18 +67,27 @@ export function EventsTable({ contractId }: { contractId: number }) {
   const [exporting, setExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState("");
 
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [history, setHistory] = useState<CursorHistory>({ cursors: [null], index: 0 });
+  const [nextCursor, setNextCursor] = useState<number | null>(null);
+  const [pageLoading, setPageLoading] = useState(false);
+  const [pageError, setPageError] = useState<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
 
     async function fetchEvents() {
       try {
-        const response = await fetch(`/api/contracts/${contractId}/events?limit=20`, { cache: "no-store" });
+        const response = await fetch(`/api/contracts/${contractId}/events?limit=${pageSize}`, {
+          cache: "no-store"
+        });
         if (!response.ok) {
           throw new Error(`request failed with ${response.status}`);
         }
         const body = (await response.json()) as { data: EventRow[] };
         if (!cancelled) {
           setEvents(body.data);
+          setNextCursor(body.nextCursor ?? null);
           setError(null);
         }
       } catch (err) {
@@ -90,7 +108,7 @@ export function EventsTable({ contractId }: { contractId: number }) {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [contractId]);
+  }, [contractId, pageSize]);
 
   async function handleExport() {
     setExporting(true);
@@ -109,6 +127,58 @@ export function EventsTable({ contractId }: { contractId: number }) {
     }
   }
 
+  async function loadPage(cursor: number | null) {
+    setPageLoading(true);
+    setPageError(null);
+    try {
+      const query = new URLSearchParams({ limit: String(pageSize) });
+      if (cursor !== null) {
+        query.set("cursor", String(cursor));
+      }
+      const response = await fetch(`/api/contracts/${contractId}/events?${query}`, {
+        cache: "no-store"
+      });
+      if (!response.ok) {
+        throw new Error(`request failed with ${response.status}`);
+      }
+      const body = (await response.json()) as EventsPage;
+      setEvents(body.data);
+      setNextCursor(body.nextCursor ?? null);
+      setError(null);
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : "failed to load events");
+    } finally {
+      setPageLoading(false);
+    }
+  }
+
+  function handleNextPage() {
+    if (nextCursor === null) {
+      return;
+    }
+    const nextIndex = history.index + 1;
+    const cursors = history.cursors.slice(0, nextIndex);
+    cursors[nextIndex] = nextCursor;
+    setHistory({ cursors, index: nextIndex });
+    void loadPage(nextCursor);
+  }
+
+  function handlePreviousPage() {
+    if (history.index === 0) {
+      return;
+    }
+    const prevIndex = history.index - 1;
+    setHistory({ ...history, index: prevIndex });
+    void loadPage(history.cursors[prevIndex]);
+  }
+
+  function handlePageSizeChange(event: React.ChangeEvent<HTMLSelectElement>) {
+    const size = Number(event.target.value);
+    setPageSize(size);
+    setHistory({ cursors: [null], index: 0 });
+    void loadPage(null);
+  }
+
   if (loading) {
     return <LoadingState label="Loading events…" />;
   }
@@ -116,6 +186,9 @@ export function EventsTable({ contractId }: { contractId: number }) {
   return (
     <div>
       {error && <p className="mb-2 text-sm text-red-600">Couldn&apos;t refresh events: {error}</p>}
+      {pageError && (
+        <p className="mb-2 text-sm text-red-600">Couldn&apos;t load page: {pageError}</p>
+      )}
       {events.length === 0 ? (
         <EmptyState
           title="No events yet"
@@ -169,6 +242,44 @@ export function EventsTable({ contractId }: { contractId: number }) {
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <label className="flex items-center gap-2 text-xs text-gray-600">
+              <span>Rows per page</span>
+              <select
+                value={pageSize}
+                onChange={handlePageSizeChange}
+                disabled={pageLoading}
+                aria-label="Rows per page"
+                className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 disabled:opacity-50"
+              >
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handlePreviousPage}
+                disabled={pageLoading || history.index === 0}
+                aria-label="Previous page of events"
+                className="rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                onClick={handleNextPage}
+                disabled={pageLoading || nextCursor === null}
+                aria-label="Next page of events"
+                className="rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
           </div>
         </>
       )}

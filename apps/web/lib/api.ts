@@ -45,6 +45,7 @@ export interface EventRow {
 export interface EventsPage {
   data: EventRow[];
   nextCursor: number | null;
+  prevCursor?: number | null;
 }
 
 export interface ListEventsParams {
@@ -67,6 +68,7 @@ export interface TransferRow {
 export interface TransfersPage {
   data: TransferRow[];
   nextCursor: number | null;
+  prevCursor?: number | null;
 }
 
 export interface ListTransfersParams {
@@ -128,21 +130,21 @@ export function getContract(id: number): Promise<Contract> {
 }
 
 export function createContract(input: CreateContractInput): Promise<Contract> {
-  return apiFetch<Contract>("/contracts", {
+  return apiFetch<Contract>(` /contracts`, {
     method: "POST",
     body: JSON.stringify(input)
   });
 }
 
 export function updateContract(id: number, input: UpdateContractInput): Promise<Contract> {
-  return apiFetch<Contract>(`/contracts/${id}`, {
+  return apiFetch<Contract>(` /contracts/${id}`, {
     method: "PATCH",
     body: JSON.stringify(input)
   });
 }
 
 export function getContractStats(id: number): Promise<ContractStats> {
-  return apiFetch<ContractStats>(`/contracts/${id}/stats`);
+  return apiFetch<ContractStats>(` /contracts/${id}/stats`);
 }
 
 export function listEvents(contractId: number, params?: ListEventsParams): Promise<EventsPage> {
@@ -154,7 +156,7 @@ export function listEvents(contractId: number, params?: ListEventsParams): Promi
     query.set("limit", String(params.limit));
   }
   const qs = query.toString();
-  return apiFetch<EventsPage>(`/contracts/${contractId}/events${qs ? `?${qs}` : ""}`);
+  return apiFetch<EventsPage>(` /contracts/${contractId}/events${qs ? `?${qs}` : ""}`);
 }
 
 export function listTransfers(contractId: number, params?: ListTransfersParams): Promise<TransfersPage> {
@@ -166,7 +168,7 @@ export function listTransfers(contractId: number, params?: ListTransfersParams):
     query.set("limit", String(params.limit));
   }
   const qs = query.toString();
-  return apiFetch<TransfersPage>(`/contracts/${contractId}/transfers${qs ? `?${qs}` : ""}`);
+  return apiFetch<TransfersPage>(` /contracts/${contractId}/transfers${qs ? `?${qs}` : ""}`);
 }
 
 export function listWebhooks(contractId: number): Promise<Webhook[]> {
@@ -181,5 +183,5 @@ export function createWebhook(contractId: number, input: CreateWebhookInput): Pr
 }
 
 export function deleteWebhook(contractId: number, id: number): Promise<void> {
-  return apiFetch<void>(`/contracts/${contractId}/webhooks/${id}`, { method: "DELETE" });
+  return apiFetch<void>(` /contracts/${contractId}/webhooks/${id}`, { method: "DELETE" });
 }
