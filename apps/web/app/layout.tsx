@@ -1,9 +1,29 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
+const SITE_NAME = "stellarlens";
+const SITE_DESCRIPTION = "stellarlens web app";
+// Absolute base for og:url and og:image; crawlers can't resolve relative urls.
+const SITE_URL = process.env.SITE_URL ?? "http://localhost:3000";
+
+// The favicon comes from app/icon.svg and the preview image from
+// app/opengraph-image.tsx; Next adds both to every route's <head>.
 export const metadata: Metadata = {
-  title: "stellarlens",
-  description: "stellarlens web app"
+  metadataBase: new URL(SITE_URL),
+  title: SITE_NAME,
+  description: SITE_DESCRIPTION,
+  openGraph: {
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+    url: "/",
+    siteName: SITE_NAME,
+    type: "website"
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION
+  }
 };
 
 export default function RootLayout({

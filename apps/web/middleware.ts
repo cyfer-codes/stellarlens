@@ -46,5 +46,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"]
+  // Icons and the og image must stay public so browsers and link-preview crawlers can fetch them.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|opengraph-image).*)"]
 };
