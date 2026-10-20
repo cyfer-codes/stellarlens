@@ -1,14 +1,14 @@
 import { events, webhookDeliveries } from "@stellarlens/db";
 import request from "supertest";
 import { beforeEach, describe, expect, it } from "vitest";
-import { createApiKey } from "./helpers";
+import { contractAddress, createApiKey } from "./helpers";
 import { getApp, getTestDb } from "./setup";
 
 async function registerContract(apiKey: string, address: string): Promise<number> {
   const response = await request(getApp().getHttpServer())
     .post("/contracts")
     .set("x-api-key", apiKey)
-    .send({ address, network: "testnet" });
+    .send({ address: contractAddress(address), network: "testnet" });
   return response.body.id;
 }
 

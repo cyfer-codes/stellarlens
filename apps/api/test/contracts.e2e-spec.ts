@@ -1,6 +1,6 @@
 import request from "supertest";
 import { beforeEach, describe, expect, it } from "vitest";
-import { createApiKey } from "./helpers";
+import { contractAddress, createApiKey } from "./helpers";
 import { getApp, getTestDb } from "./setup";
 
 describe("contracts (e2e)", () => {
@@ -14,11 +14,11 @@ describe("contracts (e2e)", () => {
     const response = await request(getApp().getHttpServer())
       .post("/contracts")
       .set("x-api-key", apiKey)
-      .send({ address: "CONTRACT_REGISTER_A", network: "testnet", name: "My Contract" });
+      .send({ address: contractAddress("CONTRACT_REGISTER_A"), network: "testnet", name: "My Contract" });
 
     expect(response.status).toBe(201);
     expect(response.body).toMatchObject({
-      address: "CONTRACT_REGISTER_A",
+      address: contractAddress("CONTRACT_REGISTER_A"),
       network: "testnet",
       name: "My Contract"
     });
@@ -29,7 +29,7 @@ describe("contracts (e2e)", () => {
     const registerResponse = await request(getApp().getHttpServer())
       .post("/contracts")
       .set("x-api-key", apiKey)
-      .send({ address: "CONTRACT_REGISTER_B", network: "testnet" });
+      .send({ address: contractAddress("CONTRACT_REGISTER_B"), network: "testnet" });
 
     const contractId = registerResponse.body.id;
 
@@ -38,19 +38,19 @@ describe("contracts (e2e)", () => {
       .set("x-api-key", apiKey);
 
     expect(getResponse.status).toBe(200);
-    expect(getResponse.body).toMatchObject({ id: contractId, address: "CONTRACT_REGISTER_B" });
+    expect(getResponse.body).toMatchObject({ id: contractId, address: contractAddress("CONTRACT_REGISTER_B") });
   });
 
   it("upserts on re-registering the same address", async () => {
     await request(getApp().getHttpServer())
       .post("/contracts")
       .set("x-api-key", apiKey)
-      .send({ address: "CONTRACT_REGISTER_C", network: "testnet", name: "Original" });
+      .send({ address: contractAddress("CONTRACT_REGISTER_C"), network: "testnet", name: "Original" });
 
     const updateResponse = await request(getApp().getHttpServer())
       .post("/contracts")
       .set("x-api-key", apiKey)
-      .send({ address: "CONTRACT_REGISTER_C", network: "testnet", name: "Renamed" });
+      .send({ address: contractAddress("CONTRACT_REGISTER_C"), network: "testnet", name: "Renamed" });
 
     expect(updateResponse.status).toBe(201);
     expect(updateResponse.body.name).toBe("Renamed");
@@ -68,7 +68,7 @@ describe("contracts (e2e)", () => {
     const registerResponse = await request(getApp().getHttpServer())
       .post("/contracts")
       .set("x-api-key", apiKey)
-      .send({ address: "CONTRACT_PATCH_A", network: "testnet", name: "Initial Name" });
+      .send({ address: contractAddress("CONTRACT_PATCH_A"), network: "testnet", name: "Initial Name" });
 
     const contractId = registerResponse.body.id;
 
@@ -80,7 +80,7 @@ describe("contracts (e2e)", () => {
     expect(patchResponse.status).toBe(200);
     expect(patchResponse.body).toMatchObject({
       id: contractId,
-      address: "CONTRACT_PATCH_A",
+      address: contractAddress("CONTRACT_PATCH_A"),
       network: "testnet",
       name: "Updated Name"
     });
@@ -99,5 +99,26 @@ describe("contracts (e2e)", () => {
       .send({ name: "Updated Name" });
 
     expect(response.status).toBe(404);
+  });
+
+  describe("address validation", () => {
+    it("rejects a malformed address with 400", async () => {
+      const response = await request(getApp().getHttpServer())
+        .post("/contracts")
+        .set("x-api-key", apiKey)
+        .send({ address: "not-an-address", network: "testnet" });
+
+      expect(response.status).toBe(400);
+      expect(JSON.stringify(response.body)).toMatch(/address/i);
+    });
+
+    it("accepts a valid contract (C...) strkey", async () => {
+      const response = await request(getApp().getHttpServer())
+        .post("/contracts")
+        .set("x-api-key", apiKey)
+        .send({ address: contractAddress("VALIDATION_ACCEPT_C"), network: "testnet" });
+
+      expect(response.status).toBe(201);
+    });
   });
 });
