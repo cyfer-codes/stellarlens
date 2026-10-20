@@ -56,7 +56,7 @@ export function StatsCards({ stats, contractId }: { stats: ContractStats; contra
       {contractId !== undefined && (
         <div className="flex items-center justify-end gap-3">
           {error && (
-            <p role="status" className="text-sm text-red-600">
+            <p role="status" className="text-sm text-red-600 dark:text-red-400">
               Couldn&apos;t refresh stats: {error}
             </p>
           )}
@@ -65,72 +65,30 @@ export function StatsCards({ stats, contractId }: { stats: ContractStats; contra
             onClick={refresh}
             disabled={refreshing}
             aria-label="Refresh contract stats"
-            className="rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="rounded border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
           >
-            {refreshing ? "Refreshing…" : "Refresh"}
+            {refreshing ? "Refreshing�" : "Refresh"}
           </button>
         </div>
       )}
 
-import { Skeleton } from "@/components/ui/Skeleton";
-
-const CARD_LABELS = ["Transfers", "Unique senders", "Unique receivers"] as const;
-const SKELETON_VOLUME_ROWS = 3;
-
-/**
- * Renders the stats cards, or skeleton placeholders inside the same card
- * containers while `loading` is set or `stats` hasn't arrived yet, so the
- * layout doesn't shift when the real numbers land.
- */
-export function StatsCards({ stats, loading = false }: { stats?: ContractStats; loading?: boolean }) {
-  const data = loading ? undefined : stats;
-  const values = data
-    ? [
-        data.transferCount.toLocaleString(),
-        data.uniqueSenders.toLocaleString(),
-        data.uniqueReceivers.toLocaleString()
-      ]
-    : null;
-
-  return (
-    <div className="space-y-4" aria-busy={!data}>
-      {!data && <span className="sr-only">Loading contract stats…</span>}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {CARD_LABELS.map((label, index) => (
-          <div key={label} className="rounded border border-gray-200 p-4">
-            <div className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</div>
-            {values ? (
-              <div className="mt-1 text-2xl font-bold">{values[index]}</div>
-            ) : (
-              // mt-2 + h-6 + mb-1 matches mt-1 plus the 2rem line height of the text-2xl value.
-              <Skeleton className="mb-1 mt-2 h-6 w-24" />
-            )}
+        {cards.map((card) => (
+          <div key={card.label} className="rounded border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
+            <div className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{card.label}</div>
+            <div className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100">{card.value}</div>
           </div>
         ))}
       </div>
 
-      <div className="rounded border border-gray-200 p-4">
-        <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Volume by asset</div>
+      <div className="rounded border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
+        <div className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Volume by asset</div>
         {liveStats.volumeByAsset.length === 0 ? (
-          <p className="mt-2 text-sm text-gray-400">No transfer volume yet.</p>
+          <p className="mt-2 text-sm text-gray-400 dark:text-gray-500">No transfer volume yet.</p>
         ) : (
           <ul className="mt-2 space-y-1 text-sm">
             {liveStats.volumeByAsset.map((entry) => (
-        {!data ? (
-          <ul className="mt-2 space-y-1">
-            {Array.from({ length: SKELETON_VOLUME_ROWS }, (_, index) => (
-              <li key={index} className="flex h-4 items-center justify-between">
-                <Skeleton className="h-3 w-48" />
-                <Skeleton className="h-3 w-16" />
-              </li>
-            ))}
-          </ul>
-        ) : data.volumeByAsset.length === 0 ? (
-          <p className="mt-2 text-sm text-gray-400">No transfer volume yet.</p>
-        ) : (
-          <ul className="mt-2 space-y-1 text-sm">
-            {data.volumeByAsset.map((entry) => (
-              <li key={entry.asset} className="flex justify-between font-mono text-xs">
+              <li key={entry.asset} className="flex justify-between font-mono text-xs text-gray-800 dark:text-gray-200">
                 <span className="truncate pr-4">{entry.asset}</span>
                 <span>{entry.volume}</span>
               </li>

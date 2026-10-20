@@ -3,6 +3,10 @@
 @tailwind utilities;
 
 @layer base {
+  body {
+    @apply bg-white text-gray-900 antialiased dark:bg-gray-950 dark:text-gray-100;
+  }
+
   /*
    * Consistent keyboard focus indicator for every interactive element. Uses
    * :focus-visible so mouse clicks on buttons and links don't show a ring.
@@ -17,13 +21,13 @@
   summary:focus-visible,
   [role="button"]:focus-visible,
   [tabindex]:not([tabindex="-1"]):focus-visible {
-    @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-white;
+    @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-white dark:ring-offset-gray-950 dark:ring-gray-300;
   }
 }
 
 @layer components {
   /* Opt-in utility for custom interactive elements (e.g. clickable table rows). */
   .focus-ring {
-    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950 dark:focus-visible:ring-gray-300;
   }
 }

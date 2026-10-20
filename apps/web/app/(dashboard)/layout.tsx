@@ -11,7 +11,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <Sidebar authenticated={Boolean(session)} />
       <main className="flex-1 p-4 md:p-8">
         {isDemoVisitor && (
-          <div className="mb-6 rounded border border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+          <div className="mb-6 rounded border border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300">
             You&apos;re viewing a live read-only demo.{" "}
             <Link href="/login" className="font-medium underline">
               Sign in

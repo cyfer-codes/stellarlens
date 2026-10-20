@@ -54,7 +54,7 @@ export function ContractsTable({ contracts }: { contracts: Contract[] }) {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Filter by address or name"
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
           />
         </div>
         <div>
@@ -65,7 +65,7 @@ export function ContractsTable({ contracts }: { contracts: Contract[] }) {
             id="contracts-network"
             value={network}
             onChange={(event) => setNetwork(event.target.value)}
-            className="rounded border border-gray-300 px-3 py-2 text-sm"
+            className="rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
           >
             <option value="all">All networks</option>
             {networks.map((value) => (
@@ -83,7 +83,7 @@ export function ContractsTable({ contracts }: { contracts: Contract[] }) {
             Registered contracts with address, name and network. Column headers sort the table.
           </caption>
           <thead>
-            <tr className="border-b border-gray-200 text-gray-500">
+            <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400">
               {COLUMNS.map((column) => {
                 const direction = sort?.key === column.key ? sort.direction : null;
                 return (
@@ -98,10 +98,10 @@ export function ContractsTable({ contracts }: { contracts: Contract[] }) {
                     <button
                       type="button"
                       onClick={() => handleSort(column.key)}
-                      className="inline-flex items-center gap-1 hover:text-gray-900"
+                      className="inline-flex items-center gap-1 hover:text-gray-900 dark:hover:text-gray-100"
                     >
                       {column.label}
-                      <span aria-hidden="true" className={direction ? "" : "text-gray-300"}>
+                      <span aria-hidden="true" className={direction ? "" : "text-gray-300 dark:text-gray-600"}>
                         {direction === "desc" ? "↓" : "↑"}
                       </span>
                     </button>
@@ -112,14 +112,14 @@ export function ContractsTable({ contracts }: { contracts: Contract[] }) {
           </thead>
           <tbody>
             {visibleContracts.map((contract) => (
-              <tr key={contract.id} className="border-b border-gray-100">
+              <tr key={contract.id} className="border-b border-gray-100 dark:border-gray-800">
                 <td className="py-2 font-mono text-xs">
-                  <Link href={`/contracts/${contract.id}`} className="hover:underline">
+                  <Link href={`/contracts/${contract.id}`} className="text-gray-900 hover:underline dark:text-gray-100">
                     {contract.address}
                   </Link>
                 </td>
-                <td className="py-2">{contract.name ?? "—"}</td>
-                <td className="py-2">{contract.network}</td>
+                <td className="py-2 text-gray-800 dark:text-gray-200">{contract.name ?? "—"}</td>
+                <td className="py-2 text-gray-700 dark:text-gray-300">{contract.network}</td>
               </tr>
             ))}
           </tbody>
@@ -127,7 +127,7 @@ export function ContractsTable({ contracts }: { contracts: Contract[] }) {
       </div>
 
       {visibleContracts.length === 0 && (
-        <p className="text-sm text-gray-500">No contracts match the current filters.</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">No contracts match the current filters.</p>
       )}
     </div>
   );

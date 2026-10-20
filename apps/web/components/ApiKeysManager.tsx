@@ -74,30 +74,32 @@ export function ApiKeysManager() {
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {justGenerated && (
-        <div className="rounded border border-amber-300 bg-amber-50 p-4">
-          <p className="text-sm font-medium text-amber-900">
+        <div className="rounded border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/40">
+          <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
             New api key generated — copy it now, it won&apos;t be shown again:
           </p>
-          <code className="mt-2 block break-all rounded bg-white px-3 py-2 text-xs">{justGenerated}</code>
+          <code className="mt-2 block break-all rounded bg-white px-3 py-2 text-xs text-gray-900 dark:bg-gray-900 dark:text-gray-100">
+            {justGenerated}
+          </code>
         </div>
       )}
 
       <form onSubmit={handleGenerate} className="flex max-w-sm flex-col gap-2 sm:flex-row sm:items-end">
         <div className="flex-1">
-          <label htmlFor="key-name" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="key-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Name <span className="text-gray-400">(optional)</span>
           </label>
           <input
             id="key-name"
             value={name}
             onChange={(event) => setName(event.target.value)}
-            className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            className="mt-1 w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
           />
         </div>
         <button
           type="submit"
           disabled={generating}
-          className="rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          className="rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
         >
           {generating ? "Generating…" : "Generate key"}
         </button>
@@ -115,7 +117,7 @@ export function ApiKeysManager() {
           <table className="w-full min-w-[520px] border-collapse text-left text-sm">
             <caption className="sr-only">API keys with name, creation date and status</caption>
             <thead>
-              <tr className="border-b border-gray-200 text-gray-500">
+              <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400">
                 <th scope="col" className="py-2 font-medium">Name</th>
                 <th scope="col" className="py-2 font-medium">Created</th>
                 <th scope="col" className="py-2 font-medium">Status</th>
@@ -126,14 +128,14 @@ export function ApiKeysManager() {
             </thead>
             <tbody>
               {keys.map((key) => (
-                <tr key={key.id} className="border-b border-gray-100">
-                  <td className="py-2">{key.name ?? "—"}</td>
-                  <td className="py-2">{new Date(key.createdAt).toLocaleString()}</td>
+                <tr key={key.id} className="border-b border-gray-100 dark:border-gray-800">
+                  <td className="py-2 text-gray-800 dark:text-gray-200">{key.name ?? "—"}</td>
+                  <td className="py-2 text-gray-700 dark:text-gray-300">{new Date(key.createdAt).toLocaleString()}</td>
                   <td className="py-2">
                     {key.revokedAt ? (
-                      <span className="text-gray-400">Revoked</span>
+                      <span className="text-gray-400 dark:text-gray-500">Revoked</span>
                     ) : (
-                      <span className="text-green-700">Active</span>
+                      <span className="text-green-700 dark:text-green-400">Active</span>
                     )}
                   </td>
                   <td className="py-2 text-right">

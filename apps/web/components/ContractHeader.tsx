@@ -51,7 +51,7 @@ export function ContractHeader({ contract, authenticated }: { contract: Contract
       {editing ? (
         <form onSubmit={handleSave} className="max-w-sm space-y-2">
           <div>
-            <label htmlFor="contract-name" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="contract-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
               Name <span className="text-gray-400">(optional)</span>
             </label>
             <input
@@ -60,15 +60,15 @@ export function ContractHeader({ contract, authenticated }: { contract: Contract
               onChange={(event) => setNameInput(event.target.value)}
               placeholder="Contract name"
               autoFocus
-              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
             />
           </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
           <div className="flex items-center gap-2">
             <button
               type="submit"
               disabled={saving}
-              className="rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+              className="rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
             >
               {saving ? "Saving…" : "Save"}
             </button>
@@ -76,7 +76,7 @@ export function ContractHeader({ contract, authenticated }: { contract: Contract
               type="button"
               onClick={handleCancel}
               disabled={saving}
-              className="rounded border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              className="rounded border border-gray-300 dark:border-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
             >
               Cancel
             </button>
@@ -84,20 +84,20 @@ export function ContractHeader({ contract, authenticated }: { contract: Contract
         </form>
       ) : (
         <div className="flex items-baseline gap-3">
-          <h1 className="text-2xl font-bold">{name ?? contract.address}</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{name ?? contract.address}</h1>
           {authenticated && (
             <button
               type="button"
               onClick={startEditing}
-              className="text-xs font-medium text-gray-600 hover:underline"
+              className="text-xs font-medium text-gray-600 hover:underline dark:text-gray-400"
             >
               Edit name
             </button>
           )}
         </div>
       )}
-      <p className="mt-1 font-mono text-xs text-gray-500">{contract.address}</p>
-      <p className="text-sm text-gray-500">{contract.network}</p>
+      <p className="mt-1 font-mono text-xs text-gray-500 dark:text-gray-400">{contract.address}</p>
+      <p className="text-sm text-gray-500 dark:text-gray-400">{contract.network}</p>
     </div>
   );
 }

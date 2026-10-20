@@ -7,7 +7,7 @@ Checklist of what to grab for the README's visuals section, and where they live.
 - Seed a little real data first (a contract or two, a few indexed events/transfers, one api key) so the
   screenshots show the populated states, not just empty tables. `pnpm --filter @stellarlens/web seed-demo`
   does this for contracts/events/transfers.
-- Browser window at **1440×900**, light mode (the app doesn't have a dark theme).
+- Browser window at **1440×900** (light or dark mode; dark mode is fully supported via system preference or the theme toggle).
 - Save as PNG under `docs/screenshots/`, named per the list below.
 
 ## Shots to capture
