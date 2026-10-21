@@ -38,4 +38,20 @@ describe("listContracts", () => {
     expect(tableSpy).toHaveBeenCalledWith([{ id: 1, address: "C1", name: "—", network: "testnet" }]);
     tableSpy.mockRestore();
   });
+
+  it("prints raw JSON in json mode", async () => {
+    const contracts = [{ id: 1, address: "C1", name: null, network: "testnet" }];
+    const client = {
+      listContracts: vi.fn().mockResolvedValue(contracts)
+    } as unknown as StellarLensClient;
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const tableSpy = vi.spyOn(console, "table").mockImplementation(() => {});
+
+    await listContracts(client, true);
+
+    expect(logSpy).toHaveBeenCalledWith(JSON.stringify(contracts));
+    expect(tableSpy).not.toHaveBeenCalled();
+    logSpy.mockRestore();
+    tableSpy.mockRestore();
+  });
 });
