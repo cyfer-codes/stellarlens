@@ -3,7 +3,7 @@ import { nativeToScVal, rpc } from "@stellar/stellar-sdk";
 import { contracts, events as eventsTable, indexerCheckpoints, tokenTransfers } from "@stellarlens/db";
 import { describe, expect, it, vi } from "vitest";
 import { STELLAR_NETWORK as NETWORK } from "../src/config.js";
-import { processEventsBatch } from "../src/events.js";
+import { isExpiredCursorError, processEventsBatch } from "../src/events.js";
 import { registerContract } from "../src/registry.js";
 import { contractAddress } from "./addresses.js";
 import { mockJsonRpc, TEST_RPC_URL } from "./rpc-mocks.js";
@@ -409,5 +409,97 @@ describe("processEventsBatch", () => {
 
     expect(result).toEqual({ indexedCount: 0, cursor: null });
     expect(getEventsSpy).not.toHaveBeenCalled();
+  });
+
+  describe("isExpiredCursorError", () => {
+    it("identifies expired cursor and ledger retention error messages", () => {
+      expect(isExpiredCursorError(new Error("start is before oldest ledger: 100 < 500"))).toBe(true);
+      expect(isExpiredCursorError(new Error("cursor is expired"))).toBe(true);
+      expect(isExpiredCursorError(new Error("expired cursor requested"))).toBe(true);
+      expect(isExpiredCursorError({ message: "cursor is invalid" })).toBe(true);
+      expect(isExpiredCursorError("cursor out of range or oldest ledger expired")).toBe(true);
+    });
+
+    it("returns false for unrelated errors", () => {
+      expect(isExpiredCursorError(new Error("network timeout"))).toBe(false);
+      expect(isExpiredCursorError(new Error("rate limit exceeded"))).toBe(false);
+      expect(isExpiredCursorError(new Error("internal server error"))).toBe(false);
+      expect(isExpiredCursorError(null)).toBe(false);
+      expect(isExpiredCursorError(undefined)).toBe(false);
+    });
+  });
+
+  it("re-seeds from getLatestLedger and logs warning when stored cursor is expired", async () => {
+    const db = getTestDb();
+    await registerContract(db, { address: "CONTRACT_EXPIRED", network: NETWORK });
+
+    // Store an old cursor
+    await db.insert(indexerCheckpoints).values({
+      network: NETWORK,
+      cursor: "OLD_EXPIRED_CURSOR"
+    });
+
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    let callCount = 0;
+    const getEventsSpy = vi.fn((params: any) => {
+      callCount += 1;
+      if (params?.cursor === "OLD_EXPIRED_CURSOR") {
+        throw new Error("start is before oldest ledger: 100 < 500");
+      }
+      return {
+        events: [
+          buildRawEvent({
+            contractId: "CONTRACT_EXPIRED",
+            topic: [symbolXdr("transfer"), addressXdr(ADDRESS_A), addressXdr(ADDRESS_B)],
+            value: i128Xdr(999n)
+          })
+        ],
+        cursor: "NEW_RESEEDED_CURSOR",
+        latestLedger: 500
+      };
+    });
+
+    const getLatestLedgerSpy = vi.fn(() => buildLatestLedger(500));
+
+    mswServer.use(
+      mockJsonRpc({
+        getLatestLedger: getLatestLedgerSpy,
+        getEvents: getEventsSpy
+      })
+    );
+
+    try {
+      const result = await processEventsBatch(db, makeServer());
+
+      expect(callCount).toBe(2);
+      expect(getLatestLedgerSpy).toHaveBeenCalledTimes(1);
+
+      // Verify second getEvents call received startLedger instead of expired cursor
+      const secondCallParams = getEventsSpy.mock.calls[1][0] as {
+        cursor?: string;
+        startLedger?: number;
+      };
+      expect(secondCallParams.cursor).toBeUndefined();
+      expect(secondCallParams.startLedger).toBe(500);
+
+      // Verify return and updated checkpoint
+      expect(result.cursor).toBe("NEW_RESEEDED_CURSOR");
+      expect(result.indexedCount).toBe(1);
+
+      const [checkpoint] = await db
+        .select({ cursor: indexerCheckpoints.cursor })
+        .from(indexerCheckpoints)
+        .where(eq(indexerCheckpoints.network, NETWORK));
+      expect(checkpoint?.cursor).toBe("NEW_RESEEDED_CURSOR");
+
+      // Verify logging
+      expect(consoleWarn).toHaveBeenCalledTimes(1);
+      const warnMessage = String(consoleWarn.mock.calls[0][0]);
+      expect(warnMessage).toContain("OLD_EXPIRED_CURSOR");
+      expect(warnMessage).toContain("re-seeding");
+    } finally {
+      consoleWarn.mockRestore();
+    }
   });
 });

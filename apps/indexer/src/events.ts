@@ -64,6 +64,29 @@ export interface ProcessEventsBatchResult {
   cursor: string | null;
 }
 
+export function isExpiredCursorError(error: unknown): boolean {
+  if (!error) return false;
+
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "object" && error !== null && "message" in error
+        ? String((error as { message: unknown }).message)
+        : String(error);
+
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("start is before oldest ledger") ||
+    lower.includes("before oldest ledger") ||
+    lower.includes("cursor is expired") ||
+    lower.includes("expired cursor") ||
+    lower.includes("cursor expired") ||
+    lower.includes("cursor is invalid") ||
+    (lower.includes("cursor") &&
+      (lower.includes("expired") || lower.includes("oldest") || lower.includes("not found") || lower.includes("invalid")))
+  );
+}
+
 export async function processEventsBatch(
   db: Database,
   server: rpc.Server
@@ -75,15 +98,49 @@ export async function processEventsBatch(
 
   const cursor = await getStoredCursor(db);
 
-  const request = cursor
-    ? { filters: [{ type: "contract" as const }], cursor, limit: EVENTS_BATCH_LIMIT }
-    : {
-        filters: [{ type: "contract" as const }],
-        startLedger: (await withRetry("getLatestLedger", () => server._getLatestLedger())).sequence,
-        limit: EVENTS_BATCH_LIMIT
-      };
+  let response: Awaited<ReturnType<rpc.Server["_getEvents"]>>;
 
-  const response = await withRetry("getEvents", () => server._getEvents(request));
+  if (cursor) {
+    try {
+      response = await withRetry(
+        "getEvents",
+        () =>
+          server._getEvents({
+            filters: [{ type: "contract" as const }],
+            cursor,
+            limit: EVENTS_BATCH_LIMIT
+          }),
+        {
+          shouldRetry: (err) => !isExpiredCursorError(err)
+        }
+      );
+    } catch (err) {
+      if (isExpiredCursorError(err)) {
+        console.warn(
+          `stored cursor "${cursor}" has expired on RPC node; re-seeding indexer from latest ledger`
+        );
+        const latestLedger = (await withRetry("getLatestLedger", () => server._getLatestLedger())).sequence;
+        response = await withRetry("getEvents", () =>
+          server._getEvents({
+            filters: [{ type: "contract" as const }],
+            startLedger: latestLedger,
+            limit: EVENTS_BATCH_LIMIT
+          })
+        );
+      } else {
+        throw err;
+      }
+    }
+  } else {
+    const latestLedger = (await withRetry("getLatestLedger", () => server._getLatestLedger())).sequence;
+    response = await withRetry("getEvents", () =>
+      server._getEvents({
+        filters: [{ type: "contract" as const }],
+        startLedger: latestLedger,
+        limit: EVENTS_BATCH_LIMIT
+      })
+    );
+  }
 
   let indexedCount = 0;
   const webhookPayloads: WebhookEventPayload[] = [];
