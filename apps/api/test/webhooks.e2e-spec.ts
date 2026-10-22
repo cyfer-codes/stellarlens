@@ -1,4 +1,5 @@
-import { events, webhookDeliveries } from "@stellarlens/db";
+import { eq } from "drizzle-orm";
+import { events, webhookDeliveries, webhooks } from "@stellarlens/db";
 import request from "supertest";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApiKey } from "./helpers";
@@ -112,6 +113,50 @@ describe("webhooks (e2e)", () => {
       .get(`/contracts/${contractId}/webhooks`)
       .set("x-api-key", apiKey);
     expect(listResponse.body).toHaveLength(0);
+  });
+
+  it("updates webhook configuration without changing its secret", async () => {
+    const contractId = await registerContract(apiKey, "CONTRACT_WEBHOOKS_PATCH_A");
+    const created = await request(getApp().getHttpServer())
+      .post(`/contracts/${contractId}/webhooks`)
+      .set("x-api-key", apiKey)
+      .send({ url: "https://example.com/old", eventTypes: ["transfer"] });
+
+    const response = await request(getApp().getHttpServer())
+      .patch(`/contracts/${contractId}/webhooks/${created.body.id}`)
+      .set("x-api-key", apiKey)
+      .send({ url: "https://example.com/new", eventTypes: ["mint"] });
+
+    const [stored] = await getTestDb()
+      .select({ secret: webhooks.secret })
+      .from(webhooks)
+      .where(eq(webhooks.id, created.body.id));
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ url: "https://example.com/new", eventTypes: ["mint"] });
+    expect(response.body.secret).toBeUndefined();
+    expect(stored.secret).toBe(created.body.secret);
+  });
+
+  it("returns 404 when updating a webhook outside its contract or with an unknown id", async () => {
+    const contractA = await registerContract(apiKey, "CONTRACT_WEBHOOKS_PATCH_B");
+    const contractB = await registerContract(apiKey, "CONTRACT_WEBHOOKS_PATCH_C");
+    const created = await request(getApp().getHttpServer())
+      .post(`/contracts/${contractA}/webhooks`)
+      .set("x-api-key", apiKey)
+      .send({ url: "https://example.com/webhook" });
+
+    const otherContractResponse = await request(getApp().getHttpServer())
+      .patch(`/contracts/${contractB}/webhooks/${created.body.id}`)
+      .set("x-api-key", apiKey)
+      .send({ url: "https://example.com/updated" });
+    const unknownIdResponse = await request(getApp().getHttpServer())
+      .patch(`/contracts/${contractA}/webhooks/999999`)
+      .set("x-api-key", apiKey)
+      .send({ url: "https://example.com/updated" });
+
+    expect(otherContractResponse.status).toBe(404);
+    expect(unknownIdResponse.status).toBe(404);
   });
 
   it("returns 404 deleting a webhook that doesn't belong to the contract", async () => {

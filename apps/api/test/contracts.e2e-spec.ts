@@ -56,7 +56,63 @@ describe("contracts (e2e)", () => {
     expect(updateResponse.body.name).toBe("Renamed");
 
     const listResponse = await request(getApp().getHttpServer()).get("/contracts").set("x-api-key", apiKey);
-    expect(listResponse.body).toHaveLength(1);
+    expect(listResponse.body.data).toHaveLength(1);
+  });
+
+  it("filters contracts by a partial case-insensitive name", async () => {
+    await request(getApp().getHttpServer())
+      .post("/contracts")
+      .set("x-api-key", apiKey)
+      .send({ address: "CONTRACT_NAME_A", network: "testnet", name: "Stellar Token" });
+    await request(getApp().getHttpServer())
+      .post("/contracts")
+      .set("x-api-key", apiKey)
+      .send({ address: "CONTRACT_NAME_B", network: "testnet", name: "Other Asset" });
+
+    const response = await request(getApp().getHttpServer()).get("/contracts?name=TELLA").set("x-api-key", apiKey);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].name).toBe("Stellar Token");
+  });
+
+  it("filters contracts by network and returns all networks when omitted", async () => {
+    await request(getApp().getHttpServer())
+      .post("/contracts")
+      .set("x-api-key", apiKey)
+      .send({ address: "CONTRACT_NETWORK_A", network: "testnet" });
+    await request(getApp().getHttpServer())
+      .post("/contracts")
+      .set("x-api-key", apiKey)
+      .send({ address: "CONTRACT_NETWORK_B", network: "mainnet" });
+
+    const filteredResponse = await request(getApp().getHttpServer())
+      .get("/contracts?network=testnet")
+      .set("x-api-key", apiKey);
+    const allResponse = await request(getApp().getHttpServer()).get("/contracts").set("x-api-key", apiKey);
+
+    expect(filteredResponse.body.data).toHaveLength(1);
+    expect(filteredResponse.body.data[0].network).toBe("testnet");
+    expect(allResponse.body.data).toHaveLength(2);
+  });
+
+  it("paginates contracts across multiple pages", async () => {
+    for (const address of ["CONTRACT_PAGE_A", "CONTRACT_PAGE_B", "CONTRACT_PAGE_C"]) {
+      await request(getApp().getHttpServer())
+        .post("/contracts")
+        .set("x-api-key", apiKey)
+        .send({ address, network: "testnet" });
+    }
+
+    const firstPage = await request(getApp().getHttpServer()).get("/contracts?limit=2").set("x-api-key", apiKey);
+    const secondPage = await request(getApp().getHttpServer())
+      .get(`/contracts?limit=2&cursor=${firstPage.body.nextCursor}`)
+      .set("x-api-key", apiKey);
+
+    expect(firstPage.body.data).toHaveLength(2);
+    expect(firstPage.body.nextCursor).toBe(firstPage.body.data[1].id);
+    expect(secondPage.body.data).toHaveLength(1);
+    expect(secondPage.body.nextCursor).toBeNull();
   });
 
   it("returns 404 for an unknown contract id", async () => {

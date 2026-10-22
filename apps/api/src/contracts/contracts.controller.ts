@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query } from "@nestjs/common";
 import { ContractsService } from "./contracts.service";
 import { CreateContractDto } from "./dto/create-contract.dto";
+import { FindContractsQueryDto } from "./dto/find-contracts-query.dto";
 import { UpdateContractDto } from "./dto/update-contract.dto";
 
 @Controller("contracts")
@@ -13,8 +14,8 @@ export class ContractsController {
   }
 
   @Get()
-  findAll() {
-    return this.contractsService.findAll();
+  findAll(@Query() query: FindContractsQueryDto) {
+    return this.contractsService.findAll(query);
   }
 
   @Get(":id")

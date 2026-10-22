@@ -15,6 +15,8 @@ describe('ContractsService', () => {
   const mockWhere = vi.fn();
   const mockFrom = vi.fn(() => ({ where: mockWhere }));
   const mockSelect = vi.fn(() => ({ from: mockFrom }));
+  const mockLimit = vi.fn();
+  const mockOrderBy = vi.fn(() => ({ limit: mockLimit }));
 
   const mockDb = {
     insert: mockInsert,
@@ -104,25 +106,29 @@ describe('ContractsService', () => {
         },
       ];
 
-      mockWhere.mockResolvedValueOnce(contracts);
+      mockWhere.mockReturnValueOnce({ orderBy: mockOrderBy });
+      mockLimit.mockResolvedValueOnce(contracts);
 
       const result = await service.findAll();
 
       expect(mockSelect).toHaveBeenCalledTimes(1);
       expect(mockFrom).toHaveBeenCalledTimes(1);
       expect(mockWhere).toHaveBeenCalledTimes(1);
-      expect(result).toEqual(contracts);
+      expect(mockOrderBy).toHaveBeenCalledTimes(1);
+      expect(mockLimit).toHaveBeenCalledWith(21);
+      expect(result).toEqual({ data: contracts, nextCursor: null });
     });
 
     it('should return an empty array when no contracts exist', async () => {
-      mockWhere.mockResolvedValueOnce([]);
+      mockWhere.mockReturnValueOnce({ orderBy: mockOrderBy });
+      mockLimit.mockResolvedValueOnce([]);
 
       const result = await service.findAll();
 
       expect(mockSelect).toHaveBeenCalledTimes(1);
       expect(mockFrom).toHaveBeenCalledTimes(1);
       expect(mockWhere).toHaveBeenCalledTimes(1);
-      expect(result).toEqual([]);
+      expect(result).toEqual({ data: [], nextCursor: null });
     });
   });
 

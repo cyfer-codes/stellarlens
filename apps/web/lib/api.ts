@@ -122,7 +122,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function listContracts(): Promise<Contract[]> {
-  return apiFetch<Contract[]>("/contracts");
+  return apiFetch<{ data: Contract[] }>("/contracts").then((page) => page.data);
 }
 
 export function getContract(id: number): Promise<Contract> {

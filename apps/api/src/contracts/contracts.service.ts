@@ -1,8 +1,9 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { eq } from "drizzle-orm";
+import { and, asc, eq, gt, ilike } from "drizzle-orm";
 import { contracts, type Database } from "@stellarlens/db";
 import { DATABASE } from "../database/database.module";
 import { CreateContractDto } from "./dto/create-contract.dto";
+import { FindContractsQueryDto } from "./dto/find-contracts-query.dto";
 import { UpdateContractDto } from "./dto/update-contract.dto";
 
 @Injectable()
@@ -21,8 +22,31 @@ export class ContractsService {
     return contract;
   }
 
-  findAll() {
-    return this.db.select().from(contracts);
+  async findAll(query: FindContractsQueryDto = new FindContractsQueryDto()) {
+    const conditions = [];
+
+    if (query.cursor !== undefined) {
+      conditions.push(gt(contracts.id, query.cursor));
+    }
+    if (query.name) {
+      conditions.push(ilike(contracts.name, `%${query.name}%`));
+    }
+    if (query.network) {
+      conditions.push(eq(contracts.network, query.network));
+    }
+
+    const rows = await this.db
+      .select()
+      .from(contracts)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(asc(contracts.id))
+      .limit(query.limit + 1);
+
+    const hasMore = rows.length > query.limit;
+    const data = hasMore ? rows.slice(0, query.limit) : rows;
+    const nextCursor = hasMore ? data[data.length - 1].id : null;
+
+    return { data, nextCursor };
   }
 
   async findOne(id: number) {
