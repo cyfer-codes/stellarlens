@@ -21,6 +21,18 @@ export function WebhooksManager({ contractId, authenticated }: { contractId: num
   const [eventTypesInput, setEventTypesInput] = useState("");
   const [creating, setCreating] = useState(false);
   const [justCreatedSecret, setJustCreatedSecret] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopySecret() {
+    if (!justCreatedSecret) return;
+    try {
+      await navigator.clipboard.writeText(justCreatedSecret);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // fallback if clipboard API not available
+    }
+  }
 
   async function refresh() {
     try {
@@ -67,6 +79,9 @@ export function WebhooksManager({ contractId, authenticated }: { contractId: num
   }
 
   async function handleDelete(id: number) {
+    if (typeof window !== "undefined" && !window.confirm("Are you sure you want to delete this webhook?")) {
+      return;
+    }
     try {
       const response = await fetch(`/api/contracts/${contractId}/webhooks/${id}`, { method: "DELETE" });
       if (!response.ok) {
@@ -88,7 +103,16 @@ export function WebhooksManager({ contractId, authenticated }: { contractId: num
           <p className="text-sm font-medium text-amber-900">
             New webhook secret — copy it now, it won&apos;t be shown again:
           </p>
-          <code className="mt-2 block break-all rounded bg-white px-3 py-2 text-xs">{justCreatedSecret}</code>
+          <div className="mt-2 flex items-center gap-2">
+            <code className="block flex-1 break-all rounded bg-white px-3 py-2 text-xs">{justCreatedSecret}</code>
+            <button
+              type="button"
+              onClick={handleCopySecret}
+              className="rounded bg-amber-200 px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-300"
+            >
+              {copied ? "Copied!" : "Copy"}
+            </button>
+          </div>
         </div>
       )}
 
@@ -145,6 +169,7 @@ export function WebhooksManager({ contractId, authenticated }: { contractId: num
             <thead>
               <tr className="border-b border-gray-200 text-gray-500">
                 <th scope="col" className="py-2 font-medium">URL</th>
+                <th scope="col" className="py-2 font-medium">Status</th>
                 <th scope="col" className="py-2 font-medium">Events</th>
                 <th scope="col" className="py-2 font-medium">Created</th>
                 {authenticated && (
@@ -158,6 +183,17 @@ export function WebhooksManager({ contractId, authenticated }: { contractId: num
               {webhooks.map((webhook) => (
                 <tr key={webhook.id} className="border-b border-gray-100">
                   <td className="py-2 font-mono text-xs">{webhook.url}</td>
+                  <td className="py-2">
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                        webhook.active === false
+                          ? "bg-gray-100 text-gray-700"
+                          : "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20"
+                      }`}
+                    >
+                      {webhook.active === false ? "Inactive" : "Active"}
+                    </span>
+                  </td>
                   <td className="py-2">{webhook.eventTypes?.length ? webhook.eventTypes.join(", ") : "All events"}</td>
                   <td className="py-2">{new Date(webhook.createdAt).toLocaleString()}</td>
                   {authenticated && (

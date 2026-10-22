@@ -80,6 +80,7 @@ export interface Webhook {
   id: number;
   url: string;
   eventTypes: string[] | null;
+  active?: boolean;
   createdAt: string;
 }
 
