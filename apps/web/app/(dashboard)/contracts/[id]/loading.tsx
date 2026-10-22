@@ -1,16 +1,13 @@
-import { EventsTableSkeleton } from "@/components/EventsTable";
+import EventsTableSkeleton from "@/components/EventsTableSkeleton";
 import { StatsCards } from "@/components/StatsCards";
 import { Skeleton } from "@/components/ui/Skeleton";
 
 export default function ContractDetailLoading() {
   return (
-    <div className="space-y-8">
-      <Skeleton className="h-8 w-64" />
-
+    <div className="space-y-6">
       <StatsCards loading />
-
-      <div>
-        <h2 className="mb-3 text-lg font-semibold">Events</h2>
+      <div className="space-y-3">
+        <Skeleton className="h-5 w-48" />
         <EventsTableSkeleton />
       </div>
     </div>

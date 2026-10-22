@@ -9,13 +9,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   }
   const limitParam = request.nextUrl.searchParams.get("limit");
   const cursorParam = request.nextUrl.searchParams.get("cursor");
-  const beforeParam = request.nextUrl.searchParams.get("before");
 
   try {
     const events = await listEvents(contractId, {
       limit: limitParam ? Number(limitParam) : undefined,
-      cursor: cursorParam ? Number(cursorParam) : undefined,
-      before: beforeParam ? Number(beforeParam) : undefined
+      cursor: cursorParam ? Number(cursorParam) : undefined
     });
     return NextResponse.json(events);
   } catch (err) {
