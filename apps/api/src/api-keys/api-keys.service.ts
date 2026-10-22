@@ -23,7 +23,8 @@ export class ApiKeysService {
         id: apiKeys.id,
         name: apiKeys.name,
         createdAt: apiKeys.createdAt,
-        expiresAt: apiKeys.expiresAt
+        expiresAt: apiKeys.expiresAt,
+        lastUsedAt: apiKeys.lastUsedAt
       });
 
     return { ...apiKey, key: rawKey };
@@ -36,7 +37,9 @@ export class ApiKeysService {
         name: apiKeys.name,
         scope: apiKeys.scope,
         createdAt: apiKeys.createdAt,
-        revokedAt: apiKeys.revokedAt
+        revokedAt: apiKeys.revokedAt,
+        expiresAt: apiKeys.expiresAt,
+        lastUsedAt: apiKeys.lastUsedAt
       })
       .from(apiKeys)
       .orderBy(desc(apiKeys.createdAt));

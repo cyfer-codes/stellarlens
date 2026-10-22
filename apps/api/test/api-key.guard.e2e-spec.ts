@@ -95,4 +95,16 @@ describe("ApiKeyGuard", () => {
     await expect(guard().canActivate(context)).resolves.toBe(true);
     expect(request.apiKey).toBeUndefined();
   });
+
+  it("updates lastUsedAt on successful authentication", async () => {
+    const db = getTestDb();
+    const apiKey = await createApiKey(db);
+    const { context } = contextFor(TestController.prototype.protected, { "x-api-key": apiKey });
+
+    await expect(guard().canActivate(context)).resolves.toBe(true);
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const [row] = await db.select().from(apiKeys);
+    expect(row.lastUsedAt).toBeInstanceOf(Date);
+  });
 });

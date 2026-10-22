@@ -66,6 +66,20 @@ export class ApiKeyGuard implements CanActivate {
     }
 
     request.apiKey = apiKey;
+
+    // Fire-and-forget throttled update for lastUsedAt (at most once every 60 seconds)
+    // to prevent request latency and avoid database write amplification.
+    const now = Date.now();
+    if (!apiKey.lastUsedAt || now - apiKey.lastUsedAt.getTime() > 60_000) {
+      this.db
+        .update(apiKeys)
+        .set({ lastUsedAt: new Date(now) })
+        .where(eq(apiKeys.id, apiKey.id))
+        .catch(() => {
+          // Fire-and-forget: do not block or fail the authenticated request if background write fails
+        });
+    }
+
     return true;
   }
 }

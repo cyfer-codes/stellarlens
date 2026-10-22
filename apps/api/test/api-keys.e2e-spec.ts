@@ -34,6 +34,7 @@ describe("api keys (e2e)", () => {
     for (const row of response.body) {
       expect(row.keyHash).toBeUndefined();
       expect(row.key).toBeUndefined();
+      expect("lastUsedAt" in row).toBe(true);
     }
   });
 
