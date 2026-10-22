@@ -1,8 +1,9 @@
 import { IsNotEmpty, IsOptional, IsString } from "class-validator";
+import { IsValidStellarAddress } from "./is-stellar-address.decorator";
 
 export class CreateContractDto {
   @IsString()
-  @IsNotEmpty()
+  @IsValidStellarAddress()
   address!: string;
 
   @IsOptional()

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { STELLAR_NETWORK as NETWORK } from "../src/config.js";
 import { processEventsBatch } from "../src/events.js";
 import { registerContract } from "../src/registry.js";
+import { contractAddress } from "./addresses.js";
 import { mockJsonRpc, TEST_RPC_URL } from "./rpc-mocks.js";
 import { getTestDb, mswServer } from "./setup.js";
 
@@ -63,12 +64,12 @@ function buildLatestLedger(sequence: number) {
 describe("processEventsBatch", () => {
   it("advances the checkpoint across polls and resumes from the stored cursor", async () => {
     const db = getTestDb();
-    await registerContract(db, { address: "CONTRACT_A", network: NETWORK });
+    await registerContract(db, { address: contractAddress("CONTRACT_A"), network: NETWORK });
 
     const firstEventsSpy = vi.fn((_params: unknown) => ({
       events: [
         buildRawEvent({
-          contractId: "CONTRACT_A",
+          contractId: contractAddress("CONTRACT_A"),
           topic: [symbolXdr("fee")],
           value: i128Xdr(-100n)
         })
@@ -127,7 +128,7 @@ describe("processEventsBatch", () => {
 
   it("decodes event topic and value XDR into native values alongside the raw form", async () => {
     const db = getTestDb();
-    await registerContract(db, { address: "CONTRACT_B", network: NETWORK });
+    await registerContract(db, { address: contractAddress("CONTRACT_B"), network: NETWORK });
 
     mswServer.use(
       mockJsonRpc({
@@ -135,7 +136,7 @@ describe("processEventsBatch", () => {
         getEvents: () => ({
           events: [
             buildRawEvent({
-              contractId: "CONTRACT_B",
+              contractId: contractAddress("CONTRACT_B"),
               ledger: 2005,
               txHash: "b".repeat(64),
               topic: [symbolXdr("fee"), addressXdr(ADDRESS_A)],
@@ -171,7 +172,7 @@ describe("processEventsBatch", () => {
 
   it("detects a SEP-41 transfer event and populates token_transfers", async () => {
     const db = getTestDb();
-    await registerContract(db, { address: "CONTRACT_C", network: NETWORK });
+    await registerContract(db, { address: contractAddress("CONTRACT_C"), network: NETWORK });
 
     mswServer.use(
       mockJsonRpc({
@@ -179,7 +180,7 @@ describe("processEventsBatch", () => {
         getEvents: () => ({
           events: [
             buildRawEvent({
-              contractId: "CONTRACT_C",
+              contractId: contractAddress("CONTRACT_C"),
               ledger: 3010,
               txHash: "c".repeat(64),
               topic: [symbolXdr("transfer"), addressXdr(ADDRESS_A), addressXdr(ADDRESS_B)],
@@ -199,12 +200,12 @@ describe("processEventsBatch", () => {
     expect(transfer.from).toBe(ADDRESS_A);
     expect(transfer.to).toBe(ADDRESS_B);
     expect(transfer.amount).toBe("30000000");
-    expect(transfer.asset).toBe("CONTRACT_C");
+    expect(transfer.asset).toBe(contractAddress("CONTRACT_C"));
     expect(transfer.ledger).toBe(3010);
     expect(transfer.txHash).toBe("c".repeat(64));
 
     // the generic event row is still recorded alongside the transfer
-    const [contract] = await db.select().from(contracts).where(eq(contracts.address, "CONTRACT_C"));
+    const [contract] = await db.select().from(contracts).where(eq(contracts.address, contractAddress("CONTRACT_C")));
     const eventRows = await db.select().from(eventsTable).where(eq(eventsTable.contractId, contract.id));
     expect(eventRows).toHaveLength(1);
   });
@@ -241,15 +242,15 @@ describe("processEventsBatch", () => {
 
   it("skips events from unregistered contracts", async () => {
     const db = getTestDb();
-    await registerContract(db, { address: "CONTRACT_REGISTERED", network: NETWORK });
+    await registerContract(db, { address: contractAddress("CONTRACT_REGISTERED"), network: NETWORK });
 
     mswServer.use(
       mockJsonRpc({
         getLatestLedger: () => buildLatestLedger(4000),
         getEvents: () => ({
           events: [
-            buildRawEvent({ contractId: "CONTRACT_UNREGISTERED", topic: [symbolXdr("fee")] }),
-            buildRawEvent({ contractId: "CONTRACT_REGISTERED", topic: [symbolXdr("fee")] })
+            buildRawEvent({ contractId: contractAddress("CONTRACT_UNREGISTERED"), topic: [symbolXdr("fee")] }),
+            buildRawEvent({ contractId: contractAddress("CONTRACT_REGISTERED"), topic: [symbolXdr("fee")] })
           ],
           cursor: "CURSOR_FILTER",
           latestLedger: 4000
@@ -265,7 +266,7 @@ describe("processEventsBatch", () => {
     expect(eventRows).toHaveLength(1);
 
     const contractRows = await db.select().from(contracts);
-    expect(contractRows.map((c) => c.address)).toEqual(["CONTRACT_REGISTERED"]);
+    expect(contractRows.map((c) => c.address)).toEqual([contractAddress("CONTRACT_REGISTERED")]);
   });
 
   it("keeps processing the batch when one event has a malformed XDR payload", async () => {
