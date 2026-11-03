@@ -34,6 +34,20 @@ function buildQuery(params?: object): string {
   return qs ? `?${qs}` : "";
 }
 
+function parseRetryAfter(value: string | null): number | undefined {
+  if (value === null) return undefined;
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) {
+    const seconds = Number(trimmed);
+    return Number.isSafeInteger(seconds) ? seconds : undefined;
+  }
+  // Require a date-like value so invalid numbers are not parsed as calendar dates.
+  const retryAt = /^[a-z]/i.test(trimmed) ? Date.parse(trimmed) : NaN;
+  return Number.isFinite(retryAt)
+    ? Math.max(0, Math.ceil((retryAt - Date.now()) / 1000))
+    : undefined;
+}
+
 export class StellarLensClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
@@ -63,7 +77,11 @@ export class StellarLensClient {
       } catch {
         // not JSON — keep the raw text as the error body
       }
-      throw new StellarLensApiError(response.status, body);
+      throw new StellarLensApiError(
+        response.status,
+        body,
+        parseRetryAfter(response.headers.get("Retry-After"))
+      );
     }
 
     if (response.status === 204) {
@@ -96,7 +114,9 @@ export class StellarLensClient {
 
   /** Cursor-paginated token transfers for a contract, oldest first. */
   listTransfers(contractId: number, params?: ListTransfersParams): Promise<Page<TransferRecord>> {
-    return this.request<Page<TransferRecord>>(`/contracts/${contractId}/transfers${buildQuery(params)}`);
+    return this.request<Page<TransferRecord>>(
+      `/contracts/${contractId}/transfers${buildQuery(params)}`
+    );
   }
 
   /** Transfer summary stats for a contract, optionally scoped to a time window. */

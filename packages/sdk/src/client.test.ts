@@ -54,7 +54,10 @@ describe("StellarLensClient", () => {
       return jsonResponse({ id: 1, address: "C1", name: null, network: "testnet" }, 201);
     }) as unknown as typeof fetch;
 
-    const contract = await makeClient(fetchMock).registerContract({ address: "C1", network: "testnet" });
+    const contract = await makeClient(fetchMock).registerContract({
+      address: "C1",
+      network: "testnet"
+    });
     expect(contract.id).toBe(1);
   });
 
@@ -72,11 +75,61 @@ describe("StellarLensClient", () => {
   });
 
   it("throws StellarLensApiError with raw text when the error body isn't json", async () => {
-    const fetchMock = vi.fn(async () => new Response("internal error", { status: 500 })) as unknown as typeof fetch;
+    const fetchMock = vi.fn(
+      async () => new Response("internal error", { status: 500 })
+    ) as unknown as typeof fetch;
 
     await expect(makeClient(fetchMock).getContract(1)).rejects.toMatchObject({
       status: 500,
       body: "internal error"
     });
+  });
+
+  it.each<[string | null, number | undefined]>([
+    ["30", 30],
+    ["0", 0],
+    [null, undefined],
+    ["invalid", undefined],
+    ["-3", undefined],
+    ["1.5", undefined],
+    ["", undefined],
+    ["9007199254740992", undefined],
+    ["Infinity", undefined]
+  ])("exposes Retry-After %s as %s seconds on rate-limit errors", async (header, expected) => {
+    const headers: Record<string, string> = header === null ? {} : { "Retry-After": header };
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ message: "rate limited" }), { status: 429, headers })
+    ) as unknown as typeof fetch;
+
+    const error = await makeClient(fetchMock)
+      .listContracts()
+      .catch((err: unknown) => err);
+
+    expect(error).toBeInstanceOf(StellarLensApiError);
+    expect(error).toMatchObject({
+      status: 429,
+      body: { message: "rate limited" },
+      retryAfterSeconds: expected
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each<[string, number]>([
+    ["Thu, 01 Jan 2026 00:01:00 GMT", 60],
+    ["Wed, 31 Dec 2025 23:59:00 GMT", 0]
+  ])("converts Retry-After date %s into a non-negative delay", async (header, expected) => {
+    const clock = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-01-01T00:00:00Z") + 1);
+    try {
+      const fetchMock = vi.fn(
+        async () =>
+          new Response("rate limited", { status: 429, headers: { "Retry-After": header } })
+      ) as unknown as typeof fetch;
+      await expect(makeClient(fetchMock).listContracts()).rejects.toMatchObject({
+        retryAfterSeconds: expected
+      });
+    } finally {
+      clock.mockRestore();
+    }
   });
 });
