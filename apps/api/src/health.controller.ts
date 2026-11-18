@@ -5,12 +5,13 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { sql } from "drizzle-orm";
+import type { Database } from "@stellarlens/db";
 import { Public } from "./auth/decorators/public.decorator";
 import { DATABASE } from "./database/database.module";
 
 @Controller("health")
 export class HealthController {
-  constructor(@Inject(DATABASE) private readonly db: any) {}
+  constructor(@Inject(DATABASE) private readonly db: Database) {}
 
   @Public()
   @Get()

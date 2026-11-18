@@ -21,10 +21,10 @@ export class TransfersService {
       conditions.push(gt(tokenTransfers.id, query.cursor));
     }
     if (query.minAmount !== undefined) {
-      conditions.push(gte(tokenTransfers.amount, query.minAmount));
+      conditions.push(gte(tokenTransfers.amount, String(query.minAmount)));
     }
     if (query.maxAmount !== undefined) {
-      conditions.push(lte(tokenTransfers.amount, query.maxAmount));
+      conditions.push(lte(tokenTransfers.amount, String(query.maxAmount)));
     }
     if (query.from !== undefined) {
       conditions.push(eq(tokenTransfers.from, query.from));
