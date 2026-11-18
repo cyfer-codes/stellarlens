@@ -14,12 +14,15 @@ export const tokenTransfers = pgTable(
     asset: text("asset").notNull(),
     txHash: text("tx_hash").notNull(),
     ledger: bigint("ledger", { mode: "number" }).notNull(),
+    // Soroban RPC's event id (e.g. "0001234-0000000001"): unique per emitted event, so it
+    // dedupes re-processed batches without collapsing several transfers in one transaction.
+    rpcEventId: text("rpc_event_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
   },
   (table) => [
     index("token_transfers_contract_id_idx").on(table.contractId),
     index("token_transfers_tx_hash_idx").on(table.txHash),
     index("token_transfers_ledger_idx").on(table.ledger),
-    uniqueIndex("token_transfers_contract_tx_ledger_uidx").on(table.contractId, table.txHash, table.ledger)
+    uniqueIndex("token_transfers_rpc_event_id_uidx").on(table.rpcEventId)
   ]
 );
