@@ -26,13 +26,14 @@ describe("tryDecodeScVal", () => {
     const result = tryDecodeScVal(MALFORMED_XDR);
     expect(result.ok).toBe(false);
     expect(!result.ok && result.error).toMatch(/incomplete XDR data/);
-import { decodeScVal } from "../src/decode.js";
+  });
+});
 
 function encode(value: unknown, type?: "symbol" | "string" | "i128"): string {
   return nativeToScVal(value, type ? { type } : undefined).toXdr("base64");
 }
 
-describe("decodeScVal", () => {
+describe("decodeScVal value types", () => {
   it("decodes symbol and string values", () => {
     expect(decodeScVal(encode("transfer", "symbol"))).toBe("transfer");
     expect(decodeScVal(encode("hello", "string"))).toBe("hello");
