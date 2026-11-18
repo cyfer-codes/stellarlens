@@ -63,11 +63,11 @@ describe("contracts (e2e)", () => {
     await request(getApp().getHttpServer())
       .post("/contracts")
       .set("x-api-key", apiKey)
-      .send({ address: "CONTRACT_NAME_A", network: "testnet", name: "Stellar Token" });
+      .send({ address: contractAddress("CONTRACT_NAME_A"), network: "testnet", name: "Stellar Token" });
     await request(getApp().getHttpServer())
       .post("/contracts")
       .set("x-api-key", apiKey)
-      .send({ address: "CONTRACT_NAME_B", network: "testnet", name: "Other Asset" });
+      .send({ address: contractAddress("CONTRACT_NAME_B"), network: "testnet", name: "Other Asset" });
 
     const response = await request(getApp().getHttpServer()).get("/contracts?name=TELLA").set("x-api-key", apiKey);
 
@@ -80,11 +80,11 @@ describe("contracts (e2e)", () => {
     await request(getApp().getHttpServer())
       .post("/contracts")
       .set("x-api-key", apiKey)
-      .send({ address: "CONTRACT_NETWORK_A", network: "testnet" });
+      .send({ address: contractAddress("CONTRACT_NETWORK_A"), network: "testnet" });
     await request(getApp().getHttpServer())
       .post("/contracts")
       .set("x-api-key", apiKey)
-      .send({ address: "CONTRACT_NETWORK_B", network: "mainnet" });
+      .send({ address: contractAddress("CONTRACT_NETWORK_B"), network: "mainnet" });
 
     const filteredResponse = await request(getApp().getHttpServer())
       .get("/contracts?network=testnet")
@@ -101,7 +101,7 @@ describe("contracts (e2e)", () => {
       await request(getApp().getHttpServer())
         .post("/contracts")
         .set("x-api-key", apiKey)
-        .send({ address, network: "testnet" });
+        .send({ address: contractAddress(address), network: "testnet" });
     }
 
     const firstPage = await request(getApp().getHttpServer()).get("/contracts?limit=2").set("x-api-key", apiKey);

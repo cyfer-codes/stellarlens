@@ -1,14 +1,14 @@
 import { tokenTransfers } from "@stellarlens/db";
 import request from "supertest";
 import { beforeEach, describe, expect, it } from "vitest";
-import { createApiKey } from "./helpers";
+import { contractAddress, createApiKey } from "./helpers";
 import { getApp, getTestDb } from "./setup";
 
 async function registerContract(apiKey: string): Promise<number> {
   const response = await request(getApp().getHttpServer())
     .post("/contracts")
     .set("x-api-key", apiKey)
-    .send({ address: "CONTRACT_TRANSFERS_A", network: "testnet" });
+    .send({ address: contractAddress("CONTRACT_TRANSFERS_A"), network: "testnet" });
   return response.body.id;
 }
 
