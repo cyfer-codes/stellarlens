@@ -27,7 +27,8 @@ function formatEvent(event: EventRecord): Record<string, string> {
 export async function pollNewEvents(
   client: StellarLensClient,
   contractId: number,
-  cursor: number | undefined
+  cursor: number | undefined,
+  json = false
 ): Promise<number | undefined> {
   const page = await client.listEvents(contractId, { cursor, limit: PAGE_SIZE });
 
@@ -35,17 +36,29 @@ export async function pollNewEvents(
     return cursor;
   }
 
-  console.table(page.data.map(formatEvent));
+  if (json) {
+    for (const event of page.data) {
+      console.log(JSON.stringify(event));
+    }
+  } else {
+    console.table(page.data.map(formatEvent));
+  }
   return page.data[page.data.length - 1].id;
 }
 
-export async function tailEvents(client: StellarLensClient, contractId: number): Promise<void> {
-  console.log(`tailing events for contract ${contractId} (ctrl+c to stop)...`);
+export async function tailEvents(
+  client: StellarLensClient,
+  contractId: number,
+  json = false
+): Promise<void> {
+  if (!json) {
+    console.log(`tailing events for contract ${contractId} (ctrl+c to stop)...`);
+  }
 
   let cursor: number | undefined;
   for (;;) {
     try {
-      cursor = await pollNewEvents(client, contractId, cursor);
+      cursor = await pollNewEvents(client, contractId, cursor, json);
     } catch (err) {
       console.error("failed to fetch events:", err instanceof Error ? err.message : err);
     }
