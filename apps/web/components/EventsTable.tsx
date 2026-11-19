@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { EventRow, EventsPage } from "@/lib/api";
@@ -12,6 +13,21 @@ const POLL_INTERVAL_MS = 10000;
 // The api caps `limit` at 100, so exports walk the cursor in pages of this size.
 const EXPORT_PAGE_SIZE = 100;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+const CURSOR_PARAM = "eventsCursor";
+const PAGE_SIZE_PARAM = "eventsPageSize";
+
+function parsePageSize(value: string | null): number {
+  const size = Number(value);
+  return PAGE_SIZE_OPTIONS.includes(size) ? size : 20;
+}
+
+function parseCursor(value: string | null): number | null {
+  if (value === null) {
+    return null;
+  }
+  const cursor = Number(value);
+  return Number.isInteger(cursor) ? cursor : null;
+}
 
 function formatTopic(event: EventRow): string {
   const topic = event.decodedData?.decoded?.topic;
@@ -78,6 +94,16 @@ type CursorHistory = {
   index: number;
 };
 
+export function EventsTable({ contractId }: { contractId: number }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const [pageSize, setPageSize] = useState(() => parsePageSize(searchParams.get(PAGE_SIZE_PARAM)));
+  const [history, setHistory] = useState<CursorHistory>(() => ({
+    cursors: [parseCursor(searchParams.get(CURSOR_PARAM))],
+    index: 0
+  }));
 export function EventsTable({ contractId, network, contractAddress }: { contractId: number; network: string; contractAddress: string }) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
@@ -102,6 +128,41 @@ export function EventsTable({ contractId, network, contractAddress }: { contract
   const [selectedEvent, setSelectedEvent] = useState<EventRow | null>(null);
 
   const activeCursor = history.cursors[history.index];
+
+  const updateUrl = useCallback(
+    (params: { cursor: number | null; pageSize: number }, mode: "push" | "replace") => {
+      const next = new URLSearchParams(searchParams.toString());
+      if (params.cursor === null) {
+        next.delete(CURSOR_PARAM);
+      } else {
+        next.set(CURSOR_PARAM, String(params.cursor));
+      }
+      next.set(PAGE_SIZE_PARAM, String(params.pageSize));
+      const query = next.toString();
+      const url = query ? `${pathname}?${query}` : pathname;
+      if (mode === "push") {
+        router.push(url, { scroll: false });
+      } else {
+        router.replace(url, { scroll: false });
+      }
+    },
+    [pathname, router, searchParams]
+  );
+
+  // Keep local state in sync when the URL changes from outside this component
+  // (browser back/forward, or a shared link loaded fresh).
+  useEffect(() => {
+    const urlCursor = parseCursor(searchParams.get(CURSOR_PARAM));
+    const urlPageSize = parsePageSize(searchParams.get(PAGE_SIZE_PARAM));
+
+    setPageSize((current) => (current === urlPageSize ? current : urlPageSize));
+    setHistory((current) => {
+      if (current.cursors[current.index] === urlCursor) {
+        return current;
+      }
+      return { cursors: [urlCursor], index: 0 };
+    });
+  }, [searchParams]);
 
   const fetchEvents = useCallback(async () => {
     const id = ++requestId.current;
@@ -193,6 +254,7 @@ export function EventsTable({ contractId, network, contractAddress }: { contract
     const cursors = history.cursors.slice(0, nextIndex);
     cursors[nextIndex] = nextCursor;
     setHistory({ cursors, index: nextIndex });
+    updateUrl({ cursor: nextCursor, pageSize }, "push");
     void loadPage(nextCursor);
   }
 
@@ -201,14 +263,17 @@ export function EventsTable({ contractId, network, contractAddress }: { contract
       return;
     }
     const prevIndex = history.index - 1;
+    const prevCursor = history.cursors[prevIndex];
     setHistory({ ...history, index: prevIndex });
-    void loadPage(history.cursors[prevIndex]);
+    updateUrl({ cursor: prevCursor, pageSize }, "push");
+    void loadPage(prevCursor);
   }
 
   function handlePageSizeChange(event: React.ChangeEvent<HTMLSelectElement>) {
     const size = Number(event.target.value);
     setPageSize(size);
     setHistory({ cursors: [null], index: 0 });
+    updateUrl({ cursor: null, pageSize: size }, "replace");
     void loadPage(null);
   }
 

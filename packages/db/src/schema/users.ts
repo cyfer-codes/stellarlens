@@ -1,5 +1,8 @@
 import { integer, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 
+export const USER_ROLES = ["admin", "member"] as const;
+export type UserRole = (typeof USER_ROLES)[number];
+
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   email: text("email").notNull().unique(),
