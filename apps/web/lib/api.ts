@@ -121,8 +121,34 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function listContracts(): Promise<Contract[]> {
-  return apiFetch<{ data: Contract[] }>("/contracts").then((page) => page.data);
+export interface ContractsPage {
+  data: Contract[];
+  nextCursor: number | null;
+}
+
+export interface ListContractsParams {
+  cursor?: number;
+  limit?: number;
+  name?: string;
+  network?: string;
+}
+
+export function listContracts(params?: ListContractsParams): Promise<ContractsPage> {
+  const query = new URLSearchParams();
+  if (params?.cursor !== undefined) {
+    query.set("cursor", String(params.cursor));
+  }
+  if (params?.limit !== undefined) {
+    query.set("limit", String(params.limit));
+  }
+  if (params?.name) {
+    query.set("name", params.name);
+  }
+  if (params?.network) {
+    query.set("network", params.network);
+  }
+  const qs = query.toString();
+  return apiFetch<ContractsPage>(`/contracts${qs ? `?${qs}` : ""}`);
 }
 
 export function getContract(id: number): Promise<Contract> {
