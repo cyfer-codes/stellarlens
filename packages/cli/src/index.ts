@@ -1,7 +1,12 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { createClientFromEnv } from "./client.js";
-import { addContract, listContracts } from "./commands/contracts.js";
+import {
+  type ContractEntry,
+  listContracts,
+  readContractsFile,
+  runAddContracts
+} from "./commands/contracts.js";
 import { tailEvents } from "./commands/events.js";
 
 const program = new Command();
@@ -16,13 +21,32 @@ program
 const contractsCommand = program.command("contracts").description("Manage registered contracts");
 
 contractsCommand
-  .command("add <address>")
-  .description("Register a contract")
-  .requiredOption("-n, --network <network>", "Stellar network, e.g. testnet")
-  .option("--name <name>", "Optional display name")
-  .action(async (address: string, options: { network: string; name?: string }) => {
-    await addContract(createClientFromEnv(), address, options);
-  });
+  .command("add [addresses...]")
+  .description(
+    "Register one or more contracts. Every address is validated locally before anything is sent; " +
+      "several addresses use the bulk endpoint when the api supports it. Exits non-zero if any address fails."
+  )
+  .option("-n, --network <network>", "Stellar network, e.g. testnet (default for file entries without one)")
+  .option("--name <name>", "Optional display name (single address only)")
+  .option(
+    "-f, --file <path>",
+    "Read addresses from a file: .json (array of addresses or { address, network?, name? }) or text (one per line, # comments)"
+  )
+  .action(
+    async (addresses: string[], options: { network?: string; name?: string; file?: string }) => {
+      const entries: ContractEntry[] = addresses.map((address) => ({ address }));
+      if (options.file) {
+        entries.push(...(await readContractsFile(options.file)));
+      }
+      const ok = await runAddContracts(createClientFromEnv(), entries, {
+        network: options.network,
+        name: options.name
+      });
+      if (!ok) {
+        process.exitCode = 1;
+      }
+    }
+  );
 
 contractsCommand
   .command("list")
@@ -40,4 +64,7 @@ eventsCommand
     await tailEvents(createClientFromEnv(), Number(contractId));
   });
 
-program.parseAsync(process.argv);
+program.parseAsync(process.argv).catch((error: unknown) => {
+  console.error(`error: ${error instanceof Error ? error.message : String(error)}`);
+  process.exitCode = 1;
+});

@@ -119,7 +119,7 @@ one thing that can't depend on an api key existing yet: creating the first one (
 - **Indexer** (`apps/indexer`): a polling worker, no framework — decodes XDR, detects transfers, delivers webhooks
 - **Web** (`apps/web`): Next.js 14 App Router, Tailwind, session-cookie auth gating every route
 - **SDK** (`packages/sdk`): typed client for the api, published as `@stellarlens/sdk`
-- **CLI** (`packages/cli`): `stellarlens contracts add/list`, `stellarlens events tail`, built on the SDK
+- **CLI** (`packages/cli`): `stellarlens contracts add` (single or bulk) / `list`, `stellarlens events tail`, built on the SDK
 - **DB** (`packages/db`): Drizzle ORM + Postgres, `drizzle-kit` for migrations
 - **CI**: GitHub Actions — install, lint, typecheck, build, test on every push and PR
 

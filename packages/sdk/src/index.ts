@@ -3,6 +3,10 @@ export { StellarLensApiError } from "./errors.js";
 export type {
   Contract,
   RegisterContractInput,
+  BulkRegisterContractItem,
+  BulkContractStatus,
+  BulkContractResult,
+  BulkRegisterContractsResponse,
   DecodedEventData,
   EventRecord,
   ListEventsParams,
