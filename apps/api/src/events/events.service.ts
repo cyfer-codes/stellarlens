@@ -9,6 +9,14 @@ import { ContractsService } from "../contracts/contracts.service";
 import { DATABASE } from "../database/database.module";
 import { FindEventsQueryDto } from "./dto/find-events-query.dto";
 
+/**
+ * Event filtering semantics:
+ * - `topic` matches the value at ANY position in the decoded topics array
+ *   (JSONB containment). Filtering transfers "to" an address therefore also
+ *   matches transfers "from" it.
+ * - `topic0`..`topic3` match the decoded topic at that exact index only.
+ *   They combine (AND) with each other and with all other filters.
+ */
 const DEFAULT_MAX_STREAMS_PER_KEY = 5;
 const DEFAULT_POLL_INTERVAL_MS = 1000;
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 15000;
@@ -158,11 +166,23 @@ export class EventsService {
     if (query.to) {
       conditions.push(lte(events.createdAt, new Date(query.to)));
     }
+    // `topic` uses JSONB containment, so it matches the given value at ANY
+    // position in the decoded topics array (e.g. filtering transfers "to" an
+    // address also matches transfers "from" it). Use `topic0`..`topic3` for
+    // exact positional matching.
     if (query.topic) {
       conditions.push(
         sql`${events.decodedData} -> 'decoded' -> 'topic' @> ${JSON.stringify([query.topic])}::jsonb`
       );
     }
+    const positionalTopics = [query.topic0, query.topic1, query.topic2, query.topic3];
+    positionalTopics.forEach((value, index) => {
+      if (value) {
+        conditions.push(
+          sql`${events.decodedData} -> 'decoded' -> 'topic' ->> ${sql.raw(String(index))} = ${value}`
+        );
+      }
+    });
     if (query.topics && query.topics.length > 0) {
       conditions.push(
         sql`${events.decodedData} -> 'decoded' -> 'topic' ?| ${sql.raw(
