@@ -1,7 +1,7 @@
 import { events } from "@stellarlens/db";
 import request from "supertest";
 import { beforeEach, describe, expect, it } from "vitest";
-import { contractAddress, createApiKey } from "./helpers";
+import { contractAddress, createApiKey, openSseStream } from "./helpers";
 import { getApp, getTestDb } from "./setup";
 
 async function registerContract(apiKey: string, address: string): Promise<number> {
@@ -132,5 +132,57 @@ describe("events (e2e)", () => {
     expect(response.status).toBe(200);
     expect(response.body.data).toHaveLength(1);
     expect(response.body.data[0].ledger).toBe(3001);
+  });
+
+  it("pushes new events over the SSE stream", async () => {
+    const contractId = await registerContract(apiKey, "CONTRACT_EVENTS_STREAM");
+    await seedEvents(contractId, 1);
+
+    const stream = await openSseStream(`/contracts/${contractId}/events/stream`, apiKey);
+    try {
+      const db = getTestDb();
+      const [inserted] = await db
+        .insert(events)
+        .values({
+          contractId,
+          ledger: 5000,
+          txHash: "a".repeat(64),
+          topic: JSON.stringify(["stream"]),
+          decodedData: { decoded: { topic: ["stream"], value: null } }
+        })
+        .returning();
+
+      const message = await stream.nextEvent();
+      expect(message.id).toBe(String(inserted.id));
+      expect(message.event).toBe("event");
+      const payload = JSON.parse(message.data);
+      expect(payload.id).toBe(inserted.id);
+      expect(payload.ledger).toBe(5000);
+      expect(payload.contractId).toBe(contractId);
+    } finally {
+      stream.close();
+    }
+  });
+
+  it("resumes the SSE stream from Last-Event-ID", async () => {
+    const contractId = await registerContract(apiKey, "CONTRACT_EVENTS_STREAM_RESUME");
+    await seedEvents(contractId, 3);
+    const db = getTestDb();
+    const existing = await db.select().from(events);
+    const lastSeen = existing
+      .filter((event) => event.contractId === contractId)
+      .sort((a, b) => a.id - b.id)[1];
+
+    const stream = await openSseStream(`/contracts/${contractId}/events/stream`, apiKey, {
+      lastEventId: String(lastSeen.id)
+    });
+    try {
+      const message = await stream.nextEvent();
+      expect(message.id).toBe(String(lastSeen.id + 1));
+      const payload = JSON.parse(message.data);
+      expect(payload.ledger).toBe(1002);
+    } finally {
+      stream.close();
+    }
   });
 });
