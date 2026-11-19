@@ -8,6 +8,7 @@ export { StellarLensApiError, StellarLensHookError, type StellarLensHook } from 
 export { formatAmount, parseAmount, type FormatAmountOptions } from "./amount.js";
 export { StellarLensClient, type StellarLensClientOptions } from "./client.js";
 export { StellarLensApiError } from "./errors.js";
+export { escapeCsvCell, toCsv, toCsvRows } from "./csv.js";
 export {
   verifyWebhookSignature,
   type VerifyWebhookSignatureOptions,

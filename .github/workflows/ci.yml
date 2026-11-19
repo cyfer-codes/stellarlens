@@ -55,6 +55,8 @@ jobs:
 
       - run: pnpm build
 
+      # Includes the CLI end-to-end suite (packages/cli/test/e2e), which boots the built api against a
+      # throwaway database on the postgres service above and drives the built CLI binary.
       # The service container is a fresh, empty database: apply every migration exactly as a
       # deploy would, so a broken or out-of-order migration fails here rather than in production.
       - name: Apply migrations to a fresh database

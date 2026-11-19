@@ -31,6 +31,8 @@ const contract = await client.registerContract({
   name: "My token"
 });
 
+// List registered contracts, one page at a time
+const { data: contracts, nextCursor } = await client.listContracts({ limit: 100 });
 // List registered contracts (cursor-paginated, optionally filtered by `name` substring and `network`)
 const { data: contracts, nextCursor } = await client.listContracts({ network: "testnet", limit: 50 });
 // One page of registered contracts (filter by name substring and/or network)

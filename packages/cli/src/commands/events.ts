@@ -136,6 +136,41 @@ export async function tailEvents(
   return page.data[page.data.length - 1].id;
 }
 
+export interface ListEventsOptions {
+  limit?: number;
+  cursor?: number;
+  topic?: string;
+  from?: string;
+  to?: string;
+}
+
+/** Prints one page of a contract's events, and the cursor for the next page when there is one. */
+export async function listEvents(
+  client: StellarLensClient,
+  contractId: number,
+  options: ListEventsOptions = {}
+): Promise<void> {
+  const page = await client.listEvents(contractId, {
+    cursor: options.cursor,
+    limit: options.limit,
+    topic: options.topic,
+    from: options.from,
+    to: options.to
+  });
+
+  if (page.data.length === 0) {
+    console.log("No events found.");
+    return;
+  }
+
+  console.table(page.data.map(formatEvent));
+  if (page.nextCursor !== null) {
+    console.log(`more events available: fetch the next page with --cursor ${page.nextCursor}`);
+  }
+}
+
+export async function tailEvents(client: StellarLensClient, contractId: number): Promise<void> {
+  console.log(`tailing events for contract ${contractId} (ctrl+c to stop)...`);
 /** Delay before the next poll: the normal interval, doubling per consecutive failure up to {@link MAX_BACKOFF_MS}. */
 export function nextPollDelay(consecutiveFailures: number): number {
   if (consecutiveFailures <= 0) {

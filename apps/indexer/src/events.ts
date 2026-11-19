@@ -7,7 +7,7 @@ import {
   type Database
 } from "@stellarlens/db";
 import { EVENTS_BATCH_LIMIT, STELLAR_NETWORK } from "./config.js";
-import { tryDecodeScVal } from "./decode.js";
+import { tryDecodeScVal } from "@stellarlens/decode";
 import { loadRegisteredContracts } from "./registry.js";
 import { detectTransfer } from "./transfers.js";
 import { withRetry } from "./retry.js";

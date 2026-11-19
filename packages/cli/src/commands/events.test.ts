@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { StellarLensClient } from "@stellarlens/sdk";
+import { listEvents, pollNewEvents } from "./events.js";
 import {
   MAX_BACKOFF_MS,
   POLL_INTERVAL_MS,
@@ -356,5 +357,40 @@ describe("tailEvents", () => {
     await expect(tailEvents(client, 1, { since: "yesterday" })).rejects.toThrow(/--since must be/);
     await expect(tailEvents(client, 1, { since: "1", fromStart: true })).rejects.toThrow("can't be used together");
     expect(listEvents).not.toHaveBeenCalled();
+  });
+});
+
+describe("listEvents", () => {
+  it("passes paging and filter options through and prints the next cursor", async () => {
+    const listEventsMock = vi.fn().mockResolvedValue({ data: [eventFixture(3, 100)], nextCursor: 3 });
+    const client = { listEvents: listEventsMock } as unknown as StellarLensClient;
+    const tableSpy = vi.spyOn(console, "table").mockImplementation(() => {});
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await listEvents(client, 1, { limit: 1, cursor: 2, topic: "transfer", from: "2026-01-01" });
+
+    expect(listEventsMock).toHaveBeenCalledWith(1, {
+      cursor: 2,
+      limit: 1,
+      topic: "transfer",
+      from: "2026-01-01",
+      to: undefined
+    });
+    expect(tableSpy).toHaveBeenCalledWith([expect.objectContaining({ id: "3", ledger: "100" })]);
+    expect(logSpy).toHaveBeenCalledWith("more events available: fetch the next page with --cursor 3");
+    tableSpy.mockRestore();
+    logSpy.mockRestore();
+  });
+
+  it("prints a message when there are no events", async () => {
+    const client = {
+      listEvents: vi.fn().mockResolvedValue({ data: [], nextCursor: null })
+    } as unknown as StellarLensClient;
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await listEvents(client, 1);
+
+    expect(logSpy).toHaveBeenCalledWith("No events found.");
+    logSpy.mockRestore();
   });
 });

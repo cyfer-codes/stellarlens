@@ -172,6 +172,9 @@ export class StellarLensClient {
     });
   }
 
+  /** Cursor-paginated registered contracts, oldest first. */
+  listContracts(params?: ListContractsParams): Promise<Page<Contract>> {
+    return this.request<Page<Contract>>(`/contracts${buildQuery(params)}`);
   /**
    * Registers up to 100 contracts in one request (`POST /contracts/bulk`), reporting a result per
    * item. Unlike `registerContract`, already-registered addresses are left untouched (`existing`).

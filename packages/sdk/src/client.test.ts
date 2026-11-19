@@ -29,6 +29,10 @@ describe("StellarLensClient", () => {
 
     const page = await makeClient(fetchMock).listContracts();
 
+    expect(contracts).toEqual({
+      data: [{ id: 1, address: "C123", name: null, network: "testnet" }],
+      nextCursor: null
+    });
     expect(page).toEqual({ data: [{ id: 1, address: "C123", name: null, network: "testnet" }], nextCursor: null });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -90,6 +94,16 @@ describe("StellarLensClient", () => {
     }) as unknown as typeof fetch;
 
     await makeClient(fetchMock, "https://api.example.com/").listContracts();
+  });
+
+  it("passes contract list pagination and filters as query params", async () => {
+    const fetchMock = vi.fn(async (url: string | URL) => {
+      expect(String(url)).toBe("https://api.example.com/contracts?cursor=20&limit=100&network=testnet");
+      return jsonResponse({ data: [], nextCursor: null });
+    }) as unknown as typeof fetch;
+
+    await makeClient(fetchMock).listContracts({ cursor: 20, limit: 100, network: "testnet" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("posts a json body when registering a contract", async () => {

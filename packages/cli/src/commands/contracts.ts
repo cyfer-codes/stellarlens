@@ -1,3 +1,6 @@
+import type { Contract, StellarLensClient } from "@stellarlens/sdk";
+
+const PAGE_SIZE = 100;
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 import { StellarLensApiError, type StellarLensClient } from "@stellarlens/sdk";
@@ -164,6 +167,23 @@ async function registerSequentially(
   }
 }
 
+/** `GET /contracts` is cursor-paginated, so follow `nextCursor` until every contract has been fetched. */
+export async function fetchAllContracts(client: StellarLensClient): Promise<Contract[]> {
+  const contracts: Contract[] = [];
+  let cursor: number | undefined;
+
+  for (;;) {
+    const page = await client.listContracts({ cursor, limit: PAGE_SIZE });
+    contracts.push(...page.data);
+    if (page.nextCursor === null) {
+      return contracts;
+    }
+    cursor = page.nextCursor;
+  }
+}
+
+export async function listContracts(client: StellarLensClient): Promise<void> {
+  const contracts = await fetchAllContracts(client);
 async function registerInBulk(
   client: StellarLensClient,
   entries: ValidEntry[],

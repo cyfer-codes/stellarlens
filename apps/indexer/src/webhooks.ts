@@ -7,6 +7,7 @@ import {
   webhooks as webhooksTable,
   type Database
 } from "@stellarlens/db";
+import { signWebhookPayload } from "@stellarlens/sdk/webhooks";
 import {
   WEBHOOK_CONCURRENCY,
   WEBHOOK_MAX_RETRIES,
@@ -118,6 +119,7 @@ async function postWebhook(url: string, body: string, signature: string): Promis
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "X-Webhook-Signature": signature
         [WEBHOOK_SIGNATURE_HEADER]: signature
       },
       body,
@@ -228,6 +230,7 @@ export async function deliverWebhooksForEvent(
 
         let secret: string;
         try {
+          const signature = signWebhookPayload(body, webhook.secret);
           const signature = signWebhookPayload(webhook.secret, body);
           await withRetry(
             `webhook:${webhook.id}`,
