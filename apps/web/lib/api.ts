@@ -250,3 +250,41 @@ export function createWebhook(contractId: number, input: CreateWebhookInput): Pr
 export function deleteWebhook(contractId: number, id: number): Promise<void> {
   return apiFetch<void>(`/contracts/${contractId}/webhooks/${id}`, { method: "DELETE" });
 }
+
+
+export interface WebhookDelivery {
+  id: number;
+  status: string;
+  attempts: number;
+  lastError: string | null;
+  deliveredAt: string | null;
+  createdAt: string;
+}
+
+export interface WebhookDeliveriesPage {
+  data: WebhookDelivery[];
+  nextCursor: number | null;
+}
+
+export interface ListWebhookDeliveriesParams {
+  cursor?: number;
+  limit?: number;
+}
+
+export function listWebhookDeliveries(
+  contractId: number,
+  webhookId: number,
+  params?: ListWebhookDeliveriesParams
+): Promise<WebhookDeliveriesPage> {
+  const query = new URLSearchParams();
+  if (params?.cursor !== undefined) {
+    query.set("cursor", String(params.cursor));
+  }
+  if (params?.limit !== undefined) {
+    query.set("limit", String(params.limit));
+  }
+  const qs = query.toString();
+  return apiFetch<WebhookDeliveriesPage>(
+    `/contracts/${contractId}/webhooks/${webhookId}/deliveries${qs ? `?${qs}` : ""}`
+  );
+}
