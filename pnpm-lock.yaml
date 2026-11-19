@@ -220,6 +220,9 @@ importers:
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@20.19.43)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))
 
   packages/sdk:
     devDependencies:

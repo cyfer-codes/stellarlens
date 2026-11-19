@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { desc, eq } from "drizzle-orm";
-import { apiKeys, createDb } from "@stellarlens/db";
+import { apiKeys, getDb } from "@stellarlens/db";
 
 export interface ApiKeyRow {
   id: number;
@@ -14,7 +14,7 @@ export interface GeneratedApiKey extends ApiKeyRow {
 }
 
 export async function listApiKeys(): Promise<ApiKeyRow[]> {
-  const db = createDb();
+  const db = getDb();
   const rows = await db
     .select({
       id: apiKeys.id,
@@ -33,7 +33,7 @@ export async function listApiKeys(): Promise<ApiKeyRow[]> {
 }
 
 export async function generateApiKey(name?: string): Promise<GeneratedApiKey> {
-  const db = createDb();
+  const db = getDb();
   const rawKey = randomBytes(24).toString("hex");
   const keyHash = createHash("sha256").update(rawKey).digest("hex");
 
@@ -47,7 +47,7 @@ export async function generateApiKey(name?: string): Promise<GeneratedApiKey> {
 
 /** Returns false if no key with that id exists; otherwise revokes (idempotently) and returns true. */
 export async function revokeApiKey(id: number): Promise<boolean> {
-  const db = createDb();
+  const db = getDb();
   const [existing] = await db.select({ id: apiKeys.id, revokedAt: apiKeys.revokedAt }).from(apiKeys).where(eq(apiKeys.id, id));
 
   if (!existing) {

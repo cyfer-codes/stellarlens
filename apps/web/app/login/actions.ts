@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
-import { createDb, users } from "@stellarlens/db";
+import { getDb, users } from "@stellarlens/db";
 import { verifyPassword } from "@/lib/password";
 import { createSessionToken, SESSION_COOKIE_NAME, SESSION_TTL_SECONDS } from "@/lib/session";
 
@@ -21,7 +21,7 @@ export async function login(_prevState: LoginState, formData: FormData): Promise
     return { error: "email and password are required" };
   }
 
-  const db = createDb();
+  const db = getDb();
   const [user] = await db.select().from(users).where(eq(users.email, email));
 
   if (!user || !(await verifyPassword(password, user.passwordHash))) {
