@@ -1,4 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
+import { and, asc, desc, eq, gt, gte, lte, sql } from "drizzle-orm";
+import { contracts, events, type Database } from "@stellarlens/db";
 import { and, asc, eq, gt, gte, lte, sql } from "drizzle-orm";
 import { Observable, Subscription, interval, merge, of } from "rxjs";
 import { concatMap, map, takeUntil } from "rxjs/operators";
@@ -34,7 +36,7 @@ export class EventsService {
   constructor(
     @Inject(DATABASE) private readonly db: Database,
     private readonly contractsService: ContractsService
-  ) {}
+  ) { }
 
   private get maxStreamsPerKey(): number {
     return parsePositiveInt(
@@ -205,6 +207,22 @@ export class EventsService {
     return { data, nextCursor };
   }
 
+  async findRecent(limit: number) {
+    return this.db
+      .select({
+        id: events.id,
+        contractId: events.contractId,
+        contractName: contracts.name,
+        ledger: events.ledger,
+        txHash: events.txHash,
+        topic: events.topic,
+        decodedData: events.decodedData,
+        createdAt: events.createdAt
+      })
+      .from(events)
+      .innerJoin(contracts, eq(events.contractId, contracts.id))
+      .orderBy(desc(events.ledger), desc(events.id))
+      .limit(limit);
   async findByTxHash(hash: string) {
     return this.db
       .select()

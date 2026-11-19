@@ -96,6 +96,8 @@
     {
       "idx": 13,
       "version": "7",
+      "when": 1795099600000,
+      "tag": "0013_session_version_indexer_heartbeat",
       "when": 1795126000000,
       "tag": "0013_transfer_filter_indexes",
       "breakpoints": true

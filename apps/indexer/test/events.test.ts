@@ -98,10 +98,11 @@ describe("processEventsBatch", () => {
     expect(firstCallParams.startLedger).toBe(1000);
 
     const [afterFirst] = await db
-      .select({ cursor: indexerCheckpoints.cursor })
+      .select({ cursor: indexerCheckpoints.cursor, latestLedger: indexerCheckpoints.latestLedger })
       .from(indexerCheckpoints)
       .where(eq(indexerCheckpoints.network, NETWORK));
     expect(afterFirst?.cursor).toBe("CURSOR_1");
+    expect(afterFirst?.latestLedger).toBe(1005);
 
     const secondEventsSpy = vi.fn((_params: unknown) => ({ events: [], cursor: "CURSOR_2", latestLedger: 1010 }));
 
@@ -311,7 +312,7 @@ describe("processEventsBatch", () => {
   it("keeps processing the batch when one event has a malformed XDR payload", async () => {
     const db = getTestDb();
     await registerContract(db, { address: contractAddress("CONTRACT_D"), network: NETWORK });
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => { });
 
     mswServer.use(
       mockJsonRpc({
@@ -400,7 +401,7 @@ describe("processEventsBatch", () => {
   it("stores null for a malformed topic entry and skips transfer detection", async () => {
     const db = getTestDb();
     await registerContract(db, { address: contractAddress("CONTRACT_E"), network: NETWORK });
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => { });
 
     mswServer.use(
       mockJsonRpc({

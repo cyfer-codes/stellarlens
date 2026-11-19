@@ -22,6 +22,9 @@ import {
 } from "@nestjs/swagger";
 import { EventsService } from "./events.service";
 import { FindEventsQueryDto } from "./dto/find-events-query.dto";
+import { FindRecentEventsQueryDto } from "./dto/find-recent-events-query.dto";
+
+@Controller()
 import { ContractEventDto } from "./dto/contract-event.dto";
 import { PaginatedEventsDto } from "./dto/paginated-events.dto";
 import { SseEventDto } from "./dto/sse-event.dto";
@@ -30,8 +33,15 @@ import { SseEventDto } from "./dto/sse-event.dto";
 @ApiSecurity("x-api-key")
 @Controller("contracts/:contractId/events")
 export class EventsController {
-  constructor(private readonly eventsService: EventsService) {}
+  constructor(private readonly eventsService: EventsService) { }
 
+  @Get("events")
+  findRecent(@Query() query: FindRecentEventsQueryDto) {
+    return this.eventsService.findRecent(query.limit);
+  }
+
+  @Get("contracts/:contractId/events")
+  findByContract(@Param("contractId", ParseIntPipe) contractId: number, @Query() query: FindEventsQueryDto) {
   @Get()
   @ApiOperation({
     summary: "List events for a contract",

@@ -1,3 +1,5 @@
+import { Inject, Injectable } from "@nestjs/common";
+import { and, asc, eq, gt, gte, lte, or, sql } from "drizzle-orm";
 import { BadRequestException, Inject, Injectable } from "@nestjs/common";
 import { and, asc, eq, gt, gte, lte, sql } from "drizzle-orm";
 import { tokenTransfers, type Database } from "@stellarlens/db";
@@ -53,6 +55,18 @@ export class TransfersService {
     return { data, nextCursor };
   }
 
+  async findByAccount(address: string, query: FindTransfersQueryDto) {
+    const conditions = [or(eq(tokenTransfers.from, address), eq(tokenTransfers.to, address))!];
+    if (query.cursor !== undefined) conditions.push(gt(tokenTransfers.id, query.cursor));
+    const rows = await this.db
+      .select()
+      .from(tokenTransfers)
+      .where(and(...conditions))
+      .orderBy(asc(tokenTransfers.id))
+      .limit(query.limit + 1);
+    const hasMore = rows.length > query.limit;
+    const data = hasMore ? rows.slice(0, query.limit) : rows;
+    return { data, nextCursor: hasMore ? data[data.length - 1].id : null };
   async findByTxHash(hash: string) {
     return this.db
       .select()

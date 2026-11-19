@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { TransfersPage } from "@/lib/api";
+import type { TransferFilterValues } from "./TransferFilters";
 import { downloadCsv, transfersToCsvRows, TRANSFER_CSV_HEADERS, toCsv } from "@/lib/csvExport";
 
 // The api caps `limit` at 100, so exports walk the cursor in pages of this size.
@@ -12,7 +13,7 @@ const EXPORT_PAGE_SIZE = 100;
  * time and serialized to CSV text as they arrive, so only the current page's
  * rows are held as objects; the accumulated text chunks become the download.
  */
-export function ExportTransfersButton({ contractId }: { contractId: number }) {
+export function ExportTransfersButton({ contractId, filters }: { contractId: number; filters?: TransferFilterValues }) {
   const [exporting, setExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState("");
   const abortRef = useRef<AbortController | null>(null);
@@ -32,6 +33,9 @@ export function ExportTransfersButton({ contractId }: { contractId: number }) {
     try {
       do {
         const query = new URLSearchParams({ limit: String(EXPORT_PAGE_SIZE) });
+        for (const [key, value] of Object.entries(filters ?? {})) {
+          if (value) query.set(key, value);
+        }
         if (cursor !== null) {
           query.set("cursor", String(cursor));
         }

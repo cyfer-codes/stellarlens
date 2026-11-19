@@ -1,4 +1,5 @@
 import request from "supertest";
+import { indexerCheckpoints } from "@stellarlens/db";
 import { beforeEach, describe, expect, it } from "vitest";
 import { contractAddress, createApiKey } from "./helpers";
 import { getApp, getTestDb } from "./setup";
@@ -202,6 +203,30 @@ describe("contracts (e2e)", () => {
       .get("/contracts/999999")
       .set("x-api-key", apiKey);
     expect(response.status).toBe(404);
+  });
+
+  it("reports whether a contract network is indexed and its ledger lag", async () => {
+    const registerResponse = await request(getApp().getHttpServer())
+      .post("/contracts")
+      .set("x-api-key", apiKey)
+      .send({ address: contractAddress("CONTRACT_STATUS_A"), network: "testnet" });
+    const contractId = registerResponse.body.id;
+
+    const notIndexed = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/status`)
+      .set("x-api-key", apiKey);
+    expect(notIndexed.body.status).toBe("not_indexed");
+
+    await getTestDb().insert(indexerCheckpoints).values({
+      network: "testnet",
+      cursor: "status-cursor",
+      latestLedger: 1000,
+      updatedAt: new Date()
+    });
+    const live = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/status`)
+      .set("x-api-key", apiKey);
+    expect(live.body).toMatchObject({ status: "live", lag: 0 });
   });
 
   it("updates a contract name via PATCH /contracts/:id", async () => {
