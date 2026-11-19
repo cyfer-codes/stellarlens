@@ -70,6 +70,92 @@ describe("api keys (e2e)", () => {
     expect(response.status).toBe(404);
   });
 
+  it("rotates a key, keeping both keys valid during the overlap window", async () => {
+    const createResponse = await request(getApp().getHttpServer())
+      .post("/api-keys")
+      .set("x-api-key", apiKey)
+      .send({ name: "rotating-key" });
+    expect(createResponse.status).toBe(201);
+    const { id, key: oldRawKey, scope: oldScope } = createResponse.body;
+
+    const rotateResponse = await request(getApp().getHttpServer())
+      .post(`/api-keys/${id}/rotate`)
+      .set("x-api-key", apiKey)
+      .send({});
+    expect([200, 201]).toContain(rotateResponse.status);
+    expect(rotateResponse.body.name).toBe("rotating-key");
+    expect(rotateResponse.body.scope).toBe(oldScope);
+    expect(rotateResponse.body.id).toBeDefined();
+    expect(rotateResponse.body.id).not.toBe(id);
+    expect(typeof rotateResponse.body.key).toBe("string");
+    expect(rotateResponse.body.key.length).toBeGreaterThan(10);
+    expect(rotateResponse.body.key).not.toBe(oldRawKey);
+    const newRawKey = rotateResponse.body.key;
+
+    const useOldKey = await request(getApp().getHttpServer()).get("/contracts").set("x-api-key", oldRawKey);
+    expect(useOldKey.status).toBe(200);
+
+    const useNewKey = await request(getApp().getHttpServer()).get("/contracts").set("x-api-key", newRawKey);
+    expect(useNewKey.status).toBe(200);
+  });
+
+  it("rejects the old key after the rotation grace period elapses", async () => {
+    const createResponse = await request(getApp().getHttpServer())
+      .post("/api-keys")
+      .set("x-api-key", apiKey)
+      .send({ name: "short-grace-key" });
+    expect(createResponse.status).toBe(201);
+    const { id, key: oldRawKey } = createResponse.body;
+
+    const rotateResponse = await request(getApp().getHttpServer())
+      .post(`/api-keys/${id}/rotate`)
+      .set("x-api-key", apiKey)
+      .send({ gracePeriodMs: 50 });
+    expect([200, 201]).toContain(rotateResponse.status);
+    const newRawKey = rotateResponse.body.key;
+
+    const useNewKey = await request(getApp().getHttpServer()).get("/contracts").set("x-api-key", newRawKey);
+    expect(useNewKey.status).toBe(200);
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const useOldKey = await request(getApp().getHttpServer()).get("/contracts").set("x-api-key", oldRawKey);
+    expect(useOldKey.status).toBe(401);
+
+    const useNewKeyAgain = await request(getApp().getHttpServer()).get("/contracts").set("x-api-key", newRawKey);
+    expect(useNewKeyAgain.status).toBe(200);
+  });
+
+  it("returns 403 rotating a key with a read-scope key", async () => {
+    const createResponse = await request(getApp().getHttpServer())
+      .post("/api-keys")
+      .set("x-api-key", apiKey)
+      .send({ name: "target-key" });
+    expect(createResponse.status).toBe(201);
+    const { id } = createResponse.body;
+
+    const readKeyResponse = await request(getApp().getHttpServer())
+      .post("/api-keys")
+      .set("x-api-key", apiKey)
+      .send({ name: "read-only-key", scope: "read" });
+    expect(readKeyResponse.status).toBe(201);
+    const readRawKey = readKeyResponse.body.key;
+
+    const rotateResponse = await request(getApp().getHttpServer())
+      .post(`/api-keys/${id}/rotate`)
+      .set("x-api-key", readRawKey)
+      .send({});
+    expect(rotateResponse.status).toBe(403);
+  });
+
+  it("returns 404 rotating an unknown key id", async () => {
+    const response = await request(getApp().getHttpServer())
+      .post("/api-keys/999999/rotate")
+      .set("x-api-key", apiKey)
+      .send({});
+    expect(response.status).toBe(404);
+  });
+
   it("rejects an expired key and accepts a key that has not yet expired", async () => {
     const pastExpiry = new Date(Date.now() - 60_000).toISOString();
     const expiredCreate = await request(getApp().getHttpServer())
