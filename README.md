@@ -76,8 +76,15 @@ Full pipeline check before opening a PR:
 pnpm lint
 pnpm typecheck
 pnpm build
+pnpm --filter @stellarlens/db db:migrate   # tests run against the migrated schema; they don't create tables
 pnpm test
 ```
+
+The api and indexer test suites never create or migrate tables themselves: they fail fast with a
+"database is missing N migration(s)" error unless `DATABASE_URL` has every migration applied. CI
+applies all migrations to a fresh Postgres before testing, runs `drizzle-kit check`, and fails if
+`drizzle-kit generate` would produce a new migration — so after changing `packages/db/src/schema`,
+run `pnpm --filter @stellarlens/db db:generate` and commit the generated files.
 
 ## Architecture
 
