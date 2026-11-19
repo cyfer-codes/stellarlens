@@ -28,7 +28,7 @@ export async function login(_prevState: LoginState, formData: FormData): Promise
     return { error: "invalid email or password" };
   }
 
-  const token = await createSessionToken(user.id);
+  const token = await createSessionToken(user.id, user.sessionVersion);
   cookies().set(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

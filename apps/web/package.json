@@ -11,15 +11,22 @@
     "test": "vitest run",
     "create-user": "tsx scripts/create-user.ts",
     "seed-admin": "tsx scripts/seed-admin.ts",
-    "seed-demo": "tsx scripts/seed-demo.ts"
+    "seed-demo": "tsx scripts/seed-demo.ts",
+    "seed-api-key": "tsx scripts/seed-api-key.ts"
   },
   "dependencies": {
+    "@stellar/stellar-sdk": "^17.0.1",
     "@stellarlens/db": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "next": "^14.2.35",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
-    "recharts": "^3.10.1"
+    "recharts": "^3.10.1",
+    "@testing-library/jest-dom": "^6.4.0",
+    "@testing-library/react": "^16.0.0",
+    "@testing-library/user-event": "^14.5.0",
+    "jsdom": "^25.0.0",
+    "vitest": "^2.0.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",

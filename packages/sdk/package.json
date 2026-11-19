@@ -20,7 +20,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "sideEffects": false,
   "publishConfig": {
@@ -31,10 +32,12 @@
     "dev": "tsup --watch",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "generate": "openapi-typescript ../../apps/api/openapi.json --output src/generated/openapi.ts"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "openapi-typescript": "7.13.0",
     "tsup": "^8.5.1",
     "typescript": "^5.7.0",
     "vitest": "^2.1.9"
