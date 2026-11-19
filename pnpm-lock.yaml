@@ -182,6 +182,9 @@ importers:
 
   packages/cli:
     dependencies:
+      '@stellar/stellar-sdk':
+        specifier: ^17.0.1
+        version: 17.0.1
       '@stellarlens/sdk':
         specifier: workspace:*
         version: link:../sdk

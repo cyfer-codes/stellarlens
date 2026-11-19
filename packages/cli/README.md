@@ -12,8 +12,20 @@ export STELLARLENS_API_KEY=<a valid api key>
 ## Usage
 
 ```bash
+# Register a single contract
 stellarlens contracts add <address> --network testnet [--name "My contract"]
+
+# Register multiple contracts at once
+stellarlens contracts add <address1> <address2> <address3> --network testnet
+
+# Register contracts from a file (.txt or .json)
+stellarlens contracts add --file contracts.txt --network testnet
+stellarlens contracts add --file contracts.json --network testnet
+
+# List registered contracts
 stellarlens contracts list
+
+# Follow events in real time
 stellarlens events tail <contractId>   # follows new events every 5s, ctrl+c to stop
 ```
 
