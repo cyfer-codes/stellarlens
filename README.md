@@ -53,6 +53,9 @@ pnpm --filter @stellarlens/web seed-admin   # SEED_ADMIN_EMAIL / SEED_ADMIN_PASS
 pnpm dev   # starts every app in watch mode
 ```
 
+Prefer containers? See [Running everything with Docker](#running-everything-with-docker) for a
+single-command stack.
+
 Then open the web dashboard (default `:3000` — see the per-workspace table below for exact ports and
 env vars each app needs), log in with the seeded admin account, and generate your first api key from
 **Settings**.
@@ -85,6 +88,41 @@ The api and indexer test suites never create or migrate tables themselves: they 
 applies all migrations to a fresh Postgres before testing, runs `drizzle-kit check`, and fails if
 `drizzle-kit generate` would produce a new migration — so after changing `packages/db/src/schema`,
 run `pnpm --filter @stellarlens/db db:generate` and commit the generated files.
+
+## Running everything with Docker
+
+`docker compose up -d` still starts only Postgres and Redis (for `pnpm dev` on the host). The `full`
+profile builds and runs the whole stack:
+
+```bash
+docker compose --profile full up -d --build --wait
+```
+
+| Service | What it does | Host port |
+|---|---|---|
+| `postgres`, `redis` | Datastores (health-checked) | `5433`, `6379` |
+| `migrate` | One-shot `drizzle-kit migrate` against the compose database; everything else waits for it to exit `0` | — |
+| `seed` | One-shot, idempotent: creates the dashboard admin user and registers the dashboard's api key | — |
+| `api` | NestJS api, healthy once `GET /health/ready` can reach the database | `3001` (`API_PORT`) |
+| `indexer` | Polling worker; health-checked via the registry server's `GET /health` | `3002` (`INDEXER_REGISTRY_PORT`) |
+| `web` | Next.js dashboard, started once the api is healthy and seeding has finished | `3000` (`WEB_PORT`) |
+
+Open <http://localhost:3000> and log in as `admin@stellarlens.local` / `stellarlens-local`. The CLI
+can use the same stack:
+`STELLARLENS_API_URL=http://localhost:3001 STELLARLENS_API_KEY=local-dev-api-key-change-me stellarlens contracts list`.
+
+The defaults are for local use only. Override them from the shell or a root `.env` file:
+`SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `STELLARLENS_API_KEY` (the key the dashboard sends, seeded
+into `api_keys`), `SESSION_SECRET`, `SOROBAN_RPC_URL`, `STELLAR_NETWORK`, `POLL_INTERVAL_MS`,
+`WEBHOOK_CONCURRENCY`, `CORS_ORIGINS`, `PUBLIC_DEMO`, `SITE_URL`, and the host ports above.
+`docker compose --profile full down -v` removes everything, including the database volume.
+
+Each app has a multi-stage Dockerfile (`apps/api/Dockerfile`, `apps/indexer/Dockerfile`,
+`apps/web/Dockerfile`) that runs `turbo prune <app> --docker`, so an image only installs and builds
+that app and its workspace dependencies, and the runtime stage carries production dependencies plus
+compiled output. Build any of them from the repo root, e.g.
+`docker build -f apps/api/Dockerfile -t stellarlens-api .`. Extra targets: `apps/api/Dockerfile`'s
+`migrate` and `apps/web/Dockerfile`'s `tools` (seeding). CI builds every image on each push and PR.
 
 ## Architecture
 
@@ -128,7 +166,7 @@ one thing that can't depend on an api key existing yet: creating the first one (
 - **SDK** (`packages/sdk`): typed client for the api, published as `@stellarlens/sdk`
 - **CLI** (`packages/cli`): `stellarlens contracts add` (single or bulk) / `list`, `stellarlens events tail`, built on the SDK
 - **DB** (`packages/db`): Drizzle ORM + Postgres, `drizzle-kit` for migrations
-- **CI**: GitHub Actions — install, lint, typecheck, build, test on every push and PR
+- **CI**: GitHub Actions — install, lint, typecheck, build, migrate + drift check, test, and Docker image builds on every push and PR
 
 ## Monorepo layout
 
@@ -143,7 +181,7 @@ packages/
   db/        Drizzle schema, migrations, and the shared db client
 docs/        Supplementary docs (see docs/screenshots.md)
 .github/     CI workflow, CONTRIBUTING.md, CODE_OF_CONDUCT.md, PR/issue templates
-docker-compose.yml   Local Postgres + Redis
+docker-compose.yml   Local Postgres + Redis; `--profile full` adds migrations, api, indexer, web
 .env.example         Root-level env vars for db/indexer; apps/web and apps/api have their own
 ```
 

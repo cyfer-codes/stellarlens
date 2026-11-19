@@ -11,7 +11,8 @@
     "test": "echo \"no tests yet\" && exit 0",
     "create-user": "tsx scripts/create-user.ts",
     "seed-admin": "tsx scripts/seed-admin.ts",
-    "seed-demo": "tsx scripts/seed-demo.ts"
+    "seed-demo": "tsx scripts/seed-demo.ts",
+    "seed-api-key": "tsx scripts/seed-api-key.ts"
   },
   "dependencies": {
     "@stellarlens/db": "workspace:*",
