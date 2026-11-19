@@ -17,6 +17,17 @@ stellarlens contracts list
 stellarlens events tail <contractId>   # follows new events every 5s, ctrl+c to stop
 ```
 
+### Decoding XDR
+
+```bash
+stellarlens decode AAAACgAAAAAAAAAAAAAAAAAAAAU=      # prints "5"
+echo AAAACgAAAAAAAAAAAAAAAAAAAAU= | stellarlens decode
+```
+
+Decodes a base64 `ScVal` (an event topic or value from RPC or an explorer) into JSON using the exact rules the
+indexer stores events with (`@stellarlens/decode`): `i128`/`u64` etc. become strings, maps become objects.
+Invalid XDR prints `error: invalid XDR: <reason>` and exits with status 1. Needs no api credentials.
+
 ### Bulk export
 
 ```bash

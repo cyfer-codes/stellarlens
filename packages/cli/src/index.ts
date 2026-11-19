@@ -2,6 +2,7 @@
 import { Argument, Command, InvalidArgumentError, Option } from "commander";
 import { createClientFromEnv } from "./client.js";
 import { addContract, listContracts } from "./commands/contracts.js";
+import { runDecode } from "./commands/decode.js";
 import { tailEvents } from "./commands/events.js";
 import { runExport, type ExportFormat, type ExportKind } from "./commands/export.js";
 import { listenForWebhooks } from "./commands/webhooks.js";
@@ -27,7 +28,7 @@ const program = new Command();
 program
   .name("stellarlens")
   .description(
-    "CLI for the stellarlens Soroban indexing platform. Requires STELLARLENS_API_URL and STELLARLENS_API_KEY."
+    "CLI for the stellarlens Soroban indexing platform. Commands that call the api require STELLARLENS_API_URL and STELLARLENS_API_KEY."
   )
   .version("0.1.0");
 
@@ -77,6 +78,13 @@ program
       await runExport(createClientFromEnv(), kind, contractId, options);
     }
   );
+
+program
+  .command("decode [xdr]")
+  .description("Decode base64 ScVal XDR (from the argument, or stdin) using the indexer's decoding rules")
+  .action(async (xdr: string | undefined) => {
+    await runDecode(xdr);
+  });
 
 const webhooksCommand = program.command("webhooks").description("Develop webhook consumers locally");
 
