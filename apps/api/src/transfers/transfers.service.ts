@@ -53,6 +53,14 @@ export class TransfersService {
     return { data, nextCursor };
   }
 
+  async findByTxHash(hash: string) {
+    return this.db
+      .select()
+      .from(tokenTransfers)
+      .where(eq(tokenTransfers.txHash, hash))
+      .orderBy(asc(tokenTransfers.id));
+  }
+
   async getStats(contractId: number, query: StatsQueryDto) {
     await this.contractsService.findOne(contractId);
 

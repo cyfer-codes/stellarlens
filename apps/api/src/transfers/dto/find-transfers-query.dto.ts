@@ -57,4 +57,8 @@ export class AccountTransfersQueryDto {
   @Min(1)
   @Max(100)
   limit: number = 20;
+
+  @IsOptional()
+  @IsIn(["asc", "desc"])
+  order: "asc" | "desc" = "asc";
 }

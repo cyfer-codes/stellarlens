@@ -146,6 +146,57 @@ describe("contracts (e2e)", () => {
     expect(secondPage.body.nextCursor).toBeNull();
   });
 
+  it("pages contracts newest-first with order=desc and keeps the default ascending", async () => {
+    const registeredIds: number[] = [];
+    for (const address of ["CONTRACT_ORDER_A", "CONTRACT_ORDER_B", "CONTRACT_ORDER_C", "CONTRACT_ORDER_D"]) {
+      const response = await request(getApp().getHttpServer())
+        .post("/contracts")
+        .set("x-api-key", apiKey)
+        .send({ address: contractAddress(address), network: "testnet" });
+      registeredIds.push(response.body.id);
+    }
+
+    const defaultResponse = await request(getApp().getHttpServer())
+      .get("/contracts?limit=100")
+      .set("x-api-key", apiKey);
+    expect(defaultResponse.body.data.map((contract: { id: number }) => contract.id)).toEqual(
+      registeredIds
+    );
+
+    const ascResponse = await request(getApp().getHttpServer())
+      .get("/contracts?limit=100&order=asc")
+      .set("x-api-key", apiKey);
+    expect(ascResponse.body.data.map((contract: { id: number }) => contract.id)).toEqual(
+      registeredIds
+    );
+
+    const seenIds: number[] = [];
+    let cursor: string | null = null;
+    let pages = 0;
+
+    do {
+      const query = cursor
+        ? `/contracts?limit=2&order=desc&cursor=${cursor}`
+        : "/contracts?limit=2&order=desc";
+      const page = await request(getApp().getHttpServer())
+        .get(query)
+        .set("x-api-key", apiKey);
+
+      expect(page.status).toBe(200);
+      const pageIds = page.body.data.map((contract: { id: number }) => contract.id);
+      expect(pageIds.length).toBeGreaterThan(0);
+      for (const id of pageIds) {
+        expect(seenIds).not.toContain(id);
+      }
+      seenIds.push(...pageIds);
+      cursor = page.body.nextCursor;
+      pages += 1;
+      expect(pages).toBeLessThanOrEqual(registeredIds.length);
+    } while (cursor);
+
+    expect(seenIds).toEqual([...registeredIds].reverse());
+  });
+
   it("returns 404 for an unknown contract id", async () => {
     const response = await request(getApp().getHttpServer())
       .get("/contracts/999999")
