@@ -23,6 +23,14 @@ export const tokenTransfers = pgTable(
     index("token_transfers_contract_id_idx").on(table.contractId),
     index("token_transfers_tx_hash_idx").on(table.txHash),
     index("token_transfers_ledger_idx").on(table.ledger),
+    // Composite indexes backing the contract-scoped transfer filters (from/to/asset) and the
+    // top-accounts aggregation, ordered by id for stable cursor pagination.
+    index("token_transfers_contract_from_id_idx").on(table.contractId, table.from, table.id),
+    index("token_transfers_contract_to_id_idx").on(table.contractId, table.to, table.id),
+    index("token_transfers_contract_asset_id_idx").on(table.contractId, table.asset, table.id),
+    // Standalone indexes backing the cross-contract account history endpoint.
+    index("token_transfers_from_idx").on(table.from),
+    index("token_transfers_to_idx").on(table.to),
     uniqueIndex("token_transfers_rpc_event_id_uidx").on(table.rpcEventId)
   ]
 );
