@@ -1,0 +1,15 @@
+# Keep the build context small and avoid leaking host builds/secrets into images.
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/*.tsbuildinfo
+**/coverage
+**/.env
+**/.env.*
+!**/.env.example
+.git
+.github
+docs/screenshots
+out
+package-lock.json

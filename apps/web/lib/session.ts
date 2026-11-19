@@ -4,16 +4,14 @@
  * Node-runtime Server Actions/Route Handlers without a separate implementation.
  */
 
-import { cookies } from "next/headers";
-
 export const SESSION_COOKIE_NAME = "stellarlens_session";
 export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
 export interface SessionPayload {
   sub: number;
   exp: number;
+  sessionVersion: number;
 }
-
 function getSecretKey(): Promise<CryptoKey> {
   const secret = process.env.SESSION_SECRET;
   if (!secret) {
@@ -24,7 +22,6 @@ function getSecretKey(): Promise<CryptoKey> {
     "verify"
   ]);
 }
-
 function base64UrlEncode(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) {
@@ -43,8 +40,12 @@ function base64UrlDecode(value: string): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
-export async function createSessionToken(userId: number): Promise<string> {
-  const payload: SessionPayload = { sub: userId, exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS };
+export async function createSessionToken(userId: number, sessionVersion: number): Promise<string> {
+  const payload: SessionPayload = {
+    sub: userId,
+    exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
+    sessionVersion
+  };
   const payloadB64 = base64UrlEncode(new TextEncoder().encode(JSON.stringify(payload)));
 
   const key = await getSecretKey();
@@ -71,7 +72,12 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
     return null;
   }
 
-  const payload = JSON.parse(new TextDecoder().decode(base64UrlDecode(payloadB64))) as SessionPayload;
+  let payload: SessionPayload;
+  try {
+    payload = JSON.parse(new TextDecoder().decode(base64UrlDecode(payloadB64))) as SessionPayload;
+  } catch {
+    return null;
+  }
   if (payload.exp < Math.floor(Date.now() / 1000)) {
     return null;
   }
@@ -79,8 +85,3 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
   return payload;
 }
 
-/** Reads and verifies the session cookie for the current request. Server Components/Actions only. */
-export async function getSession(): Promise<SessionPayload | null> {
-  const token = cookies().get(SESSION_COOKIE_NAME)?.value;
-  return token ? verifySessionToken(token) : null;
-}

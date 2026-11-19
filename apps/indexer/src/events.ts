@@ -78,10 +78,10 @@ export async function processEventsBatch(
   const request = cursor
     ? { filters: [{ type: "contract" as const }], cursor, limit: EVENTS_BATCH_LIMIT }
     : {
-        filters: [{ type: "contract" as const }],
-        startLedger: (await withRetry("getLatestLedger", () => server._getLatestLedger())).sequence,
-        limit: EVENTS_BATCH_LIMIT
-      };
+      filters: [{ type: "contract" as const }],
+      startLedger: (await withRetry("getLatestLedger", () => server._getLatestLedger())).sequence,
+      limit: EVENTS_BATCH_LIMIT
+    };
 
   const response = await withRetry("getEvents", () => server._getEvents(request));
 
@@ -154,10 +154,10 @@ export async function processEventsBatch(
 
     await tx
       .insert(indexerCheckpoints)
-      .values({ network: STELLAR_NETWORK, cursor: response.cursor })
+      .values({ network: STELLAR_NETWORK, cursor: response.cursor, latestLedger: response.latestLedger })
       .onConflictDoUpdate({
         target: indexerCheckpoints.network,
-        set: { cursor: response.cursor }
+        set: { cursor: response.cursor, latestLedger: response.latestLedger, updatedAt: new Date() }
       });
   });
 
