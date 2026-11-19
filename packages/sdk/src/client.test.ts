@@ -103,6 +103,27 @@ describe("StellarLensClient", () => {
     expect(contract.id).toBe(1);
   });
 
+  it("posts an items envelope to /contracts/bulk", async () => {
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      expect(String(url)).toBe("https://api.example.com/contracts/bulk");
+      expect(init?.method).toBe("POST");
+      expect(init?.body).toBe(JSON.stringify({ items: [{ address: "C1", network: "testnet" }] }));
+      return jsonResponse(
+        {
+          results: [
+            { index: 0, address: "C1", network: "testnet", name: null, status: "created", id: 1 }
+          ]
+        },
+        201
+      );
+    }) as unknown as typeof fetch;
+
+    const response = await makeClient(fetchMock).registerContractsBulk([
+      { address: "C1", network: "testnet" }
+    ]);
+    expect(response.results[0]).toMatchObject({ status: "created", id: 1 });
+  });
+
   it("throws StellarLensApiError with the parsed json body on failure", async () => {
     const fetchMock = vi.fn(
       async () => new Response(JSON.stringify({ message: "not found" }), { status: 404 })

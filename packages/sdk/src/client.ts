@@ -1,5 +1,7 @@
 import { StellarLensApiError, StellarLensHookError } from "./errors.js";
 import type {
+  BulkRegisterContractItem,
+  BulkRegisterContractsResponse,
   Contract,
   ContractStats,
   EventRecord,
@@ -170,6 +172,19 @@ export class StellarLensClient {
     });
   }
 
+  /**
+   * Registers up to 100 contracts in one request (`POST /contracts/bulk`), reporting a result per
+   * item. Unlike `registerContract`, already-registered addresses are left untouched (`existing`).
+   */
+  registerContractsBulk(items: BulkRegisterContractItem[]): Promise<BulkRegisterContractsResponse> {
+    return this.request<BulkRegisterContractsResponse>("/contracts/bulk", {
+      method: "POST",
+      body: JSON.stringify({ items })
+    });
+  }
+
+  listContracts(): Promise<Contract[]> {
+    return this.request<Contract[]>("/contracts");
   /** Cursor-paginated registered contracts, ordered by id. Filter with `name` (substring) and `network`. */
   listContracts(params?: ListContractsParams): Promise<Page<Contract>> {
     return this.request<Page<Contract>>(`/contracts${buildQuery(params)}`);

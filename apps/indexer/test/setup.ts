@@ -1,9 +1,7 @@
 import "dotenv/config";
-import { sql } from "drizzle-orm";
-import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll } from "vitest";
-import { createDb, type Database } from "@stellarlens/db";
+import { assertMigrated, createDb, truncateAllTables, type Database } from "@stellarlens/db";
 
 export const mswServer = setupServer();
 
@@ -15,14 +13,14 @@ export function getTestDb(): Database {
 
 beforeAll(async () => {
   db = createDb();
-  await migrate(db, { migrationsFolder: "../../packages/db/migrations" });
+  // Schema comes from `pnpm --filter @stellarlens/db db:migrate` (run by CI before tests), never
+  // from the suite itself, so tests exercise exactly what the migrations produce.
+  await assertMigrated(db);
   mswServer.listen({ onUnhandledRequest: "error" });
 });
 
 afterEach(async () => {
-  await db.execute(
-    sql`TRUNCATE TABLE webhook_deliveries, token_transfers, events, indexer_checkpoints, webhooks, contracts RESTART IDENTITY CASCADE`
-  );
+  await truncateAllTables(db);
   mswServer.resetHandlers();
 });
 

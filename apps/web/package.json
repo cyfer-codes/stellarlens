@@ -11,7 +11,8 @@
     "test": "vitest run",
     "create-user": "tsx scripts/create-user.ts",
     "seed-admin": "tsx scripts/seed-admin.ts",
-    "seed-demo": "tsx scripts/seed-demo.ts"
+    "seed-demo": "tsx scripts/seed-demo.ts",
+    "seed-api-key": "tsx scripts/seed-api-key.ts"
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^17.0.1",

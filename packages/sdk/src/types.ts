@@ -80,6 +80,29 @@ export interface RegisterContractInput {
   name?: string;
 }
 
+export interface BulkRegisterContractItem {
+  address: string;
+  network: string;
+  name?: string;
+}
+
+export type BulkContractStatus = "created" | "existing" | "error";
+
+/** One entry of a bulk registration response, in the same order as the request items. */
+export interface BulkContractResult {
+  index: number;
+  address: string | null;
+  network: string | null;
+  name: string | null;
+  status: BulkContractStatus;
+  id?: number;
+  error?: string;
+}
+
+export interface BulkRegisterContractsResponse {
+  results: BulkContractResult[];
+}
+
 export interface DecodedEventData {
   id: string;
   type: string;
