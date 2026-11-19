@@ -1,0 +1,299 @@
+{
+  "_comment": "SEP-41 token event fixtures, in the indexer's decoded form (decodedData.decoded). Shared by apps/indexer/test/transfers.test.ts (detectTransfer) and packages/sdk (parseTransfer / parseTokenMovement). `transfer` is what the indexer stores as a token transfer; null means it must not be detected.",
+  "cases": [
+    {
+      "name": "plain transfer",
+      "topic": [
+        "transfer",
+        "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "GTOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      ],
+      "value": "250",
+      "transfer": {
+        "from": "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "to": "GTOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "amount": "250"
+      },
+      "movement": {
+        "kind": "transfer",
+        "from": "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "to": "GTOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "amount": "250",
+        "toMuxedId": null
+      }
+    },
+    {
+      "name": "muxed transfer ({ amount, to_muxed_id })",
+      "topic": [
+        "transfer",
+        "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "GTOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      ],
+      "value": {
+        "amount": "500",
+        "to_muxed_id": "42"
+      },
+      "transfer": {
+        "from": "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "to": "GTOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "amount": "500"
+      },
+      "movement": {
+        "kind": "transfer",
+        "from": "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "to": "GTOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "amount": "500",
+        "toMuxedId": "42"
+      }
+    },
+    {
+      "name": "SAC transfer with trailing asset topic",
+      "topic": [
+        "transfer",
+        "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "CONTRACTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "USDC:GISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      ],
+      "value": "1000",
+      "transfer": {
+        "from": "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "to": "CONTRACTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "amount": "1000"
+      },
+      "movement": {
+        "kind": "transfer",
+        "from": "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "to": "CONTRACTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "amount": "1000",
+        "toMuxedId": null
+      }
+    },
+    {
+      "name": "different topic name",
+      "topic": [
+        "approve",
+        "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "GTOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      ],
+      "value": [
+        "250",
+        "1000"
+      ],
+      "transfer": null,
+      "movement": null
+    },
+    {
+      "name": "transfer with too few topics",
+      "topic": [
+        "transfer",
+        "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      ],
+      "value": "250",
+      "transfer": null,
+      "movement": null
+    },
+    {
+      "name": "transfer with non-string from",
+      "topic": [
+        "transfer",
+        42,
+        "GTOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      ],
+      "value": "250",
+      "transfer": null,
+      "movement": null
+    },
+    {
+      "name": "transfer with null to",
+      "topic": [
+        "transfer",
+        "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        null
+      ],
+      "value": "250",
+      "transfer": null,
+      "movement": null
+    },
+    {
+      "name": "transfer with numeric amount in object",
+      "topic": [
+        "transfer",
+        "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "GTOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      ],
+      "value": {
+        "amount": 250
+      },
+      "transfer": null,
+      "movement": null
+    },
+    {
+      "name": "transfer with numeric value",
+      "topic": [
+        "transfer",
+        "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "GTOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      ],
+      "value": 250,
+      "transfer": null,
+      "movement": null
+    },
+    {
+      "name": "mint (SEP-41 / CAP-67: [mint, to])",
+      "topic": [
+        "mint",
+        "GTOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      ],
+      "value": "700",
+      "transfer": null,
+      "movement": {
+        "kind": "mint",
+        "from": null,
+        "to": "GTOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "amount": "700",
+        "toMuxedId": null
+      }
+    },
+    {
+      "name": "muxed mint",
+      "topic": [
+        "mint",
+        "GTOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      ],
+      "value": {
+        "amount": "700",
+        "to_muxed_id": "9"
+      },
+      "transfer": null,
+      "movement": {
+        "kind": "mint",
+        "from": null,
+        "to": "GTOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "amount": "700",
+        "toMuxedId": "9"
+      }
+    },
+    {
+      "name": "SAC mint (CAP-67: [mint, to, asset])",
+      "topic": [
+        "mint",
+        "GTOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "USDC:GISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      ],
+      "value": "700",
+      "transfer": null,
+      "movement": {
+        "kind": "mint",
+        "from": null,
+        "to": "GTOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "amount": "700",
+        "toMuxedId": null
+      }
+    },
+    {
+      "name": "legacy mint ([mint, admin, to, asset])",
+      "topic": [
+        "mint",
+        "GADMINAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "GTOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "USDC:GISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      ],
+      "value": "700",
+      "transfer": null,
+      "movement": {
+        "kind": "mint",
+        "from": null,
+        "to": "GTOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "amount": "700",
+        "toMuxedId": null
+      }
+    },
+    {
+      "name": "burn",
+      "topic": [
+        "burn",
+        "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      ],
+      "value": "30",
+      "transfer": null,
+      "movement": {
+        "kind": "burn",
+        "from": "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "to": null,
+        "amount": "30",
+        "toMuxedId": null
+      }
+    },
+    {
+      "name": "SAC burn with asset topic",
+      "topic": [
+        "burn",
+        "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "native"
+      ],
+      "value": "30",
+      "transfer": null,
+      "movement": {
+        "kind": "burn",
+        "from": "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "to": null,
+        "amount": "30",
+        "toMuxedId": null
+      }
+    },
+    {
+      "name": "clawback (CAP-67: [clawback, from, asset])",
+      "topic": [
+        "clawback",
+        "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "USDC:GISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      ],
+      "value": "12",
+      "transfer": null,
+      "movement": {
+        "kind": "clawback",
+        "from": "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "to": null,
+        "amount": "12",
+        "toMuxedId": null
+      }
+    },
+    {
+      "name": "legacy clawback ([clawback, admin, from, asset])",
+      "topic": [
+        "clawback",
+        "GADMINAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "USDC:GISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      ],
+      "value": "12",
+      "transfer": null,
+      "movement": {
+        "kind": "clawback",
+        "from": "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "to": null,
+        "amount": "12",
+        "toMuxedId": null
+      }
+    },
+    {
+      "name": "mint with no recipient",
+      "topic": [
+        "mint"
+      ],
+      "value": "1",
+      "transfer": null,
+      "movement": null
+    },
+    {
+      "name": "burn without amount",
+      "topic": [
+        "burn",
+        "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      ],
+      "value": null,
+      "transfer": null,
+      "movement": null
+    }
+  ]
+}

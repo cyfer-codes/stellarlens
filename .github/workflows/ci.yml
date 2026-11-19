@@ -52,6 +52,15 @@ jobs:
 
       - run: pnpm build
 
+      - name: Check OpenAPI spec is up to date
+        run: |
+          pnpm --filter @stellarlens/api openapi:generate
+          git diff --exit-code openapi.json
+        env:
+          DATABASE_URL: postgres://stellarlens:stellarlens@localhost:5432/stellarlens
+          SOROBAN_RPC_URL: https://soroban-testnet.stellar.org
+          STELLAR_NETWORK: testnet
+
       - run: pnpm test
         env:
           DATABASE_URL: postgres://stellarlens:stellarlens@localhost:5432/stellarlens

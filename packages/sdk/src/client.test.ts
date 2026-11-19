@@ -24,6 +24,12 @@ describe("StellarLensClient", () => {
     const contracts = await makeClient(fetchMock).getContract(1);
 
     expect(contracts).toEqual({ id: 1, address: "C123", name: null, network: "testnet" });
+      return jsonResponse({ data: [{ id: 1, address: "C123", name: null, network: "testnet" }], nextCursor: null });
+    }) as unknown as typeof fetch;
+
+    const page = await makeClient(fetchMock).listContracts();
+
+    expect(page).toEqual({ data: [{ id: 1, address: "C123", name: null, network: "testnet" }], nextCursor: null });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -116,6 +122,66 @@ describe("StellarLensClient", () => {
     await expect(makeClient(fetchMock).getContract(1)).rejects.toMatchObject({
       status: 500,
       body: "internal error"
+    });
+  });
+
+  describe("contracts pagination", () => {
+    const contract = (id: number) => ({ id, address: `C${id}`, name: null, network: "testnet" });
+
+    it("passes cursor, limit, name and network to GET /contracts", async () => {
+      const fetchMock = vi.fn(async (url: string | URL) => {
+        expect(String(url)).toBe("https://api.example.com/contracts?cursor=10&limit=5&name=tok&network=testnet");
+        return jsonResponse({ data: [contract(11)], nextCursor: 11 });
+      }) as unknown as typeof fetch;
+
+      const page = await makeClient(fetchMock).listContracts({
+        cursor: 10,
+        limit: 5,
+        name: "tok",
+        network: "testnet"
+      });
+
+      expect(page.nextCursor).toBe(11);
+      expect(page.data).toHaveLength(1);
+    });
+
+    it("listAllContracts follows nextCursor until it is null, keeping the filters", async () => {
+      const urls: string[] = [];
+      const pages: Record<string, unknown> = {
+        "": { data: [contract(1), contract(2)], nextCursor: 2 },
+        "2": { data: [contract(3), contract(4)], nextCursor: 4 },
+        "4": { data: [contract(5)], nextCursor: null }
+      };
+      const fetchMock = vi.fn(async (url: string | URL) => {
+        const parsed = new URL(String(url));
+        urls.push(parsed.search);
+        return jsonResponse(pages[parsed.searchParams.get("cursor") ?? ""]);
+      }) as unknown as typeof fetch;
+
+      const ids: number[] = [];
+      for await (const c of makeClient(fetchMock).listAllContracts({ limit: 2, network: "testnet" })) {
+        ids.push(c.id);
+      }
+
+      expect(ids).toEqual([1, 2, 3, 4, 5]);
+      expect(urls).toEqual([
+        "?limit=2&network=testnet",
+        "?limit=2&network=testnet&cursor=2",
+        "?limit=2&network=testnet&cursor=4"
+      ]);
+    });
+
+    it("listAllContracts fetches pages lazily", async () => {
+      const fetchMock = vi.fn(async () =>
+        jsonResponse({ data: [contract(1), contract(2)], nextCursor: 2 })
+      ) as unknown as typeof fetch;
+
+      for await (const c of makeClient(fetchMock).listAllContracts()) {
+        expect(c.id).toBe(1);
+        break;
+      }
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
     });
   });
 });
