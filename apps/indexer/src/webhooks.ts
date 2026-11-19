@@ -3,6 +3,7 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { and, eq } from "drizzle-orm";
 import {
+  decryptWebhookSecret,
   webhookDeliveries as webhookDeliveriesTable,
   webhooks as webhooksTable,
   type Database
@@ -12,6 +13,7 @@ import {
   WEBHOOK_MAX_RETRIES,
   WEBHOOK_RETRY_BASE_DELAY_MS,
   WEBHOOK_RETRY_MAX_DELAY_MS,
+  WEBHOOK_SECRET_KEY,
   WEBHOOK_TIMEOUT_MS
 } from "./config.js";
 import { withRetry } from "./retry.js";
@@ -224,8 +226,28 @@ export async function deliverWebhooksForEvent(
         const webhook = recipients[nextRecipientIndex++];
         let attempts = 0;
 
+        let secret: string;
         try {
-          const signature = createHmac("sha256", webhook.secret).update(body).digest("hex");
+          secret = decryptWebhookSecret(webhook.secret, WEBHOOK_SECRET_KEY);
+        } catch (err) {
+          console.error(
+            `webhook ${webhook.id} for contract ${contractAddress} secret could not be decrypted:`,
+            err
+          );
+
+          await recordDelivery(db, {
+            webhookId: webhook.id,
+            eventId: payload.eventId,
+            status: "failed",
+            attempts,
+            lastError: `webhook secret could not be decrypted: ${errorMessage(err)}`,
+            deliveredAt: null
+          });
+          continue;
+        }
+
+        try {
+          const signature = createHmac("sha256", secret).update(body).digest("hex");
           await withRetry(
             `webhook:${webhook.id}`,
             async () => {

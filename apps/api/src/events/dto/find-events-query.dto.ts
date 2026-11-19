@@ -15,9 +15,41 @@ export class FindEventsQueryDto {
   @Max(100)
   limit: number = 20;
 
+  /**
+   * Matches the topic value at any position (containment semantics).
+   * Use `topic0`..`topic3` to target a specific decoded topic index.
+   */
   @IsOptional()
   @IsString()
   topic?: string;
+
+  /**
+   * Matches the decoded topic at index 0.
+   */
+  @IsOptional()
+  @IsString()
+  topic0?: string;
+
+  /**
+   * Matches the decoded topic at index 1.
+   */
+  @IsOptional()
+  @IsString()
+  topic1?: string;
+
+  /**
+   * Matches the decoded topic at index 2.
+   */
+  @IsOptional()
+  @IsString()
+  topic2?: string;
+
+  /**
+   * Matches the decoded topic at index 3.
+   */
+  @IsOptional()
+  @IsString()
+  topic3?: string;
 
   @IsOptional()
   @Transform(({ value }) => {
