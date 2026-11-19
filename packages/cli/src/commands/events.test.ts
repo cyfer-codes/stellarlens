@@ -41,7 +41,9 @@ describe("pollNewEvents", () => {
   });
 
   it("passes the current cursor through on the next poll", async () => {
-    const listEvents = vi.fn().mockResolvedValue({ data: [eventFixture(10, 200)], nextCursor: null });
+    const listEvents = vi
+      .fn()
+      .mockResolvedValue({ data: [eventFixture(10, 200)], nextCursor: null });
     const client = { listEvents } as unknown as StellarLensClient;
     vi.spyOn(console, "table").mockImplementation(() => {});
 

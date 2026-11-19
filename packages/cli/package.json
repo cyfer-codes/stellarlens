@@ -21,6 +21,7 @@
     "vitest": "^2.1.9"
   },
   "dependencies": {
+    "@stellar/stellar-sdk": "^17.0.1",
     "@stellarlens/sdk": "workspace:*",
     "commander": "^15.0.0"
   }
