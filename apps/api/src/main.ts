@@ -4,7 +4,25 @@ import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { AppModule } from "./app.module";
 
-function getApiKeyId(req: any): string | number | null {
+type ApiKeyIdCandidate = string | number | string[] | undefined;
+
+interface LoggedRequest {
+  method: string;
+  url: string;
+  originalUrl?: string;
+  apiKey?: { id?: number };
+  apiKeyId?: ApiKeyIdCandidate;
+  user?: { apiKeyId?: ApiKeyIdCandidate };
+  auth?: { apiKeyId?: ApiKeyIdCandidate };
+  headers?: Record<string, ApiKeyIdCandidate>;
+}
+
+interface LoggedResponse {
+  statusCode: number;
+  on(event: "finish", listener: () => void): void;
+}
+
+function getApiKeyId(req: LoggedRequest): string | number | null {
   const candidates = [
     req?.apiKey?.id,
     req?.apiKeyId,
@@ -29,7 +47,7 @@ async function bootstrap() {
     .filter((origin) => origin.length > 0);
 
   app.enableCors({ origin: corsOrigins.length ? corsOrigins : false });
-  app.use((req: any, res: any, next: () => void) => {
+  app.use((req: LoggedRequest, res: LoggedResponse, next: () => void) => {
     const start = process.hrtime.bigint();
     const method = req.method;
     const path = req.originalUrl ?? req.url;

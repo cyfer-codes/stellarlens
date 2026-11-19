@@ -212,7 +212,7 @@ describe("processEventsBatch", () => {
 
   it("does not insert a duplicate transfer when the ledger range is reprocessed", async () => {
     const db = getTestDb();
-    await registerContract(db, { address: "CONTRACT_DUPLICATE_TRANSFER", network: NETWORK });
+    await registerContract(db, { address: contractAddress("CONTRACT_DUPLICATE_TRANSFER"), network: NETWORK });
 
     mswServer.use(
       mockJsonRpc({
@@ -220,7 +220,7 @@ describe("processEventsBatch", () => {
         getEvents: () => ({
           events: [
             buildRawEvent({
-              contractId: "CONTRACT_DUPLICATE_TRANSFER",
+              contractId: contractAddress("CONTRACT_DUPLICATE_TRANSFER"),
               ledger: 3110,
               txHash: "d".repeat(64),
               topic: [symbolXdr("transfer"), addressXdr(ADDRESS_A), addressXdr(ADDRESS_B)],
@@ -238,6 +238,45 @@ describe("processEventsBatch", () => {
 
     const transferRows = await db.select().from(tokenTransfers);
     expect(transferRows).toHaveLength(1);
+  });
+
+  it("keeps every transfer when one transaction emits several from the same token", async () => {
+    const db = getTestDb();
+    await registerContract(db, { address: contractAddress("CONTRACT_MULTI_TRANSFER"), network: NETWORK });
+
+    mswServer.use(
+      mockJsonRpc({
+        getLatestLedger: () => buildLatestLedger(3200),
+        getEvents: () => ({
+          events: [
+            buildRawEvent({
+              id: "0000000000000003210-0000000001",
+              contractId: contractAddress("CONTRACT_MULTI_TRANSFER"),
+              ledger: 3210,
+              txHash: "e".repeat(64),
+              topic: [symbolXdr("transfer"), addressXdr(ADDRESS_A), addressXdr(ADDRESS_B)],
+              value: i128Xdr(100n)
+            }),
+            buildRawEvent({
+              id: "0000000000000003210-0000000002",
+              contractId: contractAddress("CONTRACT_MULTI_TRANSFER"),
+              ledger: 3210,
+              txHash: "e".repeat(64),
+              topic: [symbolXdr("transfer"), addressXdr(ADDRESS_B), addressXdr(ADDRESS_A)],
+              value: i128Xdr(40n)
+            })
+          ],
+          cursor: "CURSOR_MULTI_TRANSFER",
+          latestLedger: 3210
+        })
+      })
+    );
+
+    await processEventsBatch(db, makeServer());
+    await processEventsBatch(db, makeServer());
+
+    const transferRows = await db.select().from(tokenTransfers);
+    expect(transferRows.map((row) => row.amount).sort()).toEqual(["100", "40"]);
   });
 
   it("skips events from unregistered contracts", async () => {
@@ -271,7 +310,7 @@ describe("processEventsBatch", () => {
 
   it("keeps processing the batch when one event has a malformed XDR payload", async () => {
     const db = getTestDb();
-    await registerContract(db, { address: "CONTRACT_D", network: NETWORK });
+    await registerContract(db, { address: contractAddress("CONTRACT_D"), network: NETWORK });
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
     mswServer.use(
@@ -281,7 +320,7 @@ describe("processEventsBatch", () => {
           events: [
             buildRawEvent({
               id: "0000000000000005001-0000000001",
-              contractId: "CONTRACT_D",
+              contractId: contractAddress("CONTRACT_D"),
               ledger: 5001,
               txHash: "1".repeat(64),
               topic: [symbolXdr("fee")],
@@ -289,7 +328,7 @@ describe("processEventsBatch", () => {
             }),
             buildRawEvent({
               id: "0000000000000005002-0000000001",
-              contractId: "CONTRACT_D",
+              contractId: contractAddress("CONTRACT_D"),
               ledger: 5002,
               txHash: "2".repeat(64),
               topic: [symbolXdr("fee")],
@@ -297,7 +336,7 @@ describe("processEventsBatch", () => {
             }),
             buildRawEvent({
               id: "0000000000000005003-0000000001",
-              contractId: "CONTRACT_D",
+              contractId: contractAddress("CONTRACT_D"),
               ledger: 5003,
               txHash: "3".repeat(64),
               topic: [symbolXdr("transfer"), addressXdr(ADDRESS_A), addressXdr(ADDRESS_B)],
@@ -350,7 +389,7 @@ describe("processEventsBatch", () => {
 
       expect(consoleError).toHaveBeenCalledTimes(1);
       const message = String(consoleError.mock.calls[0][0]);
-      expect(message).toContain("CONTRACT_D");
+      expect(message).toContain(contractAddress("CONTRACT_D"));
       expect(message).toContain("ledger=5002");
       expect(message).toContain(`tx=${"2".repeat(64)}`);
     } finally {
@@ -360,7 +399,7 @@ describe("processEventsBatch", () => {
 
   it("stores null for a malformed topic entry and skips transfer detection", async () => {
     const db = getTestDb();
-    await registerContract(db, { address: "CONTRACT_E", network: NETWORK });
+    await registerContract(db, { address: contractAddress("CONTRACT_E"), network: NETWORK });
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
     mswServer.use(
@@ -369,7 +408,7 @@ describe("processEventsBatch", () => {
         getEvents: () => ({
           events: [
             buildRawEvent({
-              contractId: "CONTRACT_E",
+              contractId: contractAddress("CONTRACT_E"),
               ledger: 6001,
               topic: [symbolXdr("transfer"), MALFORMED_XDR, addressXdr(ADDRESS_B)],
               value: i128Xdr(700n)

@@ -1,1 +1,0 @@
-ALTER TABLE "api_keys" ADD COLUMN "scope" text DEFAULT 'full' NOT NULL;

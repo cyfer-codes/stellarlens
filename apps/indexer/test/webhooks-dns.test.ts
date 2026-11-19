@@ -1,10 +1,15 @@
 import type { Database } from "@stellarlens/db";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("drizzle-orm", () => ({ eq: vi.fn() }));
+vi.mock("drizzle-orm", () => ({ and: vi.fn(), eq: vi.fn() }));
 vi.mock("@stellarlens/db", () => ({
   webhookDeliveries: {},
-  webhooks: { contractId: {} }
+  webhooks: { contractId: {}, active: {} }
+}));
+// The private-destination check resolves the hostname before fetch; let it pass so the
+// DNS failure under test comes from fetch itself.
+vi.mock("node:dns/promises", () => ({
+  lookup: vi.fn().mockResolvedValue([{ address: "93.184.216.34", family: 4 }])
 }));
 
 import { deliverWebhooksForEvent } from "../src/webhooks.js";
@@ -37,6 +42,7 @@ describe("webhook DNS failures", () => {
       await deliverWebhooksForEvent(db, {
         eventId: 42,
         contractId: 3,
+        contractAddress: "CONTRACT_DNS_FAILURE",
         ledger: 100,
         txHash: "a".repeat(64),
         topic: ["transfer"],

@@ -145,7 +145,8 @@ export async function processEventsBatch(
             amount: transfer.amount,
             asset: event.contractId,
             txHash: event.txHash,
-            ledger: event.ledger
+            ledger: event.ledger,
+            rpcEventId: event.id
           })
           .onConflictDoNothing();
       }

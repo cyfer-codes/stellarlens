@@ -1,5 +1,4 @@
 import { createHmac } from "node:crypto";
-import { eq } from "drizzle-orm";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { and, eq } from "drizzle-orm";
@@ -89,6 +88,13 @@ function ipIsPublic(address: string): boolean {
   return globalUnicast && !documentation && !specialUse;
 }
 
+export class NonPublicWebhookUrlError extends Error {
+  constructor() {
+    super("webhook URL resolves to a non-public IP address");
+    this.name = "NonPublicWebhookUrlError";
+  }
+}
+
 export async function assertPublicWebhookUrl(
   url: string,
   resolve: DnsResolver = (hostname) => lookup(hostname, { all: true, verbatim: true })
@@ -97,7 +103,7 @@ export async function assertPublicWebhookUrl(
   const addresses = isIP(hostname) ? [{ address: hostname }] : await resolve(hostname);
 
   if (addresses.length === 0 || addresses.some(({ address }) => !ipIsPublic(address))) {
-    throw new Error("webhook URL resolves to a non-public IP address");
+    throw new NonPublicWebhookUrlError();
   }
 }
 
@@ -222,14 +228,16 @@ export async function deliverWebhooksForEvent(
           const signature = createHmac("sha256", webhook.secret).update(body).digest("hex");
           await withRetry(
             `webhook:${webhook.id}`,
-            () => {
+            async () => {
               attempts += 1;
+              await assertPublicWebhookUrl(webhook.url);
               return postWebhook(webhook.url, body, signature);
             },
             {
               maxRetries: WEBHOOK_MAX_RETRIES,
               baseDelayMs: WEBHOOK_RETRY_BASE_DELAY_MS,
-              maxDelayMs: WEBHOOK_RETRY_MAX_DELAY_MS
+              maxDelayMs: WEBHOOK_RETRY_MAX_DELAY_MS,
+              shouldRetry: (err) => !(err instanceof NonPublicWebhookUrlError) && !isDnsResolutionFailure(err)
             }
           );
 
@@ -242,66 +250,25 @@ export async function deliverWebhooksForEvent(
             deliveredAt: new Date()
           });
         } catch (err) {
-          console.error(`webhook ${webhook.id} delivery failed after retries:`, err);
+          const dnsFailure = isDnsResolutionFailure(err);
+          console.error(
+            dnsFailure
+              ? `webhook ${webhook.id} for contract ${contractAddress} endpoint ${webhook.url} is unreachable due to DNS resolution failure:`
+              : `webhook ${webhook.id} for contract ${contractAddress} delivery failed after retries:`,
+            err
+          );
 
           await recordDelivery(db, {
             webhookId: webhook.id,
             eventId: payload.eventId,
             status: "failed",
             attempts,
-            lastError: errorMessage(err),
+            lastError: dnsFailure
+              ? `DNS resolution failed for ${webhook.url}: ${errorMessage(err)}`
+              : errorMessage(err),
             deliveredAt: null
           });
         }
-    recipients.map(async (webhook) => {
-      let attempts = 0;
-
-      try {
-        const signature = createHmac("sha256", webhook.secret).update(body).digest("hex");
-        await assertPublicWebhookUrl(webhook.url);
-        await withRetry(
-          `webhook:${webhook.id}`,
-          () => {
-            attempts += 1;
-            return postWebhook(webhook.url, body, signature);
-          },
-          {
-            maxRetries: WEBHOOK_MAX_RETRIES,
-            baseDelayMs: WEBHOOK_RETRY_BASE_DELAY_MS,
-            maxDelayMs: WEBHOOK_RETRY_MAX_DELAY_MS,
-            shouldRetry: (err) => !isDnsResolutionFailure(err)
-          }
-        );
-
-        await recordDelivery(db, {
-          webhookId: webhook.id,
-          eventId: payload.eventId,
-          status: "success",
-          attempts,
-          lastError: null,
-          deliveredAt: new Date()
-        });
-      } catch (err) {
-        const dnsFailure = isDnsResolutionFailure(err);
-        console.error(
-          dnsFailure
-            ? `webhook ${webhook.id} endpoint ${webhook.url} is unreachable due to DNS resolution failure:`
-            : `webhook ${webhook.id} delivery failed after retries:`,
-        console.error(
-          `webhook ${webhook.id} for contract ${contractAddress} delivery failed after retries:`,
-          err
-        );
-
-        await recordDelivery(db, {
-          webhookId: webhook.id,
-          eventId: payload.eventId,
-          status: "failed",
-          attempts,
-          lastError: dnsFailure
-            ? `DNS resolution failed for ${webhook.url}: ${errorMessage(err)}`
-            : errorMessage(err),
-          deliveredAt: null
-        });
       }
     })
   );

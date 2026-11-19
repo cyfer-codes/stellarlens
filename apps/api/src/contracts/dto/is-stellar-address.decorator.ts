@@ -12,11 +12,11 @@ import { StrKey } from "@stellar/stellar-sdk";
  * consistent with the indexer's registry validation.
  */
 export function IsValidStellarAddress(validationOptions?: ValidationOptions): PropertyDecorator {
-  return function (object: object, propertyName: string) {
+  return function (object: object, propertyName: string | symbol) {
     registerDecorator({
       name: "isValidStellarAddress",
       target: object.constructor,
-      propertyName,
+      propertyName: propertyName.toString(),
       options: validationOptions,
       validator: {
         validate(value: unknown): boolean {

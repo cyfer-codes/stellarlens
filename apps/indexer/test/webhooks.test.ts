@@ -164,6 +164,7 @@ describe("webhook delivery", () => {
     await deliverWebhooksForEvent(db, {
       eventId: 1,
       contractId: contract.id,
+      contractAddress: contractAddress("CONTRACT_HOOK_CONCURRENCY"),
       ledger: 1,
       txHash: "3".repeat(64),
       topic: ["fee"],
@@ -269,6 +270,43 @@ describe("webhook delivery", () => {
     expect(delivery.attempts).toBe(WEBHOOK_MAX_RETRIES + 1);
     expect(delivery.lastError).toContain("status 500");
     expect(delivery.deliveredAt).toBeNull();
+  });
+
+  it("records a private destination as failed without retrying or posting to it", async () => {
+    const db = getTestDb();
+    const contract = await registerContract(db, {
+      address: contractAddress("CONTRACT_HOOK_PRIVATE"),
+      network: NETWORK
+    });
+    const privateUrl = "http://10.0.0.5/webhook";
+    await db
+      .insert(webhooksTable)
+      .values({ contractId: contract.id, url: privateUrl, secret: "private-secret", eventTypes: null });
+
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const webhookSpy = vi.fn(() => HttpResponse.json({ ok: true }));
+    mswServer.use(http.post(privateUrl, webhookSpy));
+    const [event] = await db
+      .insert(eventsTable)
+      .values({ contractId: contract.id, ledger: 1, txHash: "4".repeat(64), topic: "[]" })
+      .returning({ id: eventsTable.id });
+
+    await deliverWebhooksForEvent(db, {
+      eventId: event.id,
+      contractId: contract.id,
+      contractAddress: contractAddress("CONTRACT_HOOK_PRIVATE"),
+      ledger: 1,
+      txHash: "4".repeat(64),
+      topic: ["fee"],
+      value: "-1"
+    });
+    consoleError.mockRestore();
+
+    expect(webhookSpy).not.toHaveBeenCalled();
+    const [delivery] = await db.select().from(webhookDeliveries);
+    expect(delivery.status).toBe("failed");
+    expect(delivery.attempts).toBe(1);
+    expect(delivery.lastError).toContain("non-public IP address");
   });
 
   it("does not throw when persisting a delivery outcome fails", async () => {

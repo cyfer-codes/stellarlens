@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { createHash } from 'crypto';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ApiKeysService } from './api-keys.service';
 import { DATABASE } from '../database/database.module';
 
@@ -66,7 +67,7 @@ describe('ApiKeysService', () => {
       };
       mockInsertReturning.mockResolvedValue([persistedRow]);
 
-      const result = await service.generate('Test Key');
+      const result = await service.generate({ name: 'Test Key' });
 
       expect(result).toHaveProperty('key');
       expect(typeof result.key).toBe('string');
@@ -102,7 +103,7 @@ describe('ApiKeysService', () => {
         },
       ]);
 
-      await expect(service.revoke('key-1')).resolves.not.toThrow();
+      await expect(service.revoke(1)).resolves.not.toThrow();
 
       expect(mockUpdate).not.toHaveBeenCalled();
     });
@@ -110,7 +111,7 @@ describe('ApiKeysService', () => {
     it('throws NotFoundException when the key does not exist', async () => {
       mockSelectWhere.mockResolvedValue([]);
 
-      await expect(service.revoke('missing-id')).rejects.toBeInstanceOf(
+      await expect(service.revoke(999)).rejects.toBeInstanceOf(
         NotFoundException,
       );
 

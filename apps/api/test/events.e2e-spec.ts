@@ -94,7 +94,8 @@ describe("events (e2e)", () => {
         contractId,
         ledger: 2000 + i,
         txHash: i.toString().repeat(64).slice(0, 64),
-        topic: JSON.stringify(topicSets[i])
+        topic: JSON.stringify(topicSets[i]),
+        decodedData: { decoded: { topic: topicSets[i], value: null } }
       });
     }
 
@@ -118,7 +119,8 @@ describe("events (e2e)", () => {
         contractId,
         ledger: 3000 + i,
         txHash: i.toString().repeat(64).slice(0, 64),
-        topic: JSON.stringify(topicSets[i])
+        topic: JSON.stringify(topicSets[i]),
+        decodedData: { decoded: { topic: topicSets[i], value: null } }
       });
     }
 

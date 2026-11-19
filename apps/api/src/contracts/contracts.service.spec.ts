@@ -3,6 +3,7 @@ import { NotFoundException } from '@nestjs/common';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ContractsService } from './contracts.service';
 import { DATABASE } from '../database/database.module';
+import type { CreateContractDto } from './dto/create-contract.dto';
 
 describe('ContractsService', () => {
   let service: ContractsService;
@@ -54,7 +55,7 @@ describe('ContractsService', () => {
 
       mockReturning.mockResolvedValueOnce([createdContract]);
 
-      const result = await service.register(contractData as any);
+      const result = await service.register(contractData as unknown as CreateContractDto);
 
       expect(mockInsert).toHaveBeenCalledTimes(1);
       expect(mockValues).toHaveBeenCalledWith(contractData);
@@ -77,7 +78,7 @@ describe('ContractsService', () => {
 
       mockReturning.mockResolvedValueOnce([updatedContract]);
 
-      const result = await service.register(contractData as any);
+      const result = await service.register(contractData as unknown as CreateContractDto);
 
       expect(mockInsert).toHaveBeenCalledTimes(1);
       expect(mockValues).toHaveBeenCalledWith(contractData);
@@ -144,7 +145,7 @@ describe('ContractsService', () => {
 
       mockWhere.mockResolvedValueOnce([contract]);
 
-      const result = await service.findOne('contract-1');
+      const result = await service.findOne(1);
 
       expect(mockSelect).toHaveBeenCalledTimes(1);
       expect(mockFrom).toHaveBeenCalledTimes(1);
@@ -155,7 +156,7 @@ describe('ContractsService', () => {
     it('should throw NotFoundException when no contract is found', async () => {
       mockWhere.mockResolvedValueOnce([]);
 
-      await expect(service.findOne('missing-id')).rejects.toThrow(
+      await expect(service.findOne(999)).rejects.toThrow(
         NotFoundException,
       );
 
