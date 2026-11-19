@@ -37,6 +37,15 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Check generated SDK types are up to date
+        run: |
+          pnpm --filter @stellarlens/sdk generate
+          if [ -n "$(git status --porcelain -- packages/sdk/src/generated)" ]; then
+            git diff -- packages/sdk/src/generated
+            echo "::error::packages/sdk/src/generated is out of date with apps/api/openapi.json. Run 'pnpm --filter @stellarlens/sdk generate' and commit the result."
+            exit 1
+          fi
+
       - run: pnpm lint
 
       - run: pnpm typecheck

@@ -155,7 +155,10 @@ export class EventsService {
     const direction = query.order === "desc" ? "desc" : "asc";
     const conditions = [eq(events.contractId, contractId)];
 
+    const descending = query.order === "desc";
+
     if (query.cursor !== undefined) {
+      conditions.push(descending ? lt(events.id, query.cursor) : gt(events.id, query.cursor));
       conditions.push(
         direction === "desc"
           ? lt(events.id, query.cursor)
@@ -197,6 +200,7 @@ export class EventsService {
       .select()
       .from(events)
       .where(and(...conditions))
+      .orderBy(descending ? desc(events.id) : asc(events.id))
       .orderBy(direction === "desc" ? desc(events.id) : asc(events.id))
       .limit(query.limit + 1);
 

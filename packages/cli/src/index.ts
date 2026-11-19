@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { Command, Option } from "commander";
 import { Command, InvalidArgumentError } from "commander";
 import { createClientFromEnv } from "./client.js";
 import { addContract, listContracts } from "./commands/contracts.js";
@@ -54,6 +55,19 @@ const eventsCommand = program.command("events").description("Work with indexed c
 
 eventsCommand
   .command("tail <contractId>")
+  .description(
+    "Follow new events for a contract in real time. Starts at the latest event by default, so only events " +
+      "indexed from now on are shown."
+  )
+  .addOption(
+    new Option(
+      "--since <cursor|iso-date>",
+      "start after this event id, or from the first event indexed at/after this ISO 8601 date"
+    ).conflicts("fromStart")
+  )
+  .addOption(new Option("--from-start", "replay every event from the beginning of history").conflicts("since"))
+  .action(async (contractId: string, options: { since?: string; fromStart?: boolean }) => {
+    await tailEvents(createClientFromEnv(), Number(contractId), options);
   .description("Follow new events for a contract in real time")
   .option("--latest", "Skip existing events and only show ones indexed from now on")
   .option("--interval <ms>", "Poll interval in milliseconds", parsePositiveInt, DEFAULT_POLL_INTERVAL_MS)

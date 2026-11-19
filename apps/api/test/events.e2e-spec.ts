@@ -66,6 +66,37 @@ describe("events (e2e)", () => {
     expect(thirdPage.body.nextCursor).toBeNull();
   });
 
+  it("pages newest-first with order=desc", async () => {
+    const contractId = await registerContract(apiKey, "CONTRACT_EVENTS_DESC");
+    await seedEvents(contractId, 5);
+
+    const latest = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/events`)
+      .query({ order: "desc", limit: 1 })
+      .set("x-api-key", apiKey);
+
+    expect(latest.status).toBe(200);
+    expect(latest.body.data).toHaveLength(1);
+    expect(latest.body.data[0].ledger).toBe(1004);
+    expect(latest.body.nextCursor).toBe(latest.body.data[0].id);
+
+    const older = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/events`)
+      .query({ order: "desc", limit: 10, cursor: latest.body.nextCursor })
+      .set("x-api-key", apiKey);
+
+    expect(older.body.data.map((event: { ledger: number }) => event.ledger)).toEqual([1003, 1002, 1001, 1000]);
+    expect(older.body.nextCursor).toBeNull();
+  });
+
+  it("rejects an unknown order", async () => {
+    const contractId = await registerContract(apiKey, "CONTRACT_EVENTS_BAD_ORDER");
+    const response = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/events`)
+      .query({ order: "sideways" })
+      .set("x-api-key", apiKey);
+
+    expect(response.status).toBe(400);
   it("returns recent events across contracts newest first with contract names", async () => {
     const contractA = await registerContract(apiKey, "CONTRACT_RECENT_A");
     const contractB = await registerContract(apiKey, "CONTRACT_RECENT_B");

@@ -2,6 +2,9 @@ import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform, Type } from "class-transformer";
 import { IsIn, IsInt, IsISO8601, IsOptional, IsString, Max, Min } from "class-validator";
 
+export const EVENT_ORDERS = ["asc", "desc"] as const;
+export type EventOrder = (typeof EVENT_ORDERS)[number];
+
 export class FindEventsQueryDto {
   @ApiPropertyOptional({
     description: "Opaque pagination cursor returned by a previous request.",
@@ -29,6 +32,13 @@ export class FindEventsQueryDto {
   limit: number = 20;
 
   /**
+   * `asc` (default) pages oldest-first and `cursor` returns events with a larger id; `desc` pages
+   * newest-first and `cursor` returns events with a smaller id. `order=desc&limit=1` gives the latest event.
+   */
+  @IsOptional()
+  @IsIn(EVENT_ORDERS)
+  order: EventOrder = "asc";
+
    * Matches the topic value at any position (containment semantics).
    * Use `topic0`..`topic3` to target a specific decoded topic index.
    */
