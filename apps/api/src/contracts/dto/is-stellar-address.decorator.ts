@@ -1,4 +1,8 @@
-import { type ValidationArguments, type ValidationOptions, registerDecorator } from "class-validator";
+import {
+  type ValidationArguments,
+  type ValidationOptions,
+  registerDecorator
+} from "class-validator";
 import { StrKey } from "@stellar/stellar-sdk";
 
 /**
@@ -11,6 +15,13 @@ import { StrKey } from "@stellar/stellar-sdk";
  * address won't currently be indexed. Both are accepted here so the API stays
  * consistent with the indexer's registry validation.
  */
+export function isValidStellarAddress(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    (StrKey.isValidContract(value) || StrKey.isValidEd25519PublicKey(value))
+  );
+}
+
 export function IsValidStellarAddress(validationOptions?: ValidationOptions): PropertyDecorator {
   return function (object: object, propertyName: string | symbol) {
     registerDecorator({
@@ -19,12 +30,7 @@ export function IsValidStellarAddress(validationOptions?: ValidationOptions): Pr
       propertyName: propertyName.toString(),
       options: validationOptions,
       validator: {
-        validate(value: unknown): boolean {
-          return (
-            typeof value === "string" &&
-            (StrKey.isValidContract(value) || StrKey.isValidEd25519PublicKey(value))
-          );
-        },
+        validate: isValidStellarAddress,
         defaultMessage(args: ValidationArguments): string {
           return `${args.property} must be a well-formed Stellar contract (C...) or account (G...) strkey`;
         }

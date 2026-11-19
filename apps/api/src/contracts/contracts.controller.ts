@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query } from "@nestjs/common";
 import { ContractsService } from "./contracts.service";
+import { BulkCreateContractsDto } from "./dto/bulk-create-contracts.dto";
 import { CreateContractDto } from "./dto/create-contract.dto";
 import { FindContractsQueryDto } from "./dto/find-contracts-query.dto";
 import { UpdateContractDto } from "./dto/update-contract.dto";
@@ -11,6 +12,11 @@ export class ContractsController {
   @Post()
   register(@Body() dto: CreateContractDto) {
     return this.contractsService.register(dto);
+  }
+
+  @Post("bulk")
+  registerBulk(@Body() dto: BulkCreateContractsDto) {
+    return this.contractsService.registerBulk(dto);
   }
 
   @Get()
