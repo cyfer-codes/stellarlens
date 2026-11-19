@@ -1,54 +1,48 @@
 import type { EventRecord, StellarLensClient } from "@stellarlens/sdk";
 
-const POLL_INTERVAL_MS = 5000;
-const PAGE_SIZE = 100;
+export const DEFAULT_POLL_INTERVAL_MS = 5000;
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+export function formatEvent(event: EventRecord): string {
+  const decoded = event.decodedData?.decoded;
+  return [
+    `#${event.id}`,
+    `ledger ${event.ledger}`,
+    `tx ${event.txHash.slice(0, 12)}…`,
+    `topic ${decoded ? JSON.stringify(decoded.topic) : "—"}`,
+    `value ${decoded ? JSON.stringify(decoded.value) : "—"}`
+  ].join("  ");
 }
 
-function formatEvent(event: EventRecord): Record<string, string> {
-  const decoded = event.decodedData?.decoded;
-  return {
-    id: String(event.id),
-    ledger: String(event.ledger),
-    txHash: `${event.txHash.slice(0, 12)}…`,
-    topic: decoded ? JSON.stringify(decoded.topic) : "—",
-    value: decoded ? JSON.stringify(decoded.value) : "—"
-  };
+export interface TailEventsOptions {
+  /** Skip existing events and only print ones indexed from now on. */
+  latest?: boolean;
+  /** Poll interval in ms once caught up. */
+  intervalMs?: number;
+  /** Aborting stops the tail cleanly (wired to ctrl+c by the CLI). */
+  signal?: AbortSignal;
 }
 
 /**
- * Fetches events newer than `cursor` and prints any that arrived, returning the cursor to poll from next.
- * Advances to the last *returned* event's own id — not `nextCursor`, which the api only sets when a page
- * overflows `limit`. Using `nextCursor` here would leave the cursor stuck at null forever once caught up,
- * re-printing the same events on every poll.
+ * Prints a contract's events as they arrive, until `signal` aborts. Polling, cursor tracking and error backoff all
+ * live in the SDK's `watchEvents`.
  */
-export async function pollNewEvents(
+export async function tailEvents(
   client: StellarLensClient,
   contractId: number,
-  cursor: number | undefined
-): Promise<number | undefined> {
-  const page = await client.listEvents(contractId, { cursor, limit: PAGE_SIZE });
-
-  if (page.data.length === 0) {
-    return cursor;
-  }
-
-  console.table(page.data.map(formatEvent));
-  return page.data[page.data.length - 1].id;
-}
-
-export async function tailEvents(client: StellarLensClient, contractId: number): Promise<void> {
+  options: TailEventsOptions = {}
+): Promise<void> {
   console.log(`tailing events for contract ${contractId} (ctrl+c to stop)...`);
 
-  let cursor: number | undefined;
-  for (;;) {
-    try {
-      cursor = await pollNewEvents(client, contractId, cursor);
-    } catch (err) {
-      console.error("failed to fetch events:", err instanceof Error ? err.message : err);
+  for await (const event of client.watchEvents(contractId, {
+    intervalMs: options.intervalMs ?? DEFAULT_POLL_INTERVAL_MS,
+    startAt: options.latest ? "latest" : undefined,
+    signal: options.signal,
+    onError: (err, { retryInMs }) => {
+      console.error(
+        `failed to fetch events: ${err instanceof Error ? err.message : String(err)} (retrying in ${Math.round(retryInMs / 1000)}s)`
+      );
     }
-    await sleep(POLL_INTERVAL_MS);
+  })) {
+    console.log(formatEvent(event));
   }
 }

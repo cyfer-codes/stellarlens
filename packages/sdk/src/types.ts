@@ -55,6 +55,30 @@ export interface ListEventsParams {
   to?: string;
 }
 
+export interface WatchEventsOptions {
+  /** How long to wait between polls once caught up, in ms. Defaults to 5000. */
+  intervalMs?: number;
+  /** Stops the watch: the iterator finishes (without throwing) and any in-flight request is aborted. */
+  signal?: AbortSignal;
+  /**
+   * Where to start. `"latest"` skips every existing event and yields only ones indexed after the watch starts; a
+   * number yields events with an id greater than it (e.g. the last id you processed). Omit to replay from the
+   * contract's first event.
+   */
+  startAt?: "latest" | number;
+  /** Only watch events whose first topic matches. */
+  topic?: string;
+  /** Page size per request (1–100). Defaults to 100. */
+  limit?: number;
+  /** Upper bound for the error backoff, in ms. Defaults to 60000. */
+  maxBackoffMs?: number;
+  /**
+   * Called when a poll fails, before backing off. The watch keeps going: the delay doubles from `intervalMs` on
+   * each consecutive failure (capped at `maxBackoffMs`) and resets after the next success.
+   */
+  onError?: (error: unknown, info: { attempt: number; retryInMs: number }) => void;
+}
+
 export interface TransferRecord {
   id: number;
   contractId: number;

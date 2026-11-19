@@ -70,6 +70,31 @@ do {
 const transfers = await client.listTransfers(contract.id, { limit: 20 });
 ```
 
+### Watching for new events
+
+`watchEvents` polls for you and yields each new event exactly once, oldest first, until you abort it. It handles
+the cursor bookkeeping (it advances to the last *returned* event id. `nextCursor` is only set when a page
+overflows, so following it once caught up would replay everything). It drains backlogs without waiting and backs
+off exponentially when the api errors.
+
+```ts
+const controller = new AbortController();
+process.once("SIGINT", () => controller.abort());
+
+for await (const event of client.watchEvents(contract.id, {
+  startAt: "latest",          // "latest" = only events indexed from now on; a number = after that event id;
+                              // omitted = replay from the first event
+  intervalMs: 5000,           // wait between polls once caught up (default 5000)
+  signal: controller.signal,  // abort → the loop simply ends
+  onError: (err, { attempt, retryInMs }) => console.warn(`poll failed (#${attempt}), retrying in ${retryInMs}ms`, err)
+})) {
+  console.log(event.id, event.decodedData?.decoded);
+}
+```
+
+Also accepts `topic` (filter), `limit` (page size, default 100) and `maxBackoffMs` (default 60000). To resume after
+a restart, persist the last `event.id` you processed and pass it as `startAt`.
+
 ### Typed token movements
 
 `event.decodedData.decoded` is `unknown`, since a contract can emit anything. For SEP-41 token events, use the
@@ -220,6 +245,7 @@ try {
 | `listAllContracts(params?)` | Async iterator over every matching contract, following `nextCursor` |
 | `getContract(id)` | Fetch a single contract by id |
 | `listEvents(contractId, params?)` | Cursor-paginated events for a contract (`cursor`, `limit`, `topic`, `from`, `to`) |
+| `watchEvents(contractId, options?)` | Async iterator yielding new events as they're indexed, until `signal` aborts |
 | `listTransfers(contractId, params?)` | Cursor-paginated token transfers for a contract (`cursor`, `limit`) |
 | `getStats(contractId, params?)` | Transfer summary stats for a contract (`from`, `to`) |
 

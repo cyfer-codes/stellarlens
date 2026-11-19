@@ -22,6 +22,7 @@ export type {
   DecodedEventData,
   EventRecord,
   ListEventsParams,
+  WatchEventsOptions,
   TransferRecord,
   ListTransfersParams,
   GetStatsParams,

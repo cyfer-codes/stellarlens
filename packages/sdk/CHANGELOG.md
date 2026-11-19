@@ -28,3 +28,6 @@ All notable changes to `@stellarlens/sdk` are documented here.
   format. Also exports `WEBHOOK_SIGNATURE_HEADER`, `WEBHOOK_TIMESTAMP_HEADER` and `DEFAULT_WEBHOOK_TOLERANCE_SECONDS`.
 - `parseTransfer(event)` and `parseTokenMovement(event)` — typed SEP-41 transfer / mint / burn / clawback parsing
   of `EventRecord.decodedData`, matching the indexer's transfer detection (including the muxed `{ amount }` form).
+- `watchEvents(contractId, { intervalMs, signal, startAt, topic, limit, maxBackoffMs, onError })` async iterator that
+  tails a contract's events with correct cursor handling, backlog draining and exponential error backoff
+  (new `WatchEventsOptions` type).
