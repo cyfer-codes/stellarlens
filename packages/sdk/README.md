@@ -31,8 +31,8 @@ const contract = await client.registerContract({
   name: "My token"
 });
 
-// List all registered contracts
-const contracts = await client.listContracts();
+// List registered contracts, one page at a time
+const { data: contracts, nextCursor } = await client.listContracts({ limit: 100 });
 
 // Fetch one by id
 const same = await client.getContract(contract.id);
@@ -93,7 +93,7 @@ try {
 | Method | Description |
 |---|---|
 | `registerContract(input)` | Register a contract, or update name/network if the address is already registered |
-| `listContracts()` | List all registered contracts |
+| `listContracts(params?)` | Cursor-paginated registered contracts (`cursor`, `limit`, `name`, `network`) |
 | `getContract(id)` | Fetch a single contract by id |
 | `listEvents(contractId, params?)` | Cursor-paginated events for a contract (`cursor`, `limit`, `topic`, `from`, `to`) |
 | `listTransfers(contractId, params?)` | Cursor-paginated token transfers for a contract (`cursor`, `limit`) |

@@ -3,6 +3,7 @@ export { StellarLensApiError } from "./errors.js";
 export { escapeCsvCell, toCsv, toCsvRows } from "./csv.js";
 export type {
   Contract,
+  ListContractsParams,
   RegisterContractInput,
   DecodedEventData,
   EventRecord,

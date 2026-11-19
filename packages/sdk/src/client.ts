@@ -4,6 +4,7 @@ import type {
   ContractStats,
   EventRecord,
   GetStatsParams,
+  ListContractsParams,
   ListEventsParams,
   ListTransfersParams,
   Page,
@@ -81,8 +82,9 @@ export class StellarLensClient {
     });
   }
 
-  listContracts(): Promise<Contract[]> {
-    return this.request<Contract[]>("/contracts");
+  /** Cursor-paginated registered contracts, oldest first. */
+  listContracts(params?: ListContractsParams): Promise<Page<Contract>> {
+    return this.request<Page<Contract>>(`/contracts${buildQuery(params)}`);
   }
 
   getContract(id: number): Promise<Contract> {

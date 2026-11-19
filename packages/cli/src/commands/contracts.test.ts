@@ -18,7 +18,9 @@ describe("addContract", () => {
 
 describe("listContracts", () => {
   it("prints a message when there are no contracts", async () => {
-    const client = { listContracts: vi.fn().mockResolvedValue([]) } as unknown as StellarLensClient;
+    const client = {
+      listContracts: vi.fn().mockResolvedValue({ data: [], nextCursor: null })
+    } as unknown as StellarLensClient;
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     await listContracts(client);
@@ -29,13 +31,33 @@ describe("listContracts", () => {
 
   it("prints a table when contracts exist", async () => {
     const client = {
-      listContracts: vi.fn().mockResolvedValue([{ id: 1, address: "C1", name: null, network: "testnet" }])
+      listContracts: vi
+        .fn()
+        .mockResolvedValue({ data: [{ id: 1, address: "C1", name: null, network: "testnet" }], nextCursor: null })
     } as unknown as StellarLensClient;
     const tableSpy = vi.spyOn(console, "table").mockImplementation(() => {});
 
     await listContracts(client);
 
     expect(tableSpy).toHaveBeenCalledWith([{ id: 1, address: "C1", name: "—", network: "testnet" }]);
+    tableSpy.mockRestore();
+  });
+
+  it("follows nextCursor until every page is fetched", async () => {
+    const listContractsMock = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [{ id: 1, address: "C1", name: "One", network: "testnet" }], nextCursor: 1 })
+      .mockResolvedValueOnce({ data: [{ id: 2, address: "C2", name: null, network: "mainnet" }], nextCursor: null });
+    const client = { listContracts: listContractsMock } as unknown as StellarLensClient;
+    const tableSpy = vi.spyOn(console, "table").mockImplementation(() => {});
+
+    await listContracts(client);
+
+    expect(listContractsMock.mock.calls).toEqual([[{ cursor: undefined, limit: 100 }], [{ cursor: 1, limit: 100 }]]);
+    expect(tableSpy).toHaveBeenCalledWith([
+      { id: 1, address: "C1", name: "One", network: "testnet" },
+      { id: 2, address: "C2", name: "—", network: "mainnet" }
+    ]);
     tableSpy.mockRestore();
   });
 });

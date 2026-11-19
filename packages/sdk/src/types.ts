@@ -11,6 +11,14 @@ export interface RegisterContractInput {
   name?: string;
 }
 
+export interface ListContractsParams {
+  cursor?: number;
+  limit?: number;
+  /** Case-insensitive substring match on the contract name. */
+  name?: string;
+  network?: string;
+}
+
 export interface DecodedEventData {
   id: string;
   type: string;

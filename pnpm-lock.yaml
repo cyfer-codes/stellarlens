@@ -204,9 +204,18 @@ importers:
       '@stellar/stellar-sdk':
         specifier: ^17.0.1
         version: 17.0.1
+      '@stellarlens/db':
+        specifier: workspace:*
+        version: link:../db
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.43
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(postgres@3.4.9)
+      postgres:
+        specifier: ^3.4.9
+        version: 3.4.9
       typescript:
         specifier: ^5.7.0
         version: 5.9.3

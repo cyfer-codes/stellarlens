@@ -3,7 +3,8 @@ import { Argument, Command, InvalidArgumentError, Option } from "commander";
 import { createClientFromEnv } from "./client.js";
 import { addContract, listContracts } from "./commands/contracts.js";
 import { runDecode } from "./commands/decode.js";
-import { tailEvents } from "./commands/events.js";
+import { StellarLensApiError } from "@stellarlens/sdk";
+import { listEvents, tailEvents } from "./commands/events.js";
 import { runExport, type ExportFormat, type ExportKind } from "./commands/export.js";
 import { listenForWebhooks } from "./commands/webhooks.js";
 
@@ -13,6 +14,24 @@ function parsePort(value: string): number {
     throw new InvalidArgumentError("must be an integer between 0 and 65535");
   }
   return port;
+}
+
+function parsePositiveInt(value: string): number {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new InvalidArgumentError("must be a positive integer");
+  }
+  return parsed;
+}
+
+/** Appends the api's own explanation (e.g. validation messages) to a failed request's error. */
+function describeError(err: unknown): string {
+  if (err instanceof StellarLensApiError) {
+    const body = err.body as { message?: unknown } | undefined;
+    const detail = Array.isArray(body?.message) ? body.message.join("; ") : body?.message;
+    return typeof detail === "string" && detail.length > 0 ? `${err.message}: ${detail}` : err.message;
+  }
+  return err instanceof Error ? err.message : String(err);
 }
 
 function parseContractId(value: string): number {
@@ -51,6 +70,24 @@ contractsCommand
   });
 
 const eventsCommand = program.command("events").description("Work with indexed contract events");
+
+eventsCommand
+  .command("list")
+  .description("List a page of a contract's events, oldest first")
+  .addArgument(new Argument("<contractId>", "Contract id").argParser(parseContractId))
+  .option("-l, --limit <n>", "Events per page (1-100)", parsePositiveInt)
+  .option("-c, --cursor <id>", "Only events after this event id (from a previous page)", parsePositiveInt)
+  .option("--topic <topic>", "Only events whose decoded topic contains this value")
+  .option("--from <date>", "Only events created at or after this ISO-8601 date/time")
+  .option("--to <date>", "Only events created at or before this ISO-8601 date/time")
+  .action(
+    async (
+      contractId: number,
+      options: { limit?: number; cursor?: number; topic?: string; from?: string; to?: string }
+    ) => {
+      await listEvents(createClientFromEnv(), contractId, options);
+    }
+  );
 
 eventsCommand
   .command("tail <contractId>")
@@ -104,6 +141,6 @@ webhooksCommand
   });
 
 program.parseAsync(process.argv).catch((err: unknown) => {
-  console.error(`error: ${err instanceof Error ? err.message : String(err)}`);
+  console.error(`error: ${describeError(err)}`);
   process.exitCode = 1;
 });
