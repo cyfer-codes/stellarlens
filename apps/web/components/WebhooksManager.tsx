@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useState } from "react";
-import type { Webhook } from "@/lib/api";
+import type { Webhook, WebhookDelivery } from "@/lib/api";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingState } from "@/components/ui/LoadingState";
 
@@ -13,6 +13,24 @@ function parseEventTypes(input: string): string[] | undefined {
   return eventTypes.length > 0 ? eventTypes : undefined;
 }
 
+interface DeliveriesState {
+  expanded: boolean;
+  rows: WebhookDelivery[];
+  nextCursor: number | null;
+  loading: boolean;
+  error: string | null;
+  loaded: boolean;
+}
+
+const EMPTY_DELIVERIES: DeliveriesState = {
+  expanded: false,
+  rows: [],
+  nextCursor: null,
+  loading: false,
+  error: null,
+  loaded: false
+};
+
 export function WebhooksManager({ contractId, authenticated }: { contractId: number; authenticated: boolean }) {
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,6 +39,14 @@ export function WebhooksManager({ contractId, authenticated }: { contractId: num
   const [eventTypesInput, setEventTypesInput] = useState("");
   const [creating, setCreating] = useState(false);
   const [justCreatedSecret, setJustCreatedSecret] = useState<string | null>(null);
+  const [deliveries, setDeliveries] = useState<Record<number, DeliveriesState>>({});
+
+  function patchDeliveries(id: number, patch: Partial<DeliveriesState>) {
+    setDeliveries((current) => {
+      const existing = current[id] ?? EMPTY_DELIVERIES;
+      return { ...current, [id]: { ...existing, ...patch } };
+    });
+  }
 
   async function refresh() {
     try {
@@ -73,9 +99,73 @@ export function WebhooksManager({ contractId, authenticated }: { contractId: num
         throw new Error(`request failed with ${response.status}`);
       }
       setError(null);
+      setDeliveries((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "failed to delete webhook");
+    }
+  }
+
+  async function fetchDeliveriesPage(id: number, cursor: number | undefined) {
+    const query = cursor !== undefined ? `?cursor=${cursor}` : "";
+    const response = await fetch(
+      `/api/contracts/${contractId}/webhooks/${id}/deliveries${query}`,
+      { cache: "no-store" }
+    );
+    if (!response.ok) {
+      throw new Error(`request failed with ${response.status}`);
+    }
+    return (await response.json()) as { data: WebhookDelivery[]; nextCursor: number | null };
+  }
+
+  async function handleToggleDeliveries(id: number) {
+    const state = deliveries[id] ?? EMPTY_DELIVERIES;
+    if (state.expanded) {
+      patchDeliveries(id, { expanded: false });
+      return;
+    }
+    patchDeliveries(id, { expanded: true });
+    if (state.loaded) {
+      return;
+    }
+    patchDeliveries(id, { loading: true, error: null });
+    try {
+      const page = await fetchDeliveriesPage(id, undefined);
+      patchDeliveries(id, {
+        rows: page.data,
+        nextCursor: page.nextCursor,
+        loading: false,
+        loaded: true
+      });
+    } catch (err) {
+      patchDeliveries(id, {
+        loading: false,
+        loaded: true,
+        error: err instanceof Error ? err.message : "failed to load deliveries"
+      });
+    }
+  }
+
+  async function handleLoadMoreDeliveries(id: number) {
+    const state = deliveries[id] ?? EMPTY_DELIVERIES;
+    if (state.nextCursor === null || state.loading) return;
+    patchDeliveries(id, { loading: true, error: null });
+    try {
+      const page = await fetchDeliveriesPage(id, state.nextCursor);
+      patchDeliveries(id, {
+        rows: [...state.rows, ...page.data],
+        nextCursor: page.nextCursor,
+        loading: false
+      });
+    } catch (err) {
+      patchDeliveries(id, {
+        loading: false,
+        error: err instanceof Error ? err.message : "failed to load more deliveries"
+      });
     }
   }
 
@@ -140,13 +230,16 @@ export function WebhooksManager({ contractId, authenticated }: { contractId: num
         />
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] border-collapse text-left text-sm">
-            <caption className="sr-only">Registered webhooks with URL, event filter and creation date</caption>
+          <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+            <caption className="sr-only">
+              Registered webhooks with URL, event filter, creation date and recent deliveries
+            </caption>
             <thead>
               <tr className="border-b border-gray-200 text-gray-500">
                 <th scope="col" className="py-2 font-medium">URL</th>
                 <th scope="col" className="py-2 font-medium">Events</th>
                 <th scope="col" className="py-2 font-medium">Created</th>
+                <th scope="col" className="py-2 font-medium">Deliveries</th>
                 {authenticated && (
                   <th scope="col" className="py-2 font-medium">
                     <span className="sr-only">Actions</span>
@@ -155,27 +248,136 @@ export function WebhooksManager({ contractId, authenticated }: { contractId: num
               </tr>
             </thead>
             <tbody>
-              {webhooks.map((webhook) => (
-                <tr key={webhook.id} className="border-b border-gray-100">
-                  <td className="py-2 font-mono text-xs">{webhook.url}</td>
-                  <td className="py-2">{webhook.eventTypes?.length ? webhook.eventTypes.join(", ") : "All events"}</td>
-                  <td className="py-2">{new Date(webhook.createdAt).toLocaleString()}</td>
-                  {authenticated && (
-                    <td className="py-2 text-right">
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(webhook.id)}
-                        className="text-xs font-medium text-red-600 hover:underline"
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  )}
-                </tr>
-              ))}
+              {webhooks.map((webhook) => {
+                const state = deliveries[webhook.id] ?? EMPTY_DELIVERIES;
+                return (
+                  <WebhookRow
+                    key={webhook.id}
+                    webhook={webhook}
+                    state={state}
+                    authenticated={authenticated}
+                    onToggleDeliveries={() => handleToggleDeliveries(webhook.id)}
+                    onLoadMoreDeliveries={() => handleLoadMoreDeliveries(webhook.id)}
+                    onDelete={() => handleDelete(webhook.id)}
+                  />
+                );
+              })}
             </tbody>
           </table>
         </div>
+      )}
+    </div>
+  );
+}
+
+function WebhookRow({
+  webhook,
+  state,
+  authenticated,
+  onToggleDeliveries,
+  onLoadMoreDeliveries,
+  onDelete
+}: {
+  webhook: Webhook;
+  state: DeliveriesState;
+  authenticated: boolean;
+  onToggleDeliveries: () => void;
+  onLoadMoreDeliveries: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <>
+      <tr className="border-b border-gray-100">
+        <td className="py-2 font-mono text-xs">{webhook.url}</td>
+        <td className="py-2">{webhook.eventTypes?.length ? webhook.eventTypes.join(", ") : "All events"}</td>
+        <td className="py-2">{new Date(webhook.createdAt).toLocaleString()}</td>
+        <td className="py-2">
+          <button
+            type="button"
+            onClick={onToggleDeliveries}
+            aria-expanded={state.expanded}
+            className="text-xs font-medium text-gray-700 hover:underline"
+          >
+            {state.expanded ? "Hide deliveries" : "Show deliveries"}
+          </button>
+        </td>
+        {authenticated && (
+          <td className="py-2 text-right">
+            <button
+              type="button"
+              onClick={onDelete}
+              className="text-xs font-medium text-red-600 hover:underline"
+            >
+              Delete
+            </button>
+          </td>
+        )}
+      </tr>
+      {state.expanded && (
+        <tr className="border-b border-gray-100 bg-gray-50">
+          <td colSpan={authenticated ? 5 : 4} className="px-3 py-3">
+            <DeliveriesPanel state={state} onLoadMore={onLoadMoreDeliveries} />
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function DeliveriesPanel({
+  state,
+  onLoadMore
+}: {
+  state: DeliveriesState;
+  onLoadMore: () => void;
+}) {
+  if (state.loading && state.rows.length === 0) {
+    return <p className="text-xs text-gray-500">Loading deliveries…</p>;
+  }
+  if (state.error && state.rows.length === 0) {
+    return <p className="text-xs text-red-600">{state.error}</p>;
+  }
+  if (state.loaded && state.rows.length === 0) {
+    return <p className="text-xs text-gray-500">No deliveries yet.</p>;
+  }
+  return (
+    <div className="space-y-2">
+      <table className="w-full border-collapse text-left text-xs">
+        <thead>
+          <tr className="border-b border-gray-200 text-gray-500">
+            <th scope="col" className="py-1 font-medium">Status</th>
+            <th scope="col" className="py-1 font-medium">Attempts</th>
+            <th scope="col" className="py-1 font-medium">Error</th>
+            <th scope="col" className="py-1 font-medium">Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          {state.rows.map((delivery) => (
+            <tr key={delivery.id} className="border-b border-gray-100">
+              <td className="py-1">{delivery.status}</td>
+              <td className="py-1">{delivery.attempts}</td>
+              <td className="py-1">
+                {delivery.lastError ? (
+                  <span className="text-red-600">{delivery.lastError}</span>
+                ) : (
+                  <span className="text-gray-400">—</span>
+                )}
+              </td>
+              <td className="py-1">{new Date(delivery.createdAt).toLocaleString()}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {state.error && state.rows.length > 0 && <p className="text-xs text-red-600">{state.error}</p>}
+      {state.nextCursor !== null && (
+        <button
+          type="button"
+          onClick={onLoadMore}
+          disabled={state.loading}
+          className="rounded border border-gray-300 bg-white px-3 py-1 text-xs hover:bg-gray-100 disabled:opacity-50"
+        >
+          {state.loading ? "Loading…" : "Load more"}
+        </button>
       )}
     </div>
   );
