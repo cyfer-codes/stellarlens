@@ -34,10 +34,12 @@ export interface ContractStatus {
 }
 
 export interface DecodedEventData {
+  raw?: { topic?: string[]; value?: string };
   decoded?: {
     topic: unknown[];
     value: unknown;
   };
+  decodeErrors?: { field: string; error: string }[];
 }
 
 export interface EventRow {
@@ -63,6 +65,10 @@ export interface EventsPage {
 export interface ListEventsParams {
   cursor?: number;
   limit?: number;
+  topic?: string;
+  topics?: string[];
+  from?: string;
+  to?: string;
 }
 
 export interface TransferRow {
@@ -86,6 +92,11 @@ export interface TransfersPage {
 export interface ListTransfersParams {
   cursor?: number;
   limit?: number;
+  asset?: string;
+  from?: string;
+  to?: string;
+  minAmount?: string;
+  maxAmount?: string;
 }
 
 export interface Webhook {
@@ -165,11 +176,10 @@ export function getContractStatus(id: number): Promise<ContractStatus> {
 
 export function listEvents(contractId: number, params?: ListEventsParams): Promise<EventsPage> {
   const query = new URLSearchParams();
-  if (params?.cursor !== undefined) {
-    query.set("cursor", String(params.cursor));
-  }
-  if (params?.limit !== undefined) {
-    query.set("limit", String(params.limit));
+  for (const [key, value] of Object.entries(params ?? {})) {
+    if (value !== undefined && value !== "") {
+      query.set(key, Array.isArray(value) ? value.join(",") : String(value));
+    }
   }
   const qs = query.toString();
   return apiFetch<EventsPage>(`/contracts/${contractId}/events${qs ? `?${qs}` : ""}`);
@@ -181,14 +191,23 @@ export function listRecentEvents(limit = 20): Promise<RecentEventRow[]> {
 
 export function listTransfers(contractId: number, params?: ListTransfersParams): Promise<TransfersPage> {
   const query = new URLSearchParams();
-  if (params?.cursor !== undefined) {
-    query.set("cursor", String(params.cursor));
-  }
-  if (params?.limit !== undefined) {
-    query.set("limit", String(params.limit));
+  for (const [key, value] of Object.entries(params ?? {})) {
+    if (value !== undefined && value !== "") {
+      query.set(key, String(value));
+    }
   }
   const qs = query.toString();
   return apiFetch<TransfersPage>(`/contracts/${contractId}/transfers${qs ? `?${qs}` : ""}`);
+}
+
+export function listAccountTransfers(address: string, params?: ListTransfersParams): Promise<TransfersPage> {
+  const query = new URLSearchParams({ address });
+  for (const [key, value] of Object.entries(params ?? {})) {
+    if (value !== undefined && value !== "") {
+      query.set(key, String(value));
+    }
+  }
+  return apiFetch<TransfersPage>(`/transfers?${query}`);
 }
 
 export function listWebhooks(contractId: number): Promise<Webhook[]> {

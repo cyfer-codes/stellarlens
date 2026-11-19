@@ -65,4 +65,28 @@ describe("transfers (e2e)", () => {
     expect(filteredResponse.body.data).toHaveLength(1);
     expect(filteredResponse.body.data[0].asset).toBe("USDC");
   });
+
+  it("searches transfers across contracts by account address", async () => {
+    const firstContract = await registerContract(apiKey);
+    await seedTransfers(firstContract);
+    const secondContract = await registerContract(apiKey);
+    await getTestDb().insert(tokenTransfers).values({
+      contractId: secondContract,
+      from: "OTHER",
+      to: "FROM_A",
+      amount: "30",
+      asset: "OTHER_TOKEN",
+      txHash: "c".repeat(64),
+      ledger: 1002
+    });
+
+    const response = await request(getApp().getHttpServer())
+      .get("/transfers")
+      .query({ address: "FROM_A" })
+      .set("x-api-key", apiKey);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(2);
+    expect(response.body.data.every((transfer: { from: string; to: string }) => transfer.from === "FROM_A" || transfer.to === "FROM_A")).toBe(true);
+  });
 });

@@ -46,7 +46,7 @@ export default async function ContractDetailPage({ params }: { params: { id: str
 
       <div>
         <h2 className="mb-3 text-lg font-semibold">Events</h2>
-        <EventsTable contractId={contractId} />
+        <EventsTable contractId={contractId} network={contract.network} contractAddress={contract.address} />
       </div>
 
       <div>

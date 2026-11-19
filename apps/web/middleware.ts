@@ -18,7 +18,9 @@ const PUBLIC_DEMO_GET_PATTERNS = [
   /^\/api\/contracts\/\d+\/events$/,
   /^\/api\/contracts\/\d+\/stats$/,
   /^\/api\/contracts\/\d+\/transfers$/,
-  /^\/api\/contracts\/\d+\/webhooks$/
+  /^\/api\/contracts\/\d+\/webhooks$/,
+  /^\/api\/events$/,
+  /^\/api\/transfers$/
 ];
 
 function isPublicDemoRequest(request: NextRequest): boolean {
