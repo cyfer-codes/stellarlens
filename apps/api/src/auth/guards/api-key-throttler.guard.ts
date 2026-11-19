@@ -8,6 +8,18 @@ export class ApiKeyThrottlerGuard extends ThrottlerGuard {
     return apiKey ? `api-key:${apiKey.id}` : (req.ip as string);
   }
 
+  protected async getLimit(context: ExecutionContext): Promise<number> {
+    const { req } = this.getRequestResponse(context);
+    const apiKey = (req as Record<string, unknown>).apiKey as
+      | { rateLimitPerMinute?: number | null }
+      | undefined;
+    const perKeyLimit = apiKey?.rateLimitPerMinute;
+    if (typeof perKeyLimit === "number" && perKeyLimit > 0) {
+      return perKeyLimit;
+    }
+    return super.getLimit(context);
+  }
+
   protected async throwThrottlingException(
     context: ExecutionContext,
     throttlerLimitDetail: ThrottlerLimitDetail

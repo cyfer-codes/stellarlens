@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsInt, IsNumber, IsOptional, IsString, Max, Min } from "class-validator";
+import { IsIn, IsInt, IsNumber, IsOptional, IsString, Max, Min } from "class-validator";
 
 export class FindTransfersQueryDto {
   @IsOptional()
@@ -36,4 +36,8 @@ export class FindTransfersQueryDto {
   @IsOptional()
   @IsString()
   asset?: string;
+
+  @IsOptional()
+  @IsIn(["asc", "desc"])
+  order: "asc" | "desc" = "asc";
 }

@@ -1,4 +1,4 @@
-import { IsEnum, IsISO8601, IsOptional, IsString } from "class-validator";
+import { IsEnum, IsISO8601, IsInt, IsOptional, IsString, Min } from "class-validator";
 
 
 export enum ApiKeyScope {
@@ -18,4 +18,16 @@ export class CreateApiKeyDto {
   @IsOptional()
   @IsISO8601()
   expiresAt?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  rateLimitPerMinute?: number;
+}
+
+export class UpdateApiKeyDto {
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  rateLimitPerMinute?: number;
 }

@@ -1,5 +1,5 @@
 import { Transform, Type } from "class-transformer";
-import { IsInt, IsISO8601, IsOptional, IsString, Max, Min } from "class-validator";
+import { IsIn, IsInt, IsISO8601, IsOptional, IsString, Max, Min } from "class-validator";
 
 export class FindEventsQueryDto {
   @IsOptional()
@@ -40,4 +40,8 @@ export class FindEventsQueryDto {
   @IsOptional()
   @IsISO8601()
   to?: string;
+
+  @IsOptional()
+  @IsIn(["asc", "desc"])
+  order: "asc" | "desc" = "asc";
 }
