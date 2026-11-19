@@ -206,7 +206,16 @@ export class ContractsService {
     if (!contract) {
       throw new NotFoundException(`contract ${id} not found`);
     }
-    return contract;
+
+    // Token metadata is cached on the contract row by the indexer (via a
+    // read-only simulation of SEP-41 `decimals()`, `symbol()` and `name()`).
+    // Non-token contracts have these columns null, so expose them as null.
+    return {
+      ...contract,
+      decimals: contract.decimals ?? null,
+      symbol: contract.symbol ?? null,
+      name: contract.name ?? null
+    };
   }
 
   async findStatus(id: number) {

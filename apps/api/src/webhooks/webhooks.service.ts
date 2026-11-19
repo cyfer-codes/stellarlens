@@ -1,7 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { and, desc, eq, lt, ne } from "drizzle-orm";
 import { webhookDeliveries, webhooks, type Database } from "@stellarlens/db";
+import { decryptSecret, encryptSecret } from "@stellarlens/db";
 import { ContractsService } from "../contracts/contracts.service";
 import { DATABASE } from "../database/database.module";
 import { CreateWebhookDto } from "./dto/create-webhook.dto";
@@ -10,10 +12,19 @@ import { UpdateWebhookDto } from "./dto/update-webhook.dto";
 
 @Injectable()
 export class WebhooksService {
+  private readonly secretKey: string;
+
   constructor(
     @Inject(DATABASE) private readonly db: Database,
-    private readonly contractsService: ContractsService
-  ) {}
+    private readonly contractsService: ContractsService,
+    private readonly configService: ConfigService
+  ) {
+    const key = this.configService.get<string>("WEBHOOK_SECRET_KEY");
+    if (!key) {
+      throw new Error("WEBHOOK_SECRET_KEY is not configured");
+    }
+    this.secretKey = key;
+  }
 
   async register(contractId: number, dto: CreateWebhookDto) {
     await this.contractsService.findOne(contractId);
@@ -27,12 +38,14 @@ export class WebhooksService {
     }
 
     const secret = randomBytes(32).toString("hex");
+    const encryptedSecret = encryptSecret(secret, this.secretKey);
     const eventTypes = dto.eventTypes && dto.eventTypes.length > 0 ? dto.eventTypes : null;
     const [webhook] = await this.db
       .insert(webhooks)
-      .values({ contractId, url: dto.url, secret, eventTypes })
+      .values({ contractId, url: dto.url, secret: encryptedSecret, eventTypes })
       .returning();
-    return webhook;
+    // The raw secret is only ever surfaced once, at creation time.
+    return { ...webhook, secret };
   }
 
   async findAllByContract(contractId: number) {
@@ -105,9 +118,10 @@ export class WebhooksService {
     await this.contractsService.findOne(contractId);
 
     const secret = randomBytes(32).toString("hex");
+    const encryptedSecret = encryptSecret(secret, this.secretKey);
     const [webhook] = await this.db
       .update(webhooks)
-      .set({ secret })
+      .set({ secret: encryptedSecret })
       .where(and(eq(webhooks.id, id), eq(webhooks.contractId, contractId)))
       .returning();
 
@@ -115,7 +129,8 @@ export class WebhooksService {
       throw new NotFoundException(`webhook ${id} not found for contract ${contractId}`);
     }
 
-    return webhook;
+    // The raw secret is only ever surfaced once, at rotation time.
+    return { ...webhook, secret };
   }
 
   async remove(contractId: number, id: number) {

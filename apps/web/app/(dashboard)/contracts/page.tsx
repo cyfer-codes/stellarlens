@@ -6,7 +6,7 @@ import { listContracts } from "@/lib/api";
 import { getSession } from "@/lib/session-server";
 
 export default async function ContractsPage() {
-  const [contracts, session] = await Promise.all([listContracts(), getSession()]);
+  const [page, session] = await Promise.all([listContracts(), getSession()]);
   const authenticated = Boolean(session);
 
   return (
@@ -16,7 +16,7 @@ export default async function ContractsPage() {
         <p className="mt-1 text-sm text-gray-500">Registered Soroban contracts being indexed.</p>
       </div>
 
-      {contracts.length === 0 ? (
+      {page.data.length === 0 ? (
         authenticated ? (
           <ContractsOnboarding />
         ) : (
@@ -24,7 +24,10 @@ export default async function ContractsPage() {
         )
       ) : (
         <>
-          <ContractsTable contracts={contracts} />
+          <ContractsTable
+            initialContracts={page.data}
+            initialNextCursor={page.nextCursor}
+          />
 
           {authenticated && (
             <div>

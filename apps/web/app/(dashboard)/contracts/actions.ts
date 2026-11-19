@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createContract } from "@/lib/api";
+import { createContract, listContracts, type ListContractsParams } from "@/lib/api";
 
 export interface AddContractState {
   fieldErrors: Partial<Record<"address" | "network" | "name", string>>;
@@ -47,4 +47,8 @@ export async function addContract(_prevState: AddContractState, formData: FormDa
 
   revalidatePath("/contracts");
   redirect("/contracts");
+}
+
+export async function loadContracts(params: ListContractsParams) {
+  return listContracts(params);
 }
