@@ -82,6 +82,91 @@ console.log(stats.transferCount, stats.uniqueSenders, stats.uniqueReceivers);
 console.log(stats.volumeByAsset); // [{ asset: "CABC...XYZ", volume: "30000000" }, ...]
 ```
 
+### Verifying webhooks
+
+Every webhook delivery is signed with HMAC-SHA256 using the secret returned when the webhook was registered.
+`verifyWebhookSignature` checks it for you with a constant-time comparison. It's built on WebCrypto, so the same
+code runs in Node.js 20+, Deno, Bun, Cloudflare Workers and Next.js/Vercel edge routes.
+
+```ts
+import { verifyWebhookSignature } from "@stellarlens/sdk";
+
+const ok = await verifyWebhookSignature({
+  body: rawBody,                                        // the raw request body: string, Uint8Array or ArrayBuffer
+  signatureHeader: headers["x-webhook-signature"],      // "sha256=<hex>"
+  secret: process.env.STELLARLENS_WEBHOOK_SECRET!,
+  timestampHeader: headers["x-webhook-timestamp"],      // optional — see below
+  toleranceSeconds: 300                                 // optional, default 300
+});
+```
+
+It resolves `false` (never throws) for a missing, malformed or mismatched signature, so you can call it on any
+request. **Always pass the raw body** — parsing and re-serializing the JSON can change bytes and break the check.
+
+Two signature formats are supported:
+
+| Format | Headers | Signed content |
+|---|---|---|
+| Legacy (current deliveries) | `X-Webhook-Signature: sha256=<hex>` | the raw body |
+| Timestamped | `X-Webhook-Signature: sha256=<hex>` + `X-Webhook-Timestamp: <unix seconds>` | `"<timestamp>.<raw body>"` |
+
+When `timestampHeader` is passed, the timestamped format is used and deliveries older (or further in the future)
+than `toleranceSeconds` are rejected, which protects against replayed requests. Without it, the legacy format is
+checked.
+
+#### Express
+
+```ts
+import express from "express";
+import { verifyWebhookSignature } from "@stellarlens/sdk";
+
+const app = express();
+
+// express.raw keeps the body as a Buffer, so it isn't re-serialized before verification.
+app.post("/webhooks/stellarlens", express.raw({ type: "application/json" }), async (req, res) => {
+  const ok = await verifyWebhookSignature({
+    body: req.body as Buffer,
+    signatureHeader: req.get("x-webhook-signature"),
+    timestampHeader: req.get("x-webhook-timestamp"),
+    secret: process.env.STELLARLENS_WEBHOOK_SECRET!
+  });
+  if (!ok) {
+    return res.status(401).send("invalid signature");
+  }
+
+  const event = JSON.parse((req.body as Buffer).toString("utf8"));
+  // ...handle event.eventId, event.topic, event.value
+  res.sendStatus(204);
+});
+```
+
+#### Next.js (App Router route handler — Node.js or edge runtime)
+
+```ts
+// app/api/webhooks/stellarlens/route.ts
+import { verifyWebhookSignature } from "@stellarlens/sdk";
+
+export const runtime = "edge"; // optional — works on the default Node.js runtime too
+
+export async function POST(request: Request) {
+  const body = await request.text(); // raw body; don't use request.json() before verifying
+
+  const ok = await verifyWebhookSignature({
+    body,
+    signatureHeader: request.headers.get("x-webhook-signature"),
+    timestampHeader: request.headers.get("x-webhook-timestamp"),
+    secret: process.env.STELLARLENS_WEBHOOK_SECRET!
+  });
+  if (!ok) {
+    return new Response("invalid signature", { status: 401 });
+  }
+
+  const event = JSON.parse(body);
+  // ...handle the event
+  return new Response(null, { status: 204 });
+}
+```
+
 ### Error handling
 
 Any non-2xx response throws a `StellarLensApiError` with the HTTP status and the parsed response body (falls
@@ -110,6 +195,12 @@ try {
 | `listEvents(contractId, params?)` | Cursor-paginated events for a contract (`cursor`, `limit`, `topic`, `from`, `to`) |
 | `listTransfers(contractId, params?)` | Cursor-paginated token transfers for a contract (`cursor`, `limit`) |
 | `getStats(contractId, params?)` | Transfer summary stats for a contract (`from`, `to`) |
+
+Standalone helpers:
+
+| Function | Description |
+|---|---|
+| `verifyWebhookSignature(options)` | Constant-time HMAC check of a webhook delivery (legacy and timestamped formats) |
 
 All request/response types are exported from the package root (`Contract`, `EventRecord`, `TransferRecord`,
 `ContractStats`, `Page<T>`, etc.).

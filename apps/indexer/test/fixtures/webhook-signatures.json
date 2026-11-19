@@ -1,0 +1,21 @@
+{
+  "secret": "whsec_test_9f2c1b7e4a",
+  "cases": [
+    {
+      "name": "legacy",
+      "body": "{\"eventId\":4211,\"contractId\":7,\"ledger\":512345,\"txHash\":\"3f5a3f5a3f5a3f5a3f5a3f5a3f5a3f5a3f5a3f5a3f5a3f5a3f5a3f5a3f5a3f5a\",\"topic\":[\"transfer\",\"GAFROM…\",\"GBTO…\"],\"value\":{\"amount\":\"1250000000\",\"to_muxed_id\":\"42\",\"memo\":\"café ☕\"}}",
+      "signatureHeader": "sha256=eef0bfb85ac83a082ef819a6190c9dcd7d63dc6aa87f8e0e6491062b1d53b3df"
+    },
+    {
+      "name": "legacy-empty-body",
+      "body": "",
+      "signatureHeader": "sha256=16986aa530ebf704458ccd17e40fd3141c7d0e13c43bfa1f13d79f314b6fb17d"
+    },
+    {
+      "name": "timestamped",
+      "body": "{\"eventId\":4211,\"contractId\":7,\"ledger\":512345,\"txHash\":\"3f5a3f5a3f5a3f5a3f5a3f5a3f5a3f5a3f5a3f5a3f5a3f5a3f5a3f5a3f5a3f5a\",\"topic\":[\"transfer\",\"GAFROM…\",\"GBTO…\"],\"value\":{\"amount\":\"1250000000\",\"to_muxed_id\":\"42\",\"memo\":\"café ☕\"}}",
+      "timestamp": 1763510400,
+      "signatureHeader": "sha256=d99bed2bca140a3d9ab5ecc621d7d1897fa8b44c31a880d1fde9b66fbb15d5e0"
+    }
+  ]
+}

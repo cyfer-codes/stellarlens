@@ -23,3 +23,6 @@ All notable changes to `@stellarlens/sdk` are documented here.
 
 - `listContracts(params?)` accepts `cursor`, `limit`, `name` and `network` (new `ListContractsParams` type).
 - `listAllContracts(params?)` async iterator that follows `nextCursor` across pages.
+- `verifyWebhookSignature({ body, signatureHeader, secret, timestampHeader?, toleranceSeconds? })` — WebCrypto-based,
+  constant-time verification of webhook deliveries, supporting the legacy `sha256=` format and the timestamped
+  format. Also exports `WEBHOOK_SIGNATURE_HEADER`, `WEBHOOK_TIMESTAMP_HEADER` and `DEFAULT_WEBHOOK_TOLERANCE_SECONDS`.
