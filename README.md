@@ -57,14 +57,14 @@ Then open the web dashboard (default `:3000` — see the per-workspace table bel
 env vars each app needs), log in with the seeded admin account, and generate your first api key from
 **Settings**.
 
-| Workspace | Dev command | Notes |
-|---|---|---|
-| `apps/api` | `pnpm --filter @stellarlens/api dev` | Listens on `:3000` by default (`PORT` overrides). `GET /health` is public |
-| `apps/web` | `pnpm --filter @stellarlens/web dev` | Also defaults to `:3000` — run with a different `PORT` if both are up. Needs `API_URL`, `API_KEY`, `DATABASE_URL`, `SESSION_SECRET` (see `apps/web/.env.example`) |
-| `apps/indexer` | `pnpm --filter @stellarlens/indexer dev` | Needs `DATABASE_URL`, `SOROBAN_RPC_URL`, `STELLAR_NETWORK` |
-| `packages/sdk` | `pnpm --filter @stellarlens/sdk dev` | `tsup --watch` |
-| `packages/cli` | `pnpm --filter @stellarlens/cli dev` | Needs `STELLARLENS_API_URL` / `STELLARLENS_API_KEY` to actually run the built binary — see `packages/cli/README.md` |
-| `packages/db` | n/a (library) | `db:generate` / `db:migrate` / `db:studio` wrap `drizzle-kit`; needs `DATABASE_URL` and Postgres running |
+| Workspace      | Dev command                              | Notes                                                                                                                                                             |
+| -------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/api`     | `pnpm --filter @stellarlens/api dev`     | Listens on `:3000` by default (`PORT` overrides). `GET /health` is public                                                                                         |
+| `apps/web`     | `pnpm --filter @stellarlens/web dev`     | Also defaults to `:3000` — run with a different `PORT` if both are up. Needs `API_URL`, `API_KEY`, `DATABASE_URL`, `SESSION_SECRET` (see `apps/web/.env.example`) |
+| `apps/indexer` | `pnpm --filter @stellarlens/indexer dev` | Needs `DATABASE_URL`, `SOROBAN_RPC_URL`, `STELLAR_NETWORK`                                                                                                        |
+| `packages/sdk` | `pnpm --filter @stellarlens/sdk dev`     | `tsup --watch`                                                                                                                                                    |
+| `packages/cli` | `pnpm --filter @stellarlens/cli dev`     | Needs `STELLARLENS_API_URL` / `STELLARLENS_API_KEY` to actually run the built binary — see `packages/cli/README.md`                                               |
+| `packages/db`  | n/a (library)                            | `db:generate` / `db:migrate` / `db:studio` wrap `drizzle-kit`; needs `DATABASE_URL` and Postgres running                                                          |
 
 The indexer runs as a daemon by default. Set `POLL_ONCE=true` to process one poll cycle and exit; in
 this mode the registry server is not started. `WEBHOOK_CONCURRENCY` optionally sets the maximum
@@ -144,6 +144,7 @@ Workspaces are `apps/*` and `packages/*` (see `pnpm-workspace.yaml`), scoped as 
 
 ## Docs
 
+- [docs/webhooks.md](docs/webhooks.md) — webhook delivery guarantees, failure handling, and signature verification
 - [docs/screenshots.md](docs/screenshots.md) — capture checklist for the README's screenshots
 - Deployment: see the Render + Vercel runbook shared separately (ask if you need it re-sent)
 
