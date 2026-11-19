@@ -157,7 +157,10 @@ export class StellarLensClient {
     return this.request<Contract>(`/contracts/${id}`);
   }
 
-  /** Cursor-paginated events for a contract, oldest first. */
+  /**
+   * Cursor-paginated events for a contract, oldest first. Pass `order: "desc"` to page newest-first instead
+   * (`{ order: "desc", limit: 1 }` returns the latest event).
+   */
   listEvents(contractId: number, params?: ListEventsParams): Promise<Page<EventRecord>> {
     return this.request<Page<EventRecord>>(`/contracts/${contractId}/events${buildQuery(params)}`);
   }

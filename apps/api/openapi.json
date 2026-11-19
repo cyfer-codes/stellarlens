@@ -438,7 +438,7 @@
         "tags": [
           "events"
         ],
-        "summary": "Cursor-paginated events for a contract, oldest first.",
+        "summary": "Cursor-paginated events for a contract, oldest first by default.",
         "parameters": [
           {
             "name": "cursor",
@@ -460,6 +460,20 @@
               "minimum": 1,
               "maximum": 100,
               "default": 20
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "description": "`asc` pages oldest-first (`cursor` returns larger ids); `desc` pages newest-first (`cursor` returns smaller ids). `order=desc&limit=1` returns the latest event.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "default": "asc"
             }
           },
           {
@@ -1815,7 +1829,7 @@
       },
       "EventPage": {
         "type": "object",
-        "description": "A page of events, ordered by id.",
+        "description": "A page of events, ordered by id in the requested `order`.",
         "required": [
           "data",
           "nextCursor"

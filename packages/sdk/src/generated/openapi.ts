@@ -104,7 +104,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Cursor-paginated events for a contract, oldest first. */
+        /** Cursor-paginated events for a contract, oldest first by default. */
         get: operations["listEvents"];
         put?: never;
         post?: never;
@@ -357,7 +357,7 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
-        /** @description A page of events, ordered by id. */
+        /** @description A page of events, ordered by id in the requested `order`. */
         EventPage: {
             data: components["schemas"]["EventRecord"][];
             /** @description Pass as `cursor` to fetch the next page; `null` on the last page. */
@@ -827,6 +827,8 @@ export interface operations {
                 cursor?: number;
                 /** @description Page size. */
                 limit?: number;
+                /** @description `asc` pages oldest-first (`cursor` returns larger ids); `desc` pages newest-first (`cursor` returns smaller ids). `order=desc&limit=1` returns the latest event. */
+                order?: "asc" | "desc";
                 /** @description Only events whose decoded topic contains this value. */
                 topic?: string;
                 /** @description Only events whose decoded topic contains any of these values (comma-separated or repeated). */
