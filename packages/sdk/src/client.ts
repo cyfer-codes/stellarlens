@@ -4,6 +4,7 @@ import type {
   ContractStats,
   EventRecord,
   GetStatsParams,
+  ListContractsParams,
   ListEventsParams,
   ListTransfersParams,
   Page,
@@ -26,9 +27,11 @@ function buildQuery(params?: object): string {
   }
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined) {
-      search.set(key, String(value));
+    if (value === undefined) {
+      continue;
     }
+    // Array filters (e.g. `topics`) are sent comma-separated, which the api splits back apart.
+    search.set(key, Array.isArray(value) ? value.join(",") : String(value));
   }
   const qs = search.toString();
   return qs ? `?${qs}` : "";
@@ -81,8 +84,9 @@ export class StellarLensClient {
     });
   }
 
-  listContracts(): Promise<Contract[]> {
-    return this.request<Contract[]>("/contracts");
+  /** Cursor-paginated registered contracts, ordered by id. Filter with `name` (substring) and `network`. */
+  listContracts(params?: ListContractsParams): Promise<Page<Contract>> {
+    return this.request<Page<Contract>>(`/contracts${buildQuery(params)}`);
   }
 
   getContract(id: number): Promise<Contract> {

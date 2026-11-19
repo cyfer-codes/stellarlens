@@ -1,79 +1,58 @@
-export interface Contract {
-  id: number;
-  address: string;
-  name: string | null;
-  network: string;
-}
+/**
+ * Public request/response types for the SDK.
+ *
+ * Every type here is derived from `./generated/openapi.ts`, which `pnpm generate` produces from the committed
+ * OpenAPI spec (`apps/api/openapi.json`). Don't hand-write shapes in this file — change the spec and
+ * regenerate, so the SDK can't drift from the api again. CI fails if the generated file is stale.
+ */
+import type { components, operations } from "./generated/openapi.js";
 
-export interface RegisterContractInput {
-  address: string;
-  network: string;
-  name?: string;
-}
+type Schemas = components["schemas"];
+type QueryOf<Op extends keyof operations> = NonNullable<operations[Op]["parameters"]["query"]>;
 
-export interface DecodedEventData {
-  id: string;
-  type: string;
-  ledgerClosedAt: string;
-  inSuccessfulContractCall: boolean;
-  raw: {
-    topic: string[];
-    value: string;
-  };
-  decoded: {
-    topic: unknown[];
-    value: unknown;
-  };
-}
+export type ApiError = Schemas["ApiError"];
 
-export interface EventRecord {
-  id: number;
-  contractId: number;
-  ledger: number;
-  txHash: string;
-  topic: string;
-  decodedData: DecodedEventData | null;
-  createdAt: string;
-}
+export type Contract = Schemas["Contract"];
+export type RegisterContractInput = Schemas["RegisterContractInput"];
+export type UpdateContractInput = Schemas["UpdateContractInput"];
+export type BulkRegisterContractsInput = Schemas["BulkRegisterContractsInput"];
+export type BulkRegisterContractResult = Schemas["BulkRegisterContractResult"];
+export type BulkRegisterContractsResponse = Schemas["BulkRegisterContractsResponse"];
+export type ListContractsParams = QueryOf<"listContracts">;
 
-export interface ListEventsParams {
-  cursor?: number;
-  limit?: number;
-  topic?: string;
-  from?: string;
-  to?: string;
-}
+export type DecodedEventData = Schemas["DecodedEventData"];
+export type EventRecord = Schemas["EventRecord"];
+export type ListEventsParams = QueryOf<"listEvents">;
 
-export interface TransferRecord {
-  id: number;
-  contractId: number;
-  from: string;
-  to: string;
-  amount: string;
-  asset: string;
-  txHash: string;
-  ledger: number;
-  createdAt: string;
-}
+export type TransferRecord = Schemas["TransferRecord"];
+export type ListTransfersParams = QueryOf<"listTransfers">;
 
-export interface ListTransfersParams {
-  cursor?: number;
-  limit?: number;
-}
+export type GetStatsParams = QueryOf<"getStats">;
+export type ContractStats = Schemas["ContractStats"];
 
-export interface GetStatsParams {
-  from?: string;
-  to?: string;
-}
+export type ApiKeyScope = Schemas["ApiKeyScope"];
+export type ApiKey = Schemas["ApiKey"];
+export type CreateApiKeyInput = Schemas["CreateApiKeyInput"];
+export type CreatedApiKey = Schemas["CreatedApiKey"];
 
-export interface ContractStats {
-  transferCount: number;
-  uniqueSenders: number;
-  uniqueReceivers: number;
-  volumeByAsset: { asset: string; volume: string }[];
-}
+export type Webhook = Schemas["Webhook"];
+export type WebhookSummary = Schemas["WebhookSummary"];
+export type UpdatedWebhook = Schemas["UpdatedWebhook"];
+export type CreateWebhookInput = Schemas["CreateWebhookInput"];
+export type UpdateWebhookInput = Schemas["UpdateWebhookInput"];
+export type WebhookDelivery = Schemas["WebhookDelivery"];
 
+/** A cursor-paginated response. Pass `nextCursor` back as `cursor` until it comes back `null`. */
 export interface Page<T> {
   data: T[];
   nextCursor: number | null;
 }
+
+// Compile-time guard: the generic `Page<T>` must stay assignable from every generated page schema.
+type AssertPage<P extends Page<unknown>> = P;
+export type _GeneratedPagesMatch = [
+  AssertPage<Schemas["ContractPage"]>,
+  AssertPage<Schemas["EventPage"]>,
+  AssertPage<Schemas["TransferPage"]>,
+  AssertPage<Schemas["WebhookDeliveryPage"]>
+];

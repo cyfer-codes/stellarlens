@@ -16,14 +16,14 @@ function makeClient(fetchMock: typeof fetch, baseUrl = "https://api.example.com"
 describe("StellarLensClient", () => {
   it("sends the api key header and parses a successful response", async () => {
     const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
-      expect(String(url)).toBe("https://api.example.com/contracts");
+      expect(String(url)).toBe("https://api.example.com/contracts/1");
       expect((init?.headers as Record<string, string>)["x-api-key"]).toBe("test-key");
-      return jsonResponse([{ id: 1, address: "C123", name: null, network: "testnet" }]);
+      return jsonResponse({ id: 1, address: "C123", name: null, network: "testnet" });
     }) as unknown as typeof fetch;
 
-    const contracts = await makeClient(fetchMock).listContracts();
+    const contracts = await makeClient(fetchMock).getContract(1);
 
-    expect(contracts).toEqual([{ id: 1, address: "C123", name: null, network: "testnet" }]);
+    expect(contracts).toEqual({ id: 1, address: "C123", name: null, network: "testnet" });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -38,10 +38,49 @@ describe("StellarLensClient", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("paginates and filters listContracts", async () => {
+    const page = { data: [{ id: 3, address: "C3", name: "token", network: "testnet" }], nextCursor: 3 };
+    const fetchMock = vi.fn(async (url: string | URL) => {
+      expect(String(url)).toBe("https://api.example.com/contracts?cursor=2&limit=1&network=testnet");
+      return jsonResponse(page);
+    }) as unknown as typeof fetch;
+
+    await expect(makeClient(fetchMock).listContracts({ cursor: 2, limit: 1, network: "testnet" })).resolves.toEqual(
+      page
+    );
+  });
+
+  it("sends the transfer filters", async () => {
+    const fetchMock = vi.fn(async (url: string | URL) => {
+      expect(String(url)).toBe(
+        "https://api.example.com/contracts/1/transfers?minAmount=170141183460469231731687303715884105727&from=GA&to=GB&asset=native"
+      );
+      return jsonResponse({ data: [], nextCursor: null });
+    }) as unknown as typeof fetch;
+
+    await makeClient(fetchMock).listTransfers(1, {
+      minAmount: "170141183460469231731687303715884105727",
+      from: "GA",
+      to: "GB",
+      asset: "native"
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends array filters comma-separated", async () => {
+    const fetchMock = vi.fn(async (url: string | URL) => {
+      expect(new URL(String(url)).searchParams.get("topics")).toBe("transfer,mint");
+      return jsonResponse({ data: [], nextCursor: null });
+    }) as unknown as typeof fetch;
+
+    await makeClient(fetchMock).listEvents(1, { topics: ["transfer", "mint"] });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("strips a trailing slash from baseUrl", async () => {
     const fetchMock = vi.fn(async (url: string | URL) => {
       expect(String(url)).toBe("https://api.example.com/contracts");
-      return jsonResponse([]);
+      return jsonResponse({ data: [], nextCursor: null });
     }) as unknown as typeof fetch;
 
     await makeClient(fetchMock, "https://api.example.com/").listContracts();

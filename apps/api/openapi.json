@@ -1,0 +1,2285 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "stellarlens api",
+    "version": "1.0.0",
+    "description": "Index and query Soroban contract events and token transfers. This file is the source of truth for the generated `@stellarlens/sdk` types \u2014 after editing it, run `pnpm --filter @stellarlens/sdk generate`."
+  },
+  "security": [
+    {
+      "apiKey": []
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "tags": [
+          "health"
+        ],
+        "security": [],
+        "summary": "Liveness check.",
+        "responses": {
+          "200": {
+            "description": "The api is up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "ready",
+        "tags": [
+          "health"
+        ],
+        "security": [],
+        "summary": "Readiness check (database reachable).",
+        "responses": {
+          "200": {
+            "description": "Ready.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthStatus"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contracts": {
+      "get": {
+        "operationId": "listContracts",
+        "tags": [
+          "contracts"
+        ],
+        "summary": "Cursor-paginated list of registered contracts.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Return items after this id (the previous page's `nextCursor`).",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "description": "Case-insensitive substring match on the contract name.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "network",
+            "in": "query",
+            "required": false,
+            "description": "Exact network match, e.g. `testnet`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of contracts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired api key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "registerContract",
+        "tags": [
+          "contracts"
+        ],
+        "summary": "Register a contract, or update the name/network of one already registered at that address.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterContractInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The registered contract.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Contract"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired api key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contracts/bulk": {
+      "post": {
+        "operationId": "registerContractsBulk",
+        "tags": [
+          "contracts"
+        ],
+        "summary": "Register up to 100 contracts, reporting a result per item.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkRegisterContractsInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Per-item results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkRegisterContractsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired api key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contracts/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "Contract id.",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getContract",
+        "tags": [
+          "contracts"
+        ],
+        "summary": "Fetch a contract by id.",
+        "responses": {
+          "200": {
+            "description": "The contract.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Contract"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired api key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateContract",
+        "tags": [
+          "contracts"
+        ],
+        "summary": "Update a contract's name and/or network.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateContractInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated contract.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Contract"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired api key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contracts/{contractId}/events": {
+      "parameters": [
+        {
+          "name": "contractId",
+          "in": "path",
+          "required": true,
+          "description": "Contract id.",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "get": {
+        "operationId": "listEvents",
+        "tags": [
+          "events"
+        ],
+        "summary": "Cursor-paginated events for a contract, oldest first.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Return items after this id (the previous page's `nextCursor`).",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "topic",
+            "in": "query",
+            "required": false,
+            "description": "Only events whose decoded topic contains this value.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "topics",
+            "in": "query",
+            "required": false,
+            "description": "Only events whose decoded topic contains any of these values (comma-separated or repeated).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "Only events indexed at or after this ISO 8601 time.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "Only events indexed at or before this ISO 8601 time.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of events.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired api key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contracts/{contractId}/transfers": {
+      "parameters": [
+        {
+          "name": "contractId",
+          "in": "path",
+          "required": true,
+          "description": "Contract id.",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "get": {
+        "operationId": "listTransfers",
+        "tags": [
+          "transfers"
+        ],
+        "summary": "Cursor-paginated token transfers for a contract, oldest first.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Return items after this id (the previous page's `nextCursor`).",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "minAmount",
+            "in": "query",
+            "required": false,
+            "description": "Only transfers of at least this many base units.",
+            "schema": {
+              "type": "string",
+              "pattern": "^-?\\d+$"
+            }
+          },
+          {
+            "name": "maxAmount",
+            "in": "query",
+            "required": false,
+            "description": "Only transfers of at most this many base units.",
+            "schema": {
+              "type": "string",
+              "pattern": "^-?\\d+$"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "Only transfers sent by this address.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "Only transfers received by this address.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "asset",
+            "in": "query",
+            "required": false,
+            "description": "Only transfers of this asset.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of transfers.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired api key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contracts/{contractId}/stats": {
+      "parameters": [
+        {
+          "name": "contractId",
+          "in": "path",
+          "required": true,
+          "description": "Contract id.",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getStats",
+        "tags": [
+          "transfers"
+        ],
+        "summary": "Transfer summary stats, optionally scoped to a time window.",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "Window start (ISO 8601).",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "Window end (ISO 8601).",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Transfer stats.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractStats"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired api key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contracts/{contractId}/webhooks": {
+      "parameters": [
+        {
+          "name": "contractId",
+          "in": "path",
+          "required": true,
+          "description": "Contract id.",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "get": {
+        "operationId": "listWebhooks",
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "List a contract's webhooks.",
+        "responses": {
+          "200": {
+            "description": "The webhooks.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WebhookSummary"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired api key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "registerWebhook",
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Register a webhook for a contract.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWebhookInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The webhook, including its signing secret.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Webhook"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired api key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A webhook is already registered for that url on this contract.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contracts/{contractId}/webhooks/{id}": {
+      "parameters": [
+        {
+          "name": "contractId",
+          "in": "path",
+          "required": true,
+          "description": "Contract id.",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "Webhook id.",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "patch": {
+        "operationId": "updateWebhook",
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Update a webhook's url and/or event types.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateWebhookInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated webhook.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdatedWebhook"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired api key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Another webhook is already registered for that url on this contract.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteWebhook",
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Delete a webhook.",
+        "responses": {
+          "204": {
+            "description": "Deleted."
+          },
+          "400": {
+            "description": "Invalid request parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired api key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contracts/{contractId}/webhooks/{id}/deliveries": {
+      "parameters": [
+        {
+          "name": "contractId",
+          "in": "path",
+          "required": true,
+          "description": "Contract id.",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "Webhook id.",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "get": {
+        "operationId": "listWebhookDeliveries",
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Cursor-paginated delivery attempts, newest first.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Return deliveries with an id below this (the previous page's `nextCursor`).",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of deliveries.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookDeliveryPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired api key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contracts/{contractId}/webhooks/{id}/rotate-secret": {
+      "parameters": [
+        {
+          "name": "contractId",
+          "in": "path",
+          "required": true,
+          "description": "Contract id.",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "Webhook id.",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "post": {
+        "operationId": "rotateWebhookSecret",
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Generate a new signing secret.",
+        "responses": {
+          "201": {
+            "description": "The webhook with its new secret.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Webhook"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired api key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api-keys": {
+      "get": {
+        "operationId": "listApiKeys",
+        "tags": [
+          "api-keys"
+        ],
+        "summary": "List api keys, newest first.",
+        "responses": {
+          "200": {
+            "description": "The api keys (never the raw key).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApiKey"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired api key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createApiKey",
+        "tags": [
+          "api-keys"
+        ],
+        "summary": "Generate an api key (requires `full` scope).",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateApiKeyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The new key, including the raw key value.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedApiKey"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired api key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The calling key lacks `full` scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api-keys/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "Api key id.",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "delete": {
+        "operationId": "revokeApiKey",
+        "tags": [
+          "api-keys"
+        ],
+        "summary": "Revoke an api key (requires `full` scope).",
+        "responses": {
+          "204": {
+            "description": "Revoked (idempotent)."
+          },
+          "400": {
+            "description": "Invalid request parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired api key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The calling key lacks `full` scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "apiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-api-key"
+      }
+    },
+    "schemas": {
+      "ApiError": {
+        "type": "object",
+        "description": "The error envelope returned by every endpoint.",
+        "required": [
+          "statusCode",
+          "message",
+          "error"
+        ],
+        "properties": {
+          "statusCode": {
+            "type": "integer"
+          },
+          "message": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "Contract": {
+        "type": "object",
+        "required": [
+          "id",
+          "address",
+          "name",
+          "network"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "address": {
+            "type": "string",
+            "description": "Stellar strkey (C... contract or G... account)."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "network": {
+            "type": "string"
+          }
+        }
+      },
+      "RegisterContractInput": {
+        "type": "object",
+        "required": [
+          "address",
+          "network"
+        ],
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Stellar strkey (C... contract or G... account)."
+          },
+          "network": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateContractInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "network": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "BulkRegisterContractsInput": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "required": [
+                "address",
+                "network"
+              ],
+              "properties": {
+                "address": {
+                  "type": "string"
+                },
+                "network": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "BulkRegisterContractResult": {
+        "type": "object",
+        "required": [
+          "index",
+          "address",
+          "network",
+          "name",
+          "status"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer"
+          },
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "network": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "created",
+              "existing",
+              "error"
+            ]
+          },
+          "id": {
+            "type": "integer"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "BulkRegisterContractsResponse": {
+        "type": "object",
+        "required": [
+          "results"
+        ],
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BulkRegisterContractResult"
+            }
+          }
+        }
+      },
+      "ContractPage": {
+        "type": "object",
+        "description": "A page of contracts, ordered by id ascending.",
+        "required": [
+          "data",
+          "nextCursor"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Contract"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Pass as `cursor` to fetch the next page; `null` on the last page."
+          }
+        }
+      },
+      "DecodedEventData": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "ledgerClosedAt",
+          "inSuccessfulContractCall",
+          "raw",
+          "decoded"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "ledgerClosedAt": {
+            "type": "string"
+          },
+          "inSuccessfulContractCall": {
+            "type": "boolean"
+          },
+          "raw": {
+            "type": "object",
+            "required": [
+              "topic",
+              "value"
+            ],
+            "properties": {
+              "topic": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "value": {
+                "type": "string"
+              }
+            }
+          },
+          "decoded": {
+            "type": "object",
+            "required": [
+              "topic",
+              "value"
+            ],
+            "properties": {
+              "topic": {
+                "type": "array",
+                "items": {}
+              },
+              "value": {}
+            }
+          }
+        }
+      },
+      "EventRecord": {
+        "type": "object",
+        "required": [
+          "id",
+          "contractId",
+          "ledger",
+          "txHash",
+          "topic",
+          "decodedData",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "contractId": {
+            "type": "integer"
+          },
+          "ledger": {
+            "type": "integer"
+          },
+          "txHash": {
+            "type": "string"
+          },
+          "topic": {
+            "type": "string"
+          },
+          "decodedData": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DecodedEventData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "EventPage": {
+        "type": "object",
+        "description": "A page of events, ordered by id.",
+        "required": [
+          "data",
+          "nextCursor"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventRecord"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Pass as `cursor` to fetch the next page; `null` on the last page."
+          }
+        }
+      },
+      "TransferRecord": {
+        "type": "object",
+        "required": [
+          "id",
+          "contractId",
+          "from",
+          "to",
+          "amount",
+          "asset",
+          "txHash",
+          "ledger",
+          "rpcEventId",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "contractId": {
+            "type": "integer"
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^-?\\d+$",
+            "description": "Amount in the token's base units, as a decimal string (i128 \u2014 don't convert with Number)."
+          },
+          "asset": {
+            "type": "string"
+          },
+          "txHash": {
+            "type": "string"
+          },
+          "ledger": {
+            "type": "integer"
+          },
+          "rpcEventId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Soroban RPC event id that produced this transfer."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "TransferPage": {
+        "type": "object",
+        "description": "A page of token transfers, ordered by id ascending.",
+        "required": [
+          "data",
+          "nextCursor"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TransferRecord"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Pass as `cursor` to fetch the next page; `null` on the last page."
+          }
+        }
+      },
+      "ContractStats": {
+        "type": "object",
+        "required": [
+          "transferCount",
+          "uniqueSenders",
+          "uniqueReceivers",
+          "volumeByAsset"
+        ],
+        "properties": {
+          "transferCount": {
+            "type": "integer"
+          },
+          "uniqueSenders": {
+            "type": "integer"
+          },
+          "uniqueReceivers": {
+            "type": "integer"
+          },
+          "volumeByAsset": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "asset",
+                "volume"
+              ],
+              "properties": {
+                "asset": {
+                  "type": "string"
+                },
+                "volume": {
+                  "type": "string",
+                  "description": "Summed amount in base units, as a decimal string."
+                }
+              }
+            }
+          }
+        }
+      },
+      "ApiKeyScope": {
+        "type": "string",
+        "enum": [
+          "full",
+          "read"
+        ]
+      },
+      "ApiKey": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "scope",
+          "createdAt",
+          "revokedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scope": {
+            "$ref": "#/components/schemas/ApiKeyScope"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "revokedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "CreateApiKeyInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/ApiKeyScope"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 expiry; omit for a key that never expires."
+          }
+        }
+      },
+      "CreatedApiKey": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "scope",
+          "createdAt",
+          "expiresAt",
+          "key"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scope": {
+            "$ref": "#/components/schemas/ApiKeyScope"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "key": {
+            "type": "string",
+            "description": "The raw api key. Only returned once, at creation."
+          }
+        }
+      },
+      "CreateWebhookInput": {
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "eventTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Event topics to deliver; omit or leave empty for all."
+          }
+        }
+      },
+      "UpdateWebhookInput": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "eventTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "Webhook": {
+        "type": "object",
+        "required": [
+          "id",
+          "contractId",
+          "url",
+          "secret",
+          "eventTypes",
+          "active",
+          "createdAt"
+        ],
+        "description": "A webhook including its signing secret (returned on creation and secret rotation).",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "contractId": {
+            "type": "integer"
+          },
+          "url": {
+            "type": "string"
+          },
+          "secret": {
+            "type": "string"
+          },
+          "eventTypes": {
+            "oneOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "WebhookSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "url",
+          "eventTypes",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "url": {
+            "type": "string"
+          },
+          "eventTypes": {
+            "oneOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "UpdatedWebhook": {
+        "type": "object",
+        "required": [
+          "id",
+          "contractId",
+          "url",
+          "eventTypes",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "contractId": {
+            "type": "integer"
+          },
+          "url": {
+            "type": "string"
+          },
+          "eventTypes": {
+            "oneOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "WebhookDelivery": {
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "attempts",
+          "lastError",
+          "deliveredAt",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "attempts": {
+            "type": "integer"
+          },
+          "lastError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "deliveredAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "WebhookDeliveryPage": {
+        "type": "object",
+        "description": "A page of deliveries, newest first (`cursor` returns deliveries with a smaller id).",
+        "required": [
+          "data",
+          "nextCursor"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebhookDelivery"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Pass as `cursor` to fetch the next page; `null` on the last page."
+          }
+        }
+      },
+      "HealthStatus": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

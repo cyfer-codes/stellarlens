@@ -31,8 +31,8 @@ const contract = await client.registerContract({
   name: "My token"
 });
 
-// List all registered contracts
-const contracts = await client.listContracts();
+// List registered contracts (cursor-paginated, optionally filtered by `name` substring and `network`)
+const { data: contracts, nextCursor } = await client.listContracts({ network: "testnet", limit: 50 });
 
 // Fetch one by id
 const same = await client.getContract(contract.id);
@@ -40,7 +40,7 @@ const same = await client.getContract(contract.id);
 
 ### Paginated events and transfers
 
-Both `listEvents` and `listTransfers` use cursor-based pagination, oldest first. Keep passing the previous
+`listContracts`, `listEvents` and `listTransfers` use cursor-based pagination, oldest first. Keep passing the previous
 page's `nextCursor` until it comes back `null`:
 
 ```ts
@@ -56,9 +56,14 @@ do {
 ```
 
 ```ts
-import { formatAmount } from "@stellarlens/sdk";
+import { formatAmount, parseAmount } from "@stellarlens/sdk";
 
-const transfers = await client.listTransfers(contract.id, { limit: 20 });
+const transfers = await client.listTransfers(contract.id, {
+  limit: 20,
+  asset: "CABC...XYZ",
+  from: "GSENDER...",
+  minAmount: String(parseAmount("100", 7)) // base units, as a string — see "Amounts" below
+});
 for (const transfer of transfers.data) {
   // `amount` is a base-unit decimal string, e.g. "12345678" — see "Amounts" below
   console.log(transfer.from, "→", transfer.to, formatAmount(transfer.amount, 7));
@@ -128,13 +133,26 @@ try {
 | Method | Description |
 |---|---|
 | `registerContract(input)` | Register a contract, or update name/network if the address is already registered |
-| `listContracts()` | List all registered contracts |
+| `listContracts(params?)` | Cursor-paginated registered contracts (`cursor`, `limit`, `name`, `network`) |
 | `getContract(id)` | Fetch a single contract by id |
-| `listEvents(contractId, params?)` | Cursor-paginated events for a contract (`cursor`, `limit`, `topic`, `from`, `to`) |
-| `listTransfers(contractId, params?)` | Cursor-paginated token transfers for a contract (`cursor`, `limit`) |
+| `listEvents(contractId, params?)` | Cursor-paginated events for a contract (`cursor`, `limit`, `topic`, `topics`, `from`, `to`) |
+| `listTransfers(contractId, params?)` | Cursor-paginated token transfers for a contract (`cursor`, `limit`, `minAmount`, `maxAmount`, `from`, `to`, `asset`) |
 | `getStats(contractId, params?)` | Transfer summary stats for a contract (`from`, `to`) |
 | `formatAmount(amount, decimals, { maxFractionDigits }?)` | Format a base-unit amount for display, using `bigint` |
 | `parseAmount(display, decimals)` | Parse a display amount into base units as a `bigint` |
 
 All request/response types are exported from the package root (`Contract`, `EventRecord`, `TransferRecord`,
-`ContractStats`, `Page<T>`, etc.).
+`ContractStats`, `ApiKey`, `Webhook`, `Page<T>`, etc.), along with the raw generated `paths`, `components` and
+`operations` types.
+
+## Contributing: generated types
+
+The SDK's types are generated from the api's committed OpenAPI spec, [`apps/api/openapi.json`](../../apps/api/openapi.json),
+into `src/generated/openapi.ts` — never edit that file or hand-write shapes in `src/types.ts`. When the api
+changes, update the spec and regenerate:
+
+```bash
+pnpm --filter @stellarlens/sdk generate
+```
+
+CI regenerates the types and fails if the committed output is out of date.
