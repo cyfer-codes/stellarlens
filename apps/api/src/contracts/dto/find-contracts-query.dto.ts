@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsInt, IsOptional, IsString, Max, Min } from "class-validator";
+import { IsIn, IsInt, IsOptional, IsString, Max, Min } from "class-validator";
 
 export class FindContractsQueryDto {
   @ApiPropertyOptional({
@@ -43,4 +43,8 @@ export class FindContractsQueryDto {
   @IsOptional()
   @IsString()
   network?: string;
+
+  @IsOptional()
+  @IsIn(["asc", "desc"])
+  order: "asc" | "desc" = "asc";
 }

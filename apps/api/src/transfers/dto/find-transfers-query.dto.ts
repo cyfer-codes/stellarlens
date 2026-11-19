@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsInt, IsNumber, IsOptional, IsString, Max, Min } from "class-validator";
+import { IsIn, IsInt, IsNumber, IsOptional, IsString, Max, Min } from "class-validator";
 
 export class FindTransfersQueryDto {
   @ApiPropertyOptional({
@@ -69,4 +69,29 @@ export class FindTransfersQueryDto {
   @IsOptional()
   @IsString()
   asset?: string;
+}
+
+export type AccountTransfersDirection = "in" | "out" | "both";
+
+export class AccountTransfersQueryDto {
+  @IsOptional()
+  @IsIn(["in", "out", "both"])
+  direction: AccountTransfersDirection = "both";
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  cursor?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit: number = 20;
+
+  @IsOptional()
+  @IsIn(["asc", "desc"])
+  order: "asc" | "desc" = "asc";
 }
