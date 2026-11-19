@@ -2,6 +2,7 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { and, eq } from "drizzle-orm";
 import {
+  decryptWebhookSecret,
   webhookDeliveries as webhookDeliveriesTable,
   webhooks as webhooksTable,
   type Database
@@ -11,6 +12,7 @@ import {
   WEBHOOK_MAX_RETRIES,
   WEBHOOK_RETRY_BASE_DELAY_MS,
   WEBHOOK_RETRY_MAX_DELAY_MS,
+  WEBHOOK_SECRET_KEY,
   WEBHOOK_TIMEOUT_MS
 } from "./config.js";
 import { withRetry } from "./retry.js";
@@ -224,6 +226,7 @@ export async function deliverWebhooksForEvent(
         const webhook = recipients[nextRecipientIndex++];
         let attempts = 0;
 
+        let secret: string;
         try {
           const signature = signWebhookPayload(webhook.secret, body);
           await withRetry(

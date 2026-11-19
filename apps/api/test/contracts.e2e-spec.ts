@@ -1,4 +1,5 @@
 import request from "supertest";
+import { indexerCheckpoints } from "@stellarlens/db";
 import { beforeEach, describe, expect, it } from "vitest";
 import { contractAddress, createApiKey } from "./helpers";
 import { getApp, getTestDb } from "./setup";
@@ -146,11 +147,86 @@ describe("contracts (e2e)", () => {
     expect(secondPage.body.nextCursor).toBeNull();
   });
 
+  it("pages contracts newest-first with order=desc and keeps the default ascending", async () => {
+    const registeredIds: number[] = [];
+    for (const address of ["CONTRACT_ORDER_A", "CONTRACT_ORDER_B", "CONTRACT_ORDER_C", "CONTRACT_ORDER_D"]) {
+      const response = await request(getApp().getHttpServer())
+        .post("/contracts")
+        .set("x-api-key", apiKey)
+        .send({ address: contractAddress(address), network: "testnet" });
+      registeredIds.push(response.body.id);
+    }
+
+    const defaultResponse = await request(getApp().getHttpServer())
+      .get("/contracts?limit=100")
+      .set("x-api-key", apiKey);
+    expect(defaultResponse.body.data.map((contract: { id: number }) => contract.id)).toEqual(
+      registeredIds
+    );
+
+    const ascResponse = await request(getApp().getHttpServer())
+      .get("/contracts?limit=100&order=asc")
+      .set("x-api-key", apiKey);
+    expect(ascResponse.body.data.map((contract: { id: number }) => contract.id)).toEqual(
+      registeredIds
+    );
+
+    const seenIds: number[] = [];
+    let cursor: string | null = null;
+    let pages = 0;
+
+    do {
+      const query = cursor
+        ? `/contracts?limit=2&order=desc&cursor=${cursor}`
+        : "/contracts?limit=2&order=desc";
+      const page = await request(getApp().getHttpServer())
+        .get(query)
+        .set("x-api-key", apiKey);
+
+      expect(page.status).toBe(200);
+      const pageIds = page.body.data.map((contract: { id: number }) => contract.id);
+      expect(pageIds.length).toBeGreaterThan(0);
+      for (const id of pageIds) {
+        expect(seenIds).not.toContain(id);
+      }
+      seenIds.push(...pageIds);
+      cursor = page.body.nextCursor;
+      pages += 1;
+      expect(pages).toBeLessThanOrEqual(registeredIds.length);
+    } while (cursor);
+
+    expect(seenIds).toEqual([...registeredIds].reverse());
+  });
+
   it("returns 404 for an unknown contract id", async () => {
     const response = await request(getApp().getHttpServer())
       .get("/contracts/999999")
       .set("x-api-key", apiKey);
     expect(response.status).toBe(404);
+  });
+
+  it("reports whether a contract network is indexed and its ledger lag", async () => {
+    const registerResponse = await request(getApp().getHttpServer())
+      .post("/contracts")
+      .set("x-api-key", apiKey)
+      .send({ address: contractAddress("CONTRACT_STATUS_A"), network: "testnet" });
+    const contractId = registerResponse.body.id;
+
+    const notIndexed = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/status`)
+      .set("x-api-key", apiKey);
+    expect(notIndexed.body.status).toBe("not_indexed");
+
+    await getTestDb().insert(indexerCheckpoints).values({
+      network: "testnet",
+      cursor: "status-cursor",
+      latestLedger: 1000,
+      updatedAt: new Date()
+    });
+    const live = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/status`)
+      .set("x-api-key", apiKey);
+    expect(live.body).toMatchObject({ status: "live", lag: 0 });
   });
 
   it("updates a contract name via PATCH /contracts/:id", async () => {

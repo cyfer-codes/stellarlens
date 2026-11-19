@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
+import { getSession } from "@/lib/session-server";
 
 const FEATURES = [
   {
@@ -23,8 +22,7 @@ const FEATURES = [
 ];
 
 export default async function LandingPage() {
-  const token = cookies().get(SESSION_COOKIE_NAME)?.value;
-  if (token && (await verifySessionToken(token))) {
+  if (await getSession()) {
     redirect("/contracts");
   }
 

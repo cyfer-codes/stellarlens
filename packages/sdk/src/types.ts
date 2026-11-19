@@ -53,6 +53,7 @@ export interface ListEventsParams {
   topic?: string;
   from?: string;
   to?: string;
+  order?: 'asc' | 'desc';
 }
 
 export interface WatchEventsOptions {
@@ -94,6 +95,7 @@ export interface TransferRecord {
 export interface ListTransfersParams {
   cursor?: number;
   limit?: number;
+  order?: 'asc' | 'desc';
 }
 
 export interface GetStatsParams {
@@ -106,6 +108,11 @@ export interface ContractStats {
   uniqueSenders: number;
   uniqueReceivers: number;
   volumeByAsset: { asset: string; volume: string }[];
+}
+
+export interface TransactionLookup {
+  events: EventRecord[];
+  transfers: TransferRecord[];
 }
 
 export interface Page<T> {
