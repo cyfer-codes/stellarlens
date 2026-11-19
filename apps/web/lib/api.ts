@@ -92,7 +92,85 @@ export interface CreateWebhookInput {
   eventTypes?: string[];
 }
 
-export class ApiNotFoundError extends Error {}
+export class ApiError extends Error {
+  readonly status: number;
+  readonly path: string;
+  readonly body: string;
+
+  constructor(status: number, path: string, body: string) {
+    super(`api request to ${path} failed with ${status}: ${body}`);
+    this.name = "ApiError";
+    this.status = status;
+    this.path = path;
+    this.body = body;
+  }
+}
+
+export class ApiNotFoundError extends ApiError {
+  constructor(path: string, body = "not found") {
+    super(404, path, body);
+    this.name = "ApiNotFoundError";
+  }
+}
+
+export interface SanitizedErrorResponse {
+  status: number;
+  message: string;
+}
+
+const STATUS_MESSAGE_MAP: Record<number, string> = {
+  400: "Invalid request. Please verify your input.",
+  401: "Unauthorized. Please check your credentials.",
+  403: "Forbidden. You do not have permission to perform this action.",
+  404: "The requested resource was not found.",
+  409: "A conflict occurred with an existing resource.",
+  422: "Unprocessable request data.",
+  429: "Too many requests. Please try again later.",
+  500: "An internal server error occurred in the upstream service.",
+  502: "The upstream API service is currently unavailable.",
+  503: "The upstream service is temporarily overloaded or down.",
+  504: "The upstream service timed out."
+};
+
+/**
+ * Sanitizes an API error or unexpected exception into user-facing status code and friendly message.
+ * Internal paths, full URLs, stack traces, and backend error bodies are logged server-side only.
+ */
+export function sanitizeApiError(
+  err: unknown,
+  fallbackResource?: string
+): SanitizedErrorResponse {
+  // Always log the full unsanitized error server-side for observability and debugging
+  console.error("Internal API error:", err);
+
+  if (err instanceof ApiError) {
+    if (err.status === 404 && fallbackResource) {
+      return { status: 404, message: `${fallbackResource} not found` };
+    }
+
+    const mappedMessage = STATUS_MESSAGE_MAP[err.status];
+    if (mappedMessage) {
+      return {
+        status: err.status >= 500 ? 502 : err.status,
+        message: mappedMessage
+      };
+    }
+
+    if (err.status >= 400 && err.status < 500) {
+      return { status: err.status, message: "Client error. Please check your request." };
+    }
+
+    return {
+      status: 502,
+      message: "An upstream service error occurred. Please try again later."
+    };
+  }
+
+  return {
+    status: 502,
+    message: "An unexpected error occurred while communicating with the server."
+  };
+}
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
@@ -106,12 +184,13 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (response.status === 404) {
-    throw new ApiNotFoundError(`not found: ${path}`);
+    const body = await response.text().catch(() => "not found");
+    throw new ApiNotFoundError(path, body);
   }
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`api request to ${path} failed with ${response.status}: ${body}`);
+    const body = await response.text().catch(() => "");
+    throw new ApiError(response.status, path, body);
   }
 
   if (response.status === 204) {

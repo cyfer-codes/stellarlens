@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { revokeApiKey } from "@/lib/apiKeys";
+import { sanitizeApiError } from "@/lib/api";
 
 export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
   try {
@@ -9,7 +10,7 @@ export async function DELETE(_request: Request, { params }: { params: { id: stri
     }
     return new NextResponse(null, { status: 204 });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "unknown error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const { status, message } = sanitizeApiError(err, `api key ${params.id}`);
+    return NextResponse.json({ error: message }, { status });
   }
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listEvents } from "@/lib/api";
+import { listEvents, sanitizeApiError } from "@/lib/api";
 import { notFound } from "next/navigation";
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     });
     return NextResponse.json(events);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "unknown error";
-    return NextResponse.json({ error: message }, { status: 502 });
+    const { status, message } = sanitizeApiError(err, `contract ${contractId}`);
+    return NextResponse.json({ error: message }, { status });
   }
 }

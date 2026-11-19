@@ -2,11 +2,15 @@
 
 import { ErrorState } from "@/components/ui/ErrorState";
 
-export default function ContractTransfersError({ error, reset }: { error: Error; reset: () => void }) {
+export default function ContractTransfersError({ error: _error, reset }: { error: Error; reset: () => void }) {
   return (
     <div className="space-y-3">
       <h1 className="text-2xl font-bold">Transfers</h1>
-      <ErrorState message={`Couldn't load transfers: ${error.message}`} onRetry={reset} />
+      <ErrorState
+        title="Unable to load transfers"
+        message="An error occurred while loading transfers for this contract. Please try again or check back later."
+        onRetry={reset}
+      />
     </div>
   );
 }
