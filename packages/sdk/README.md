@@ -88,9 +88,89 @@ try {
 }
 ```
 
+### Verifying webhook signatures
+
+Incoming webhooks sent by the indexer are signed with HMAC-SHA256 using the per-webhook secret returned at
+registration time. Use `verifyWebhookSignature` to verify authenticity, guard against replay attacks, and
+prevent timing attacks via constant-time comparison.
+
+The helper works in Node.js 18+ and edge runtimes (Cloudflare Workers, Vercel Edge) using WebCrypto:
+
+```ts
+import { verifyWebhookSignature } from "@stellarlens/sdk";
+```
+
+#### Express example
+
+In Express, ensure the raw request body is captured before JSON parsing:
+
+```ts
+import express from "express";
+import { verifyWebhookSignature } from "@stellarlens/sdk";
+
+const app = express();
+
+app.post(
+  "/webhook",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    const signatureHeader = req.headers["x-webhook-signature"] as string;
+    const timestampHeader = req.headers["x-webhook-timestamp"] as string | undefined;
+
+    const isValid = await verifyWebhookSignature({
+      body: req.body.toString(),
+      signatureHeader,
+      timestampHeader,
+      secret: process.env.STELLARLENS_WEBHOOK_SECRET!,
+      toleranceSeconds: 300 // Reject webhooks older than 5 minutes (default: 300)
+    });
+
+    if (!isValid) {
+      return res.status(400).send("Invalid webhook signature");
+    }
+
+    const payload = JSON.parse(req.body.toString());
+    console.log("Received verified webhook:", payload.topic, payload.txHash);
+
+    res.status(200).json({ received: true });
+  }
+);
+```
+
+#### Next.js (App Router) example
+
+In Next.js route handlers (`app/api/webhook/route.ts`), read the raw body using `req.text()`:
+
+```ts
+import { verifyWebhookSignature } from "@stellarlens/sdk";
+
+export async function POST(req: Request) {
+  const body = await req.text();
+  const signatureHeader = req.headers.get("x-webhook-signature") ?? "";
+  const timestampHeader = req.headers.get("x-webhook-timestamp") ?? undefined;
+
+  const isValid = await verifyWebhookSignature({
+    body,
+    signatureHeader,
+    timestampHeader,
+    secret: process.env.STELLARLENS_WEBHOOK_SECRET!,
+    toleranceSeconds: 300
+  });
+
+  if (!isValid) {
+    return new Response("Invalid webhook signature", { status: 400 });
+  }
+
+  const payload = JSON.parse(body);
+  console.log("Received verified webhook:", payload);
+
+  return Response.json({ received: true });
+}
+```
+
 ## API reference
 
-| Method | Description |
+| Method / Helper | Description |
 |---|---|
 | `registerContract(input)` | Register a contract, or update name/network if the address is already registered |
 | `listContracts()` | List all registered contracts |
@@ -98,6 +178,8 @@ try {
 | `listEvents(contractId, params?)` | Cursor-paginated events for a contract (`cursor`, `limit`, `topic`, `from`, `to`) |
 | `listTransfers(contractId, params?)` | Cursor-paginated token transfers for a contract (`cursor`, `limit`) |
 | `getStats(contractId, params?)` | Transfer summary stats for a contract (`from`, `to`) |
+| `verifyWebhookSignature(params)` | Verify HMAC-SHA256 webhook signatures (legacy & timestamped) using constant-time WebCrypto |
+| `timingSafeEqual(a, b)` | Constant-time comparison between two `Uint8Array` buffers |
 
 All request/response types are exported from the package root (`Contract`, `EventRecord`, `TransferRecord`,
-`ContractStats`, `Page<T>`, etc.).
+`ContractStats`, `Page<T>`, `VerifyWebhookSignatureParams`, etc.).
