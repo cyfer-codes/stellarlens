@@ -31,3 +31,7 @@ Thumbs.db
 
 # testing / coverage
 coverage/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
