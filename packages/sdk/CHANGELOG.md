@@ -26,3 +26,5 @@ All notable changes to `@stellarlens/sdk` are documented here.
 - `verifyWebhookSignature({ body, signatureHeader, secret, timestampHeader?, toleranceSeconds? })` — WebCrypto-based,
   constant-time verification of webhook deliveries, supporting the legacy `sha256=` format and the timestamped
   format. Also exports `WEBHOOK_SIGNATURE_HEADER`, `WEBHOOK_TIMESTAMP_HEADER` and `DEFAULT_WEBHOOK_TOLERANCE_SECONDS`.
+- `parseTransfer(event)` and `parseTokenMovement(event)` — typed SEP-41 transfer / mint / burn / clawback parsing
+  of `EventRecord.decodedData`, matching the indexer's transfer detection (including the muxed `{ amount }` form).

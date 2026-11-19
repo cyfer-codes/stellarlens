@@ -70,6 +70,33 @@ do {
 const transfers = await client.listTransfers(contract.id, { limit: 20 });
 ```
 
+### Typed token movements
+
+`event.decodedData.decoded` is `unknown`, since a contract can emit anything. For SEP-41 token events, use the
+typed helpers instead of hand-written guards. They return `null` for anything that isn't a matching event.
+
+```ts
+import { parseTransfer, parseTokenMovement } from "@stellarlens/sdk";
+
+const page = await client.listEvents(contract.id);
+
+for (const event of page.data) {
+  // Same rules the indexer uses to populate listTransfers, including muxed `{ amount, to_muxed_id }` data
+  const transfer = parseTransfer(event);
+  if (transfer) {
+    console.log(`${transfer.from} -> ${transfer.to}: ${transfer.amount}`, transfer.toMuxedId);
+  }
+
+  // transfer | mint | burn | clawback (`from` is null for mints, `to` is null for burns/clawbacks)
+  const movement = parseTokenMovement(event);
+  if (movement?.kind === "mint") {
+    console.log(`minted ${movement.amount} to ${movement.to}`);
+  }
+}
+```
+
+Amounts are i128 values as decimal strings in the token's smallest unit. Use `BigInt(movement.amount)` for math.
+
 ### Stats
 
 ```ts
@@ -200,6 +227,8 @@ Standalone helpers:
 
 | Function | Description |
 |---|---|
+| `parseTransfer(event)` | Typed SEP-41 transfer (`from`, `to`, `amount`, `toMuxedId`) or `null` |
+| `parseTokenMovement(event)` | Typed SEP-41 transfer/mint/burn/clawback or `null` |
 | `verifyWebhookSignature(options)` | Constant-time HMAC check of a webhook delivery (legacy and timestamped formats) |
 
 All request/response types are exported from the package root (`Contract`, `EventRecord`, `TransferRecord`,

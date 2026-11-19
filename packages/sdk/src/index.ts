@@ -7,6 +7,14 @@ export {
   WEBHOOK_TIMESTAMP_HEADER,
   DEFAULT_WEBHOOK_TOLERANCE_SECONDS
 } from "./webhooks.js";
+export {
+  parseTransfer,
+  parseTokenMovement,
+  type ParsedTransfer,
+  type TokenMovement,
+  type TokenMovementKind,
+  type DecodedEventLike
+} from "./tokens.js";
 export type {
   Contract,
   ListContractsParams,
