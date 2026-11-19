@@ -14,7 +14,11 @@ describe("contracts (e2e)", () => {
     const response = await request(getApp().getHttpServer())
       .post("/contracts")
       .set("x-api-key", apiKey)
-      .send({ address: contractAddress("CONTRACT_REGISTER_A"), network: "testnet", name: "My Contract" });
+      .send({
+        address: contractAddress("CONTRACT_REGISTER_A"),
+        network: "testnet",
+        name: "My Contract"
+      });
 
     expect(response.status).toBe(201);
     expect(response.body).toMatchObject({
@@ -38,24 +42,37 @@ describe("contracts (e2e)", () => {
       .set("x-api-key", apiKey);
 
     expect(getResponse.status).toBe(200);
-    expect(getResponse.body).toMatchObject({ id: contractId, address: contractAddress("CONTRACT_REGISTER_B") });
+    expect(getResponse.body).toMatchObject({
+      id: contractId,
+      address: contractAddress("CONTRACT_REGISTER_B")
+    });
   });
 
   it("upserts on re-registering the same address", async () => {
     await request(getApp().getHttpServer())
       .post("/contracts")
       .set("x-api-key", apiKey)
-      .send({ address: contractAddress("CONTRACT_REGISTER_C"), network: "testnet", name: "Original" });
+      .send({
+        address: contractAddress("CONTRACT_REGISTER_C"),
+        network: "testnet",
+        name: "Original"
+      });
 
     const updateResponse = await request(getApp().getHttpServer())
       .post("/contracts")
       .set("x-api-key", apiKey)
-      .send({ address: contractAddress("CONTRACT_REGISTER_C"), network: "testnet", name: "Renamed" });
+      .send({
+        address: contractAddress("CONTRACT_REGISTER_C"),
+        network: "testnet",
+        name: "Renamed"
+      });
 
     expect(updateResponse.status).toBe(201);
     expect(updateResponse.body.name).toBe("Renamed");
 
-    const listResponse = await request(getApp().getHttpServer()).get("/contracts").set("x-api-key", apiKey);
+    const listResponse = await request(getApp().getHttpServer())
+      .get("/contracts")
+      .set("x-api-key", apiKey);
     expect(listResponse.body.data).toHaveLength(1);
   });
 
@@ -63,13 +80,23 @@ describe("contracts (e2e)", () => {
     await request(getApp().getHttpServer())
       .post("/contracts")
       .set("x-api-key", apiKey)
-      .send({ address: contractAddress("CONTRACT_NAME_A"), network: "testnet", name: "Stellar Token" });
+      .send({
+        address: contractAddress("CONTRACT_NAME_A"),
+        network: "testnet",
+        name: "Stellar Token"
+      });
     await request(getApp().getHttpServer())
       .post("/contracts")
       .set("x-api-key", apiKey)
-      .send({ address: contractAddress("CONTRACT_NAME_B"), network: "testnet", name: "Other Asset" });
+      .send({
+        address: contractAddress("CONTRACT_NAME_B"),
+        network: "testnet",
+        name: "Other Asset"
+      });
 
-    const response = await request(getApp().getHttpServer()).get("/contracts?name=TELLA").set("x-api-key", apiKey);
+    const response = await request(getApp().getHttpServer())
+      .get("/contracts?name=TELLA")
+      .set("x-api-key", apiKey);
 
     expect(response.status).toBe(200);
     expect(response.body.data).toHaveLength(1);
@@ -89,7 +116,9 @@ describe("contracts (e2e)", () => {
     const filteredResponse = await request(getApp().getHttpServer())
       .get("/contracts?network=testnet")
       .set("x-api-key", apiKey);
-    const allResponse = await request(getApp().getHttpServer()).get("/contracts").set("x-api-key", apiKey);
+    const allResponse = await request(getApp().getHttpServer())
+      .get("/contracts")
+      .set("x-api-key", apiKey);
 
     expect(filteredResponse.body.data).toHaveLength(1);
     expect(filteredResponse.body.data[0].network).toBe("testnet");
@@ -104,7 +133,9 @@ describe("contracts (e2e)", () => {
         .send({ address: contractAddress(address), network: "testnet" });
     }
 
-    const firstPage = await request(getApp().getHttpServer()).get("/contracts?limit=2").set("x-api-key", apiKey);
+    const firstPage = await request(getApp().getHttpServer())
+      .get("/contracts?limit=2")
+      .set("x-api-key", apiKey);
     const secondPage = await request(getApp().getHttpServer())
       .get(`/contracts?limit=2&cursor=${firstPage.body.nextCursor}`)
       .set("x-api-key", apiKey);
@@ -116,7 +147,9 @@ describe("contracts (e2e)", () => {
   });
 
   it("returns 404 for an unknown contract id", async () => {
-    const response = await request(getApp().getHttpServer()).get("/contracts/999999").set("x-api-key", apiKey);
+    const response = await request(getApp().getHttpServer())
+      .get("/contracts/999999")
+      .set("x-api-key", apiKey);
     expect(response.status).toBe(404);
   });
 
@@ -124,7 +157,11 @@ describe("contracts (e2e)", () => {
     const registerResponse = await request(getApp().getHttpServer())
       .post("/contracts")
       .set("x-api-key", apiKey)
-      .send({ address: contractAddress("CONTRACT_PATCH_A"), network: "testnet", name: "Initial Name" });
+      .send({
+        address: contractAddress("CONTRACT_PATCH_A"),
+        network: "testnet",
+        name: "Initial Name"
+      });
 
     const contractId = registerResponse.body.id;
 
@@ -155,6 +192,95 @@ describe("contracts (e2e)", () => {
       .send({ name: "Updated Name" });
 
     expect(response.status).toBe(404);
+  });
+
+  describe("bulk registration", () => {
+    it("registers a mixed batch and reports a result per item", async () => {
+      const existingResponse = await request(getApp().getHttpServer())
+        .post("/contracts")
+        .set("x-api-key", apiKey)
+        .send({
+          address: contractAddress("BULK_EXISTING"),
+          network: "testnet",
+          name: "Already Here"
+        });
+      const existingId = existingResponse.body.id;
+
+      const items = [
+        { address: contractAddress("BULK_NEW_A"), network: "testnet", name: "Bulk A" },
+        { address: contractAddress("BULK_EXISTING"), network: "testnet", name: "Ignored Rename" },
+        { address: "not-an-address", network: "testnet", name: "Broken" },
+        { address: contractAddress("BULK_NEW_B"), network: "mainnet" },
+        { address: contractAddress("BULK_NEW_A"), network: "testnet", name: "Duplicate In Batch" }
+      ];
+
+      const response = await request(getApp().getHttpServer())
+        .post("/contracts/bulk")
+        .set("x-api-key", apiKey)
+        .send({ items });
+
+      expect(response.status).toBe(201);
+      expect(response.body.results).toHaveLength(items.length);
+      expect(response.body.results.map((result: { status: string }) => result.status)).toEqual([
+        "created",
+        "existing",
+        "error",
+        "created",
+        "existing"
+      ]);
+
+      const [createdA, existing, invalid, createdB, duplicate] = response.body.results;
+      expect(createdA).toMatchObject({
+        index: 0,
+        address: contractAddress("BULK_NEW_A"),
+        status: "created"
+      });
+      expect(createdA.id).toBeDefined();
+      expect(existing).toMatchObject({
+        index: 1,
+        id: existingId,
+        address: contractAddress("BULK_EXISTING"),
+        name: "Already Here",
+        status: "existing"
+      });
+      expect(invalid.status).toBe("error");
+      expect(invalid.error).toMatch(/address/i);
+      expect(createdB).toMatchObject({
+        index: 3,
+        network: "mainnet",
+        name: null,
+        status: "created"
+      });
+      expect(duplicate).toMatchObject({ index: 4, id: createdA.id, status: "existing" });
+
+      const listResponse = await request(getApp().getHttpServer())
+        .get("/contracts?limit=100")
+        .set("x-api-key", apiKey);
+      expect(listResponse.body.data).toHaveLength(3);
+    });
+
+    it("rejects an empty batch with 400", async () => {
+      const response = await request(getApp().getHttpServer())
+        .post("/contracts/bulk")
+        .set("x-api-key", apiKey)
+        .send({ items: [] });
+
+      expect(response.status).toBe(400);
+    });
+
+    it("rejects a batch of more than 100 items with 400", async () => {
+      const items = Array.from({ length: 101 }, (_, index) => ({
+        address: contractAddress(`BULK_TOO_MANY_${index}`),
+        network: "testnet"
+      }));
+
+      const response = await request(getApp().getHttpServer())
+        .post("/contracts/bulk")
+        .set("x-api-key", apiKey)
+        .send({ items });
+
+      expect(response.status).toBe(400);
+    });
   });
 
   describe("address validation", () => {
