@@ -5,6 +5,17 @@ export interface Contract {
   network: string;
 }
 
+export interface ListContractsParams {
+  /** Return contracts with an id greater than this (pass the previous page's `nextCursor`). */
+  cursor?: number;
+  /** Page size, 1–100 (api default 20). */
+  limit?: number;
+  /** Case-insensitive substring match on the contract name. */
+  name?: string;
+  /** Exact match on network, e.g. "testnet". */
+  network?: string;
+}
+
 export interface RegisterContractInput {
   address: string;
   network: string;

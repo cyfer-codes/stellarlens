@@ -4,6 +4,7 @@ import type {
   ContractStats,
   EventRecord,
   GetStatsParams,
+  ListContractsParams,
   ListEventsParams,
   ListTransfersParams,
   Page,
@@ -81,8 +82,22 @@ export class StellarLensClient {
     });
   }
 
-  listContracts(): Promise<Contract[]> {
-    return this.request<Contract[]>("/contracts");
+  /** One cursor-paginated page of registered contracts, ordered by id. */
+  listContracts(params?: ListContractsParams): Promise<Page<Contract>> {
+    return this.request<Page<Contract>>(`/contracts${buildQuery(params)}`);
+  }
+
+  /**
+   * Iterates every registered contract matching the filters, fetching pages lazily and following
+   * `nextCursor` until it comes back `null`. Pass `cursor` to resume part-way through.
+   */
+  async *listAllContracts(params?: ListContractsParams): AsyncGenerator<Contract, void, undefined> {
+    let cursor = params?.cursor;
+    do {
+      const page = await this.listContracts({ ...params, cursor });
+      yield* page.data;
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor !== undefined);
   }
 
   getContract(id: number): Promise<Contract> {

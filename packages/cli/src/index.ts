@@ -1,8 +1,16 @@
 #!/usr/bin/env node
-import { Command } from "commander";
+import { Command, InvalidArgumentError } from "commander";
 import { createClientFromEnv } from "./client.js";
 import { addContract, listContracts } from "./commands/contracts.js";
 import { tailEvents } from "./commands/events.js";
+
+function parsePageSize(value: string): number {
+  const size = Number(value);
+  if (!Number.isInteger(size) || size < 1 || size > 100) {
+    throw new InvalidArgumentError("must be an integer between 1 and 100");
+  }
+  return size;
+}
 
 const program = new Command();
 
@@ -26,9 +34,12 @@ contractsCommand
 
 contractsCommand
   .command("list")
-  .description("List registered contracts")
-  .action(async () => {
-    await listContracts(createClientFromEnv());
+  .description("List registered contracts (follows pagination to the end)")
+  .option("--name <name>", "Only contracts whose name contains this (case-insensitive)")
+  .option("-n, --network <network>", "Only contracts on this network")
+  .option("--page-size <size>", "Contracts fetched per api request (1-100)", parsePageSize, 100)
+  .action(async (options: { name?: string; network?: string; pageSize: number }) => {
+    await listContracts(createClientFromEnv(), options);
   });
 
 const eventsCommand = program.command("events").description("Work with indexed contract events");

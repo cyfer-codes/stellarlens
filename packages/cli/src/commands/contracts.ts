@@ -14,20 +14,36 @@ export async function addContract(
   console.log(`registered contract ${contract.id}: ${contract.address} (${contract.network})`);
 }
 
-export async function listContracts(client: StellarLensClient): Promise<void> {
-  const contracts = await client.listContracts();
+export interface ListContractsOptions {
+  /** Case-insensitive substring filter on contract name. */
+  name?: string;
+  /** Exact network filter, e.g. "testnet". */
+  network?: string;
+  /** Page size used while paginating through the api (1–100). */
+  pageSize?: number;
+}
 
-  if (contracts.length === 0) {
-    console.log("No contracts registered.");
-    return;
-  }
+/** Prints every registered contract matching the filters, following the api's cursor pagination to the end. */
+export async function listContracts(client: StellarLensClient, options: ListContractsOptions = {}): Promise<void> {
+  const rows: Record<string, string | number>[] = [];
 
-  console.table(
-    contracts.map((contract) => ({
+  for await (const contract of client.listAllContracts({
+    name: options.name,
+    network: options.network,
+    limit: options.pageSize
+  })) {
+    rows.push({
       id: contract.id,
       address: contract.address,
       name: contract.name ?? "—",
       network: contract.network
-    }))
-  );
+    });
+  }
+
+  if (rows.length === 0) {
+    console.log("No contracts registered.");
+    return;
+  }
+
+  console.table(rows);
 }

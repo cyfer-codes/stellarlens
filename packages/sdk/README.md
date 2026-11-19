@@ -31,16 +31,27 @@ const contract = await client.registerContract({
   name: "My token"
 });
 
-// List all registered contracts
-const contracts = await client.listContracts();
+// One page of registered contracts (filter by name substring and/or network)
+const page = await client.listContracts({ network: "testnet", limit: 50 });
+console.log(page.data, page.nextCursor);
+
+// ...or iterate every contract, with pages fetched lazily as you go
+for await (const c of client.listAllContracts({ network: "testnet" })) {
+  console.log(c.id, c.address);
+}
 
 // Fetch one by id
 const same = await client.getContract(contract.id);
 ```
 
+> **Breaking change (unreleased):** `listContracts()` now returns a `Page<Contract>` (`{ data, nextCursor }`) to
+> match the api, instead of `Contract[]`. Replace `await client.listContracts()` with
+> `(await client.listContracts()).data` for a single page, or use `listAllContracts()` to get every contract.
+> See [CHANGELOG.md](./CHANGELOG.md).
+
 ### Paginated events and transfers
 
-Both `listEvents` and `listTransfers` use cursor-based pagination, oldest first. Keep passing the previous
+`listContracts`, `listEvents` and `listTransfers` all use cursor-based pagination, oldest first. Keep passing the previous
 page's `nextCursor` until it comes back `null`:
 
 ```ts
@@ -93,7 +104,8 @@ try {
 | Method | Description |
 |---|---|
 | `registerContract(input)` | Register a contract, or update name/network if the address is already registered |
-| `listContracts()` | List all registered contracts |
+| `listContracts(params?)` | One cursor-paginated page of contracts (`cursor`, `limit`, `name`, `network`) |
+| `listAllContracts(params?)` | Async iterator over every matching contract, following `nextCursor` |
 | `getContract(id)` | Fetch a single contract by id |
 | `listEvents(contractId, params?)` | Cursor-paginated events for a contract (`cursor`, `limit`, `topic`, `from`, `to`) |
 | `listTransfers(contractId, params?)` | Cursor-paginated token transfers for a contract (`cursor`, `limit`) |
