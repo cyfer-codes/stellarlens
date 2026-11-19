@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, asc, eq, gt, gte, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, lt, lte, sql } from "drizzle-orm";
 import { events, type Database } from "@stellarlens/db";
 import { ContractsService } from "../contracts/contracts.service";
 import { DATABASE } from "../database/database.module";
@@ -15,10 +15,15 @@ export class EventsService {
   async findByContract(contractId: number, query: FindEventsQueryDto) {
     await this.contractsService.findOne(contractId);
 
+    const direction = query.order === "desc" ? "desc" : "asc";
     const conditions = [eq(events.contractId, contractId)];
 
     if (query.cursor !== undefined) {
-      conditions.push(gt(events.id, query.cursor));
+      conditions.push(
+        direction === "desc"
+          ? lt(events.id, query.cursor)
+          : gt(events.id, query.cursor)
+      );
     }
     if (query.from) {
       conditions.push(gte(events.createdAt, new Date(query.from)));
@@ -43,7 +48,7 @@ export class EventsService {
       .select()
       .from(events)
       .where(and(...conditions))
-      .orderBy(asc(events.id))
+      .orderBy(direction === "desc" ? desc(events.id) : asc(events.id))
       .limit(query.limit + 1);
 
     const hasMore = rows.length > query.limit;
@@ -51,5 +56,13 @@ export class EventsService {
     const nextCursor = hasMore ? data[data.length - 1].id : null;
 
     return { data, nextCursor };
+  }
+
+  async findByTxHash(hash: string) {
+    return this.db
+      .select()
+      .from(events)
+      .where(eq(events.txHash, hash))
+      .orderBy(asc(events.id));
   }
 }
