@@ -56,7 +56,35 @@ do {
 ```
 
 ```ts
+import { formatAmount } from "@stellarlens/sdk";
+
 const transfers = await client.listTransfers(contract.id, { limit: 20 });
+for (const transfer of transfers.data) {
+  console.log(
+    `${formatAmount(transfer.amount, 7)} transferred from ${transfer.from} to ${transfer.to}`
+  );
+}
+```
+
+### Working with amounts
+
+Soroban and Stellar token amounts are represented in base units (up to signed $i128$ integers). Converting
+these with JavaScript's `Number` causes silent precision loss for large values. The SDK provides native `bigint`-powered
+helpers to format and parse amounts losslessly:
+
+```ts
+import { formatAmount, parseAmount } from "@stellarlens/sdk";
+
+// Format 10,000,000 stroops (7 decimals) -> "1"
+console.log(formatAmount("10000000", 7)); // "1"
+console.log(formatAmount(12345678n, 7, { maxFractionDigits: 2 })); // "1.23"
+
+// Parse human-readable string to base-unit bigint
+const baseUnits = parseAmount("12.50", 7); // 125000000n
+
+// Supports negative values and the full signed i128 range (-2^127 to 2^127 - 1)
+const negative = parseAmount("-0.0000005", 7); // -5n
+console.log(formatAmount(negative, 7)); // "-0.0000005"
 ```
 
 ### Stats
@@ -90,14 +118,16 @@ try {
 
 ## API reference
 
-| Method | Description |
-|---|---|
-| `registerContract(input)` | Register a contract, or update name/network if the address is already registered |
-| `listContracts()` | List all registered contracts |
-| `getContract(id)` | Fetch a single contract by id |
-| `listEvents(contractId, params?)` | Cursor-paginated events for a contract (`cursor`, `limit`, `topic`, `from`, `to`) |
-| `listTransfers(contractId, params?)` | Cursor-paginated token transfers for a contract (`cursor`, `limit`) |
-| `getStats(contractId, params?)` | Transfer summary stats for a contract (`from`, `to`) |
+| Method / Helper                             | Description                                                                                      |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `registerContract(input)`                   | Register a contract, or update name/network if the address is already registered                 |
+| `listContracts()`                           | List all registered contracts                                                                    |
+| `getContract(id)`                           | Fetch a single contract by id                                                                    |
+| `listEvents(contractId, params?)`           | Cursor-paginated events for a contract (`cursor`, `limit`, `topic`, `from`, `to`)                |
+| `listTransfers(contractId, params?)`        | Cursor-paginated token transfers for a contract (`cursor`, `limit`)                              |
+| `getStats(contractId, params?)`             | Transfer summary stats for a contract (`from`, `to`)                                             |
+| `formatAmount(amount, decimals?, options?)` | Formats a base-unit amount (bigint or string) to a human-readable string without precision loss  |
+| `parseAmount(display, decimals?)`           | Parses a human-readable decimal string to a base-unit bigint (supports full signed $i128$ range) |
 
-All request/response types are exported from the package root (`Contract`, `EventRecord`, `TransferRecord`,
-`ContractStats`, `Page<T>`, etc.).
+All request/response types and constants are exported from the package root (`Contract`, `EventRecord`, `TransferRecord`,
+`ContractStats`, `Page<T>`, `FormatAmountOptions`, `I128_MIN`, `I128_MAX`, etc.).
