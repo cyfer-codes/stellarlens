@@ -7,7 +7,7 @@ import { UpdateContractDto } from "./dto/update-contract.dto";
 
 @Controller("contracts")
 export class ContractsController {
-  constructor(private readonly contractsService: ContractsService) {}
+  constructor(private readonly contractsService: ContractsService) { }
 
   @Post()
   register(@Body() dto: CreateContractDto) {
@@ -27,6 +27,11 @@ export class ContractsController {
   @Get(":id")
   findOne(@Param("id", ParseIntPipe) id: number) {
     return this.contractsService.findOne(id);
+  }
+
+  @Get(":id/status")
+  findStatus(@Param("id", ParseIntPipe) id: number) {
+    return this.contractsService.findStatus(id);
   }
 
   @Patch(":id")

@@ -1,11 +1,9 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/LoginForm";
-import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
+import { getSession } from "@/lib/session-server";
 
 export default async function LoginPage() {
-  const token = cookies().get(SESSION_COOKIE_NAME)?.value;
-  if (token && (await verifySessionToken(token))) {
+  if (await getSession()) {
     redirect("/contracts");
   }
 

@@ -66,6 +66,27 @@ describe("events (e2e)", () => {
     expect(thirdPage.body.nextCursor).toBeNull();
   });
 
+  it("returns recent events across contracts newest first with contract names", async () => {
+    const contractA = await registerContract(apiKey, "CONTRACT_RECENT_A");
+    const contractB = await registerContract(apiKey, "CONTRACT_RECENT_B");
+    const db = getTestDb();
+    await db.insert(events).values([
+      { contractId: contractA, ledger: 1000, txHash: "a".repeat(64), topic: JSON.stringify(["old"]) },
+      { contractId: contractB, ledger: 1002, txHash: "b".repeat(64), topic: JSON.stringify(["new"]) },
+      { contractId: contractA, ledger: 1001, txHash: "c".repeat(64), topic: JSON.stringify(["middle"]) }
+    ]);
+
+    const response = await request(getApp().getHttpServer())
+      .get("/events")
+      .query({ limit: 2 })
+      .set("x-api-key", apiKey);
+
+    expect(response.status).toBe(200);
+    expect(response.body.map((event: { ledger: number }) => event.ledger)).toEqual([1002, 1001]);
+    expect(response.body[0].contractId).toBe(contractB);
+    expect(response.body[0].contractName).toBeNull();
+  });
+
   it("scopes events to the requested contract only", async () => {
     const contractA = await registerContract(apiKey, "CONTRACT_EVENTS_B");
     const contractB = await registerContract(apiKey, "CONTRACT_EVENTS_C");

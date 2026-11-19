@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, asc, eq, gt, gte, lte, sql } from "drizzle-orm";
-import { events, type Database } from "@stellarlens/db";
+import { and, asc, desc, eq, gt, gte, lte, sql } from "drizzle-orm";
+import { contracts, events, type Database } from "@stellarlens/db";
 import { ContractsService } from "../contracts/contracts.service";
 import { DATABASE } from "../database/database.module";
 import { FindEventsQueryDto } from "./dto/find-events-query.dto";
@@ -10,7 +10,7 @@ export class EventsService {
   constructor(
     @Inject(DATABASE) private readonly db: Database,
     private readonly contractsService: ContractsService
-  ) {}
+  ) { }
 
   async findByContract(contractId: number, query: FindEventsQueryDto) {
     await this.contractsService.findOne(contractId);
@@ -51,5 +51,23 @@ export class EventsService {
     const nextCursor = hasMore ? data[data.length - 1].id : null;
 
     return { data, nextCursor };
+  }
+
+  async findRecent(limit: number) {
+    return this.db
+      .select({
+        id: events.id,
+        contractId: events.contractId,
+        contractName: contracts.name,
+        ledger: events.ledger,
+        txHash: events.txHash,
+        topic: events.topic,
+        decodedData: events.decodedData,
+        createdAt: events.createdAt
+      })
+      .from(events)
+      .innerJoin(contracts, eq(events.contractId, contracts.id))
+      .orderBy(desc(events.ledger), desc(events.id))
+      .limit(limit);
   }
 }

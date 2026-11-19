@@ -25,6 +25,14 @@ export interface ContractStats {
   volumeByAsset: { asset: string; volume: string }[];
 }
 
+export interface ContractStatus {
+  status: "live" | "behind" | "not_indexed";
+  lag: number | null;
+  latestLedger?: number | null;
+  indexedLedger?: number | null;
+  updatedAt?: string;
+}
+
 export interface DecodedEventData {
   decoded?: {
     topic: unknown[];
@@ -40,6 +48,10 @@ export interface EventRow {
   topic: string;
   decodedData: DecodedEventData | null;
   createdAt: string;
+}
+
+export interface RecentEventRow extends EventRow {
+  contractName: string | null;
 }
 
 export interface EventsPage {
@@ -92,7 +104,7 @@ export interface CreateWebhookInput {
   eventTypes?: string[];
 }
 
-export class ApiNotFoundError extends Error {}
+export class ApiNotFoundError extends Error { }
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
@@ -147,6 +159,10 @@ export function getContractStats(id: number): Promise<ContractStats> {
   return apiFetch<ContractStats>(`/contracts/${id}/stats`);
 }
 
+export function getContractStatus(id: number): Promise<ContractStatus> {
+  return apiFetch<ContractStatus>(`/contracts/${id}/status`);
+}
+
 export function listEvents(contractId: number, params?: ListEventsParams): Promise<EventsPage> {
   const query = new URLSearchParams();
   if (params?.cursor !== undefined) {
@@ -157,6 +173,10 @@ export function listEvents(contractId: number, params?: ListEventsParams): Promi
   }
   const qs = query.toString();
   return apiFetch<EventsPage>(`/contracts/${contractId}/events${qs ? `?${qs}` : ""}`);
+}
+
+export function listRecentEvents(limit = 20): Promise<RecentEventRow[]> {
+  return apiFetch<RecentEventRow[]>(`/events?limit=${limit}`);
 }
 
 export function listTransfers(contractId: number, params?: ListTransfersParams): Promise<TransfersPage> {

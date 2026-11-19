@@ -3,7 +3,7 @@ import { ContractsTable } from "@/components/ContractsTable";
 import { ContractsOnboarding } from "@/components/ContractsOnboarding";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { listContracts } from "@/lib/api";
-import { getSession } from "@/lib/session";
+import { getSession } from "@/lib/session-server";
 
 export default async function ContractsPage() {
   const [contracts, session] = await Promise.all([listContracts(), getSession()]);

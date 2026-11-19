@@ -133,6 +133,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@stellar/stellar-sdk':
+        specifier: ^17.0.1
+        version: 17.0.1
       '@stellarlens/db':
         specifier: workspace:*
         version: link:../../packages/db
