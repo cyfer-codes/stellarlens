@@ -1,5 +1,10 @@
-export { StellarLensClient, type StellarLensClientOptions } from "./client.js";
-export { StellarLensApiError } from "./errors.js";
+export {
+  StellarLensClient,
+  type StellarLensClientOptions,
+  type StellarLensRequestInit,
+  type StellarLensResponseInfo
+} from "./client.js";
+export { StellarLensApiError, StellarLensHookError, type StellarLensHook } from "./errors.js";
 export { formatAmount, parseAmount, type FormatAmountOptions } from "./amount.js";
 export type {
   ApiError,

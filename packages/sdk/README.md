@@ -128,6 +128,50 @@ try {
 }
 ```
 
+### Logging, metrics and tracing hooks
+
+Pass `onRequest` / `onResponse` to observe or decorate every call without wrapping `fetch` yourself:
+
+```ts
+import { randomUUID } from "node:crypto";
+import { StellarLensClient, StellarLensHookError } from "@stellarlens/sdk";
+
+const client = new StellarLensClient({
+  baseUrl: "https://api.your-stellarlens-deployment.com",
+  apiKey: process.env.STELLARLENS_API_KEY!,
+
+  // Runs before each request. Mutate `init` (or return a replacement) — e.g. to add tracing headers.
+  onRequest(init) {
+    init.headers["x-request-id"] = randomUUID();
+    console.debug("→", init.method, init.url);
+  },
+
+  // Runs once response headers arrive, for every status (4xx/5xx included).
+  onResponse({ method, url, response, durationMs }) {
+    console.debug("←", method, url, response.status, `${durationMs.toFixed(1)}ms`);
+    metrics.histogram("stellarlens.request.duration", durationMs, { status: String(response.status) });
+  }
+});
+```
+
+Both hooks may be `async`. The client still reads the response body itself, so an `onResponse` hook that
+needs the body should read `response.clone()`. `onResponse` isn't called when `fetch` itself rejects (e.g. a
+network error) — that error propagates as-is.
+
+If a hook throws or rejects, the call rejects with a `StellarLensHookError` that names the hook and request,
+with the original error on `cause` — so a broken logger is easy to tell apart from an api failure. When
+`onRequest` throws, the request is never sent.
+
+```ts
+try {
+  await client.listContracts();
+} catch (err) {
+  if (err instanceof StellarLensHookError) {
+    console.error(`${err.hook} failed for ${err.method} ${err.url}`, err.cause);
+  }
+}
+```
+
 ## API reference
 
 | Method | Description |
