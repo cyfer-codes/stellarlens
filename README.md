@@ -16,7 +16,7 @@ smart contracts on Stellar. Register a contract address, and stellarlens:
 
 - polls Soroban RPC for that contract's events and decodes them (raw XDR alongside native values),
 - detects SEP-41 token transfers and tracks volume/sender/receiver stats,
-- fires signed webhooks to your own endpoints as new events land,
+- fires signed webhooks to your own endpoints as new events land ([docs/webhooks.md](docs/webhooks.md)),
 - and surfaces all of it in a login-gated web dashboard, a REST api, a typed SDK, and a CLI.
 
 ## Screenshots
@@ -71,7 +71,8 @@ env vars each app needs), log in with the seeded admin account, and generate you
 
 The indexer runs as a daemon by default. Set `POLL_ONCE=true` to process one poll cycle and exit; in
 this mode the registry server is not started. `WEBHOOK_CONCURRENCY` optionally sets the maximum
-number of simultaneous webhook deliveries per event (default: `10`).
+number of simultaneous webhook deliveries per event (default: `10`); see
+[docs/webhooks.md](docs/webhooks.md#configuration) for everything else that affects delivery.
 
 Full pipeline check before opening a PR:
 
@@ -189,6 +190,8 @@ Workspaces are `apps/*` and `packages/*` (see `pnpm-workspace.yaml`), scoped as 
 
 ## Docs
 
+- [docs/webhooks.md](docs/webhooks.md) — webhook delivery semantics, retries, signature verification,
+  blocked destinations, pausing, the delivery history api, and related env vars
 - [docs/screenshots.md](docs/screenshots.md) — capture checklist for the README's screenshots
 - Deployment: see the Render + Vercel runbook shared separately (ask if you need it re-sent)
 
