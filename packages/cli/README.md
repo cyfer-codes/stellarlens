@@ -17,6 +17,21 @@ stellarlens contracts list
 stellarlens events tail <contractId>   # follows new events every 5s, ctrl+c to stop
 ```
 
+### Bulk export
+
+```bash
+stellarlens export events <contractId> --format csv --out events.csv [--from 2026-01-01 --to 2026-02-01]
+stellarlens export transfers <contractId> --format ndjson --out transfers.ndjson
+stellarlens export events <contractId> --format csv --out events.csv --resume
+```
+
+Streams every page to the file, fetching the next page only after the previous one is written. After each
+page the cursor is checkpointed to `<out>.cursor.json`; `--resume` continues from there (dropping any
+half-written page first), and resuming a finished export appends only records indexed since. CSV cells use
+the same escaping as the dashboard export, including formula-injection protection. Events use fixed columns
+with the decoded `topic`/`value` as JSON. Transfers are filtered by `--from`/`--to` client-side, because the
+transfers endpoint's `from`/`to` filter on addresses.
+
 ### Developing a webhook consumer locally
 
 ```bash

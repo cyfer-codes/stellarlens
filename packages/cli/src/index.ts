@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-import { Command, InvalidArgumentError, Option } from "commander";
+import { Argument, Command, InvalidArgumentError, Option } from "commander";
 import { createClientFromEnv } from "./client.js";
 import { addContract, listContracts } from "./commands/contracts.js";
 import { tailEvents } from "./commands/events.js";
+import { runExport, type ExportFormat, type ExportKind } from "./commands/export.js";
 import { listenForWebhooks } from "./commands/webhooks.js";
 
 function parsePort(value: string): number {
@@ -11,6 +12,14 @@ function parsePort(value: string): number {
     throw new InvalidArgumentError("must be an integer between 0 and 65535");
   }
   return port;
+}
+
+function parseContractId(value: string): number {
+  const id = Number(value);
+  if (!Number.isInteger(id) || id < 1) {
+    throw new InvalidArgumentError("must be a positive integer contract id");
+  }
+  return id;
 }
 
 const program = new Command();
@@ -48,6 +57,26 @@ eventsCommand
   .action(async (contractId: string) => {
     await tailEvents(createClientFromEnv(), Number(contractId));
   });
+
+program
+  .command("export")
+  .description("Bulk-export a contract's events or transfers to a file, resumably")
+  .addArgument(new Argument("<kind>", "What to export").choices(["events", "transfers"]))
+  .addArgument(new Argument("<contractId>", "Contract id").argParser(parseContractId))
+  .addOption(new Option("-f, --format <format>", "Output format").choices(["csv", "ndjson"]).default("csv"))
+  .requiredOption("-o, --out <file>", "File to write (a <file>.cursor.json checkpoint is kept next to it)")
+  .option("--from <date>", "Only records created at or after this ISO-8601 date/time")
+  .option("--to <date>", "Only records created at or before this ISO-8601 date/time")
+  .option("--resume", "Continue from the last checkpointed cursor instead of starting over")
+  .action(
+    async (
+      kind: ExportKind,
+      contractId: number,
+      options: { format: ExportFormat; out: string; from?: string; to?: string; resume?: boolean }
+    ) => {
+      await runExport(createClientFromEnv(), kind, contractId, options);
+    }
+  );
 
 const webhooksCommand = program.command("webhooks").description("Develop webhook consumers locally");
 

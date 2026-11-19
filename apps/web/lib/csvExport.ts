@@ -1,11 +1,12 @@
+import { escapeCsvCell, toCsv, toCsvRows } from "@stellarlens/sdk";
 import type { EventRow, TransferRow } from "@/lib/api";
+
+// CSV escaping (including formula-injection protection) lives in the SDK so the CLI export shares it.
+export { escapeCsvCell, toCsv, toCsvRows };
 
 type CsvRecord = Record<string, string>;
 
 const BASE_EVENT_COLUMNS = ["id", "contract_id", "ledger", "tx_hash", "created_at", "event_type"];
-
-// Spreadsheet apps evaluate cells starting with these characters as formulas.
-const FORMULA_PREFIX = /^[=+\-@\t\r]/;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -99,25 +100,6 @@ export function eventsToCsv(events: EventRow[]): string {
     headers,
     records.map((record) => headers.map((header) => record[header] ?? ""))
   );
-}
-
-export function escapeCsvCell(raw: string): string {
-  let value = raw;
-  if (FORMULA_PREFIX.test(value) && Number.isNaN(Number(value))) {
-    value = `'${value}`;
-  }
-  if (/[",\r\n]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
-}
-
-export function toCsvRows(rows: string[][]): string {
-  return rows.map((row) => row.map(escapeCsvCell).join(",")).join("\r\n");
-}
-
-export function toCsv(headers: string[], rows: string[][]): string {
-  return toCsvRows([headers, ...rows]);
 }
 
 // Matches the columns shown on the contract transfers table.
