@@ -21,16 +21,18 @@ export class ApiKeysService {
     const keyHash = createHash("sha256").update(rawKey).digest("hex");
     const scope = dto.scope ?? "full";
     const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
+    const rateLimitPerMinute = dto.rateLimitPerMinute ?? null;
 
     const [apiKey] = await this.db
       .insert(apiKeys)
-      .values({ keyHash, name: dto.name ?? null, scope, expiresAt })
+      .values({ keyHash, name: dto.name ?? null, scope, expiresAt, rateLimitPerMinute })
       .returning({
         scope: apiKeys.scope,
         id: apiKeys.id,
         name: apiKeys.name,
         createdAt: apiKeys.createdAt,
-        expiresAt: apiKeys.expiresAt
+        expiresAt: apiKeys.expiresAt,
+        rateLimitPerMinute: apiKeys.rateLimitPerMinute
       });
 
     return { ...apiKey, key: rawKey };
@@ -43,7 +45,8 @@ export class ApiKeysService {
         name: apiKeys.name,
         scope: apiKeys.scope,
         createdAt: apiKeys.createdAt,
-        revokedAt: apiKeys.revokedAt
+        revokedAt: apiKeys.revokedAt,
+        rateLimitPerMinute: apiKeys.rateLimitPerMinute
       })
       .from(apiKeys)
       .orderBy(desc(apiKeys.createdAt));
@@ -108,6 +111,10 @@ export class ApiKeysService {
         ...(dto.scope !== undefined ? { scope: dto.scope } : {}),
         ...(expiresAt !== undefined ? { expiresAt } : {})
       })
+
+    const [updated] = await this.db
+      .update(apiKeys)
+      .set({ rateLimitPerMinute: dto.rateLimitPerMinute ?? null })
       .where(eq(apiKeys.id, id))
       .returning({
         id: apiKeys.id,
@@ -116,6 +123,8 @@ export class ApiKeysService {
         createdAt: apiKeys.createdAt,
         expiresAt: apiKeys.expiresAt,
         revokedAt: apiKeys.revokedAt
+        revokedAt: apiKeys.revokedAt,
+        rateLimitPerMinute: apiKeys.rateLimitPerMinute
       });
 
     return updated;
