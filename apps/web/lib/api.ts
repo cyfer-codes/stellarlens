@@ -1,5 +1,17 @@
 const API_URL = process.env.API_URL ?? "http://localhost:3000";
 const API_KEY = process.env.API_KEY ?? "";
+// Falls back to the full-scope key when unset, so this stays optional.
+const API_READ_KEY = process.env.API_READ_KEY || API_KEY;
+
+/**
+ * Every GET we proxy — including all unauthenticated PUBLIC_DEMO traffic,
+ * which the middleware only ever lets through for GETs — uses the
+ * read-scoped key. Mutating requests (POST/PATCH/DELETE) always require a
+ * session and use the full key.
+ */
+function apiKeyFor(method: string): string {
+  return method === "GET" ? API_READ_KEY : API_KEY;
+}
 
 export interface Contract {
   id: number;
@@ -95,10 +107,11 @@ export interface CreateWebhookInput {
 export class ApiNotFoundError extends Error {}
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method ?? "GET").toUpperCase();
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
-      "x-api-key": API_KEY,
+      "x-api-key": apiKeyFor(method),
       "Content-Type": "application/json",
       ...init?.headers
     },
