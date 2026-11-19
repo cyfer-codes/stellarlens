@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createWebhook, listWebhooks } from "@/lib/api";
+import { createWebhook, listWebhooks, sanitizeApiError } from "@/lib/api";
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   const contractId = Number(params.id);
@@ -8,8 +8,8 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     const webhooks = await listWebhooks(contractId);
     return NextResponse.json(webhooks);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "unknown error";
-    return NextResponse.json({ error: message }, { status: 502 });
+    const { status, message } = sanitizeApiError(err, `contract ${contractId}`);
+    return NextResponse.json({ error: message }, { status });
   }
 }
 
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const created = await createWebhook(contractId, { url: body.url, eventTypes: body.eventTypes });
     return NextResponse.json(created, { status: 201 });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "unknown error";
-    return NextResponse.json({ error: message }, { status: 502 });
+    const { status, message } = sanitizeApiError(err, `contract ${contractId}`);
+    return NextResponse.json({ error: message }, { status });
   }
 }
