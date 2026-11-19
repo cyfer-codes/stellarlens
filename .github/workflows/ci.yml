@@ -8,6 +8,9 @@ jobs:
   ci:
     runs-on: ubuntu-latest
 
+    env:
+      DATABASE_URL: postgres://stellarlens:stellarlens@localhost:5432/stellarlens
+
     services:
       postgres:
         image: postgres:16-alpine
@@ -37,11 +40,52 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Check generated SDK types are up to date
+        run: |
+          pnpm --filter @stellarlens/sdk generate
+          if [ -n "$(git status --porcelain -- packages/sdk/src/generated)" ]; then
+            git diff -- packages/sdk/src/generated
+            echo "::error::packages/sdk/src/generated is out of date with apps/api/openapi.json. Run 'pnpm --filter @stellarlens/sdk generate' and commit the result."
+            exit 1
+          fi
+
       - run: pnpm lint
 
       - run: pnpm typecheck
 
       - run: pnpm build
+
+      # The service container is a fresh, empty database: apply every migration exactly as a
+      # deploy would, so a broken or out-of-order migration fails here rather than in production.
+      - name: Apply migrations to a fresh database
+        run: pnpm --filter @stellarlens/db db:migrate
+
+      # Catches inconsistent snapshots/journal entries (e.g. two migrations sharing an index).
+      - name: Check migration history is consistent
+        run: pnpm --filter @stellarlens/db exec drizzle-kit check
+
+      # If the Drizzle schema has changed without a matching migration, generate writes a new
+      # file; any change under migrations/ means the schema and migrations have drifted.
+      - name: Fail on schema/migration drift
+        timeout-minutes: 5
+        run: |
+          pnpm --filter @stellarlens/db db:generate
+          if [ -n "$(git status --porcelain -- packages/db/migrations)" ]; then
+            echo "::error::packages/db/src/schema has changes with no migration. Run 'pnpm --filter @stellarlens/db db:generate' and commit the result."
+            git status --porcelain -- packages/db/migrations
+            git diff -- packages/db/migrations
+            exit 1
+          fi
+
+      # Test setups assert the schema above is fully migrated instead of creating tables themselves.
+      - run: pnpm test
+      - name: Check OpenAPI spec is up to date
+        run: |
+          pnpm --filter @stellarlens/api openapi:generate
+          git diff --exit-code openapi.json
+        env:
+          SOROBAN_RPC_URL: https://soroban-testnet.stellar.org
+          STELLAR_NETWORK: testnet
 
       - run: pnpm test
         env:

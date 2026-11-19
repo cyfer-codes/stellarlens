@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ExportTransfersButton } from "@/components/ExportTransfersButton";
+import { TransferFilters, type TransferFilterValues } from "@/components/TransferFilters";
 import { VolumeChart } from "@/components/VolumeChart";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ApiNotFoundError, getContract, listTransfers } from "@/lib/api";
@@ -12,7 +13,7 @@ export default async function ContractTransfersPage({
   searchParams
 }: {
   params: { id: string };
-  searchParams: { cursor?: string };
+  searchParams: TransferFilterValues & { cursor?: string };
 }) {
   const contractId = Number(params.id);
   if (!Number.isInteger(contractId)) {
@@ -20,13 +21,20 @@ export default async function ContractTransfersPage({
   }
 
   const cursor = searchParams.cursor ? Number(searchParams.cursor) : undefined;
+  const filters: TransferFilterValues = {
+    asset: searchParams.asset,
+    from: searchParams.from,
+    to: searchParams.to,
+    minAmount: searchParams.minAmount,
+    maxAmount: searchParams.maxAmount
+  };
 
   let contract;
   let transfers;
   try {
     [contract, transfers] = await Promise.all([
       getContract(contractId),
-      listTransfers(contractId, { cursor, limit: PAGE_SIZE })
+      listTransfers(contractId, { cursor, limit: PAGE_SIZE, ...filters })
     ]);
   } catch (err) {
     if (err instanceof ApiNotFoundError) {
@@ -37,6 +45,10 @@ export default async function ContractTransfersPage({
 
   return (
     <div className="space-y-8">
+      <div>
+        <TransferFilters values={filters} />
+      </div>
+
       <div>
         <Link href={`/contracts/${contractId}`} className="text-sm text-gray-500 hover:underline">
           <span aria-hidden="true">←</span> {contract.name ?? contract.address}
@@ -52,7 +64,7 @@ export default async function ContractTransfersPage({
       <div>
         <div className="mb-3 flex items-center justify-between gap-4">
           <h2 className="text-lg font-semibold">All transfers</h2>
-          {transfers.data.length > 0 && <ExportTransfersButton contractId={contractId} />}
+          {transfers.data.length > 0 && <ExportTransfersButton contractId={contractId} filters={filters} />}
         </div>
         {transfers.data.length === 0 ? (
           <EmptyState
@@ -93,7 +105,7 @@ export default async function ContractTransfersPage({
         {transfers.nextCursor !== null && (
           <div className="mt-4">
             <Link
-              href={`/contracts/${contractId}/transfers?cursor=${transfers.nextCursor}`}
+              href={`/contracts/${contractId}/transfers?${new URLSearchParams({ ...filters, cursor: String(transfers.nextCursor) }).toString()}`}
               className="rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
             >
               Next page <span aria-hidden="true">→</span>

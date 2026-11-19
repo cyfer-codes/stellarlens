@@ -7,8 +7,15 @@ import { registerContract } from "./registry.js";
  * Minimal stub for registering contracts to index. Not a full API — just
  * enough to unblock the registration flow without pulling in a web framework.
  */
-export function startRegistryServer(db: Database): http.Server {
+export function startRegistryServer(db: Database, port: number = REGISTRY_PORT): http.Server {
   const server = http.createServer((req, res) => {
+    // Liveness probe for container health checks (docker compose, orchestrators).
+    if (req.method === "GET" && req.url === "/health") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok" }));
+      return;
+    }
+
     if (req.method === "POST" && req.url === "/contracts") {
       let body = "";
       req.on("data", (chunk) => {
@@ -24,8 +31,8 @@ export function startRegistryServer(db: Database): http.Server {
     res.end(JSON.stringify({ error: "not found" }));
   });
 
-  server.listen(REGISTRY_PORT, () => {
-    console.log(`contract registry listening on :${REGISTRY_PORT}`);
+  server.listen(port, () => {
+    console.log(`contract registry listening on :${port}`);
   });
 
   return server;

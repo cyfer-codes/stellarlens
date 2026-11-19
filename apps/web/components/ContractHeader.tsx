@@ -1,7 +1,8 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
-import type { Contract } from "@/lib/api";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
+import type { Contract, ContractStatus } from "@/lib/api";
+import { useVisibilityPolling } from "@/lib/useVisibilityPolling";
 
 export function ContractHeader({ contract, authenticated }: { contract: Contract; authenticated: boolean }) {
   const [name, setName] = useState<string | null>(contract.name);
@@ -9,6 +10,24 @@ export function ContractHeader({ contract, authenticated }: { contract: Contract
   const [nameInput, setNameInput] = useState(contract.name ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<ContractStatus | null>(null);
+
+  const refreshStatus = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/contracts/${contract.id}/status`, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`request failed with ${response.status}`);
+      }
+      setStatus((await response.json()) as ContractStatus);
+    } catch {
+      setStatus(null);
+    }
+  }, [contract.id]);
+
+  useEffect(() => {
+    refreshStatus();
+  }, [refreshStatus]);
+  useVisibilityPolling(refreshStatus, 10000);
 
   function startEditing() {
     setNameInput(name ?? "");
@@ -97,7 +116,17 @@ export function ContractHeader({ contract, authenticated }: { contract: Contract
         </div>
       )}
       <p className="mt-1 font-mono text-xs text-gray-500">{contract.address}</p>
-      <p className="text-sm text-gray-500">{contract.network}</p>
+      <div className="mt-1 flex items-center gap-2 text-sm text-gray-500">
+        <span>{contract.network}</span>
+        {status && (
+          <span
+            title={status.status === "live" ? "The indexer is updating this network." : status.status === "behind" ? "The indexer is behind the network head." : "No indexer checkpoint exists for this network."}
+            className="rounded-full border border-gray-300 px-2 py-0.5 text-xs font-medium text-gray-700"
+          >
+            {status.status === "live" ? "Live" : status.status === "behind" ? `Behind ${status.lag ?? 0} ledgers` : "Not indexed for this network"}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

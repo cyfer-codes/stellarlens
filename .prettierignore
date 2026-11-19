@@ -3,3 +3,4 @@ dist
 node_modules
 .next
 pnpm-lock.yaml
+packages/sdk/src/generated

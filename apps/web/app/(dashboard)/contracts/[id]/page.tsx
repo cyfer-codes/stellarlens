@@ -5,7 +5,7 @@ import { EventsTable } from "@/components/EventsTable";
 import { StatsCards } from "@/components/StatsCards";
 import { WebhooksManager } from "@/components/WebhooksManager";
 import { ApiNotFoundError, getContract, getContractStats } from "@/lib/api";
-import { getSession } from "@/lib/session";
+import { getSession } from "@/lib/session-server";
 
 export default async function ContractDetailPage({ params }: { params: { id: string } }) {
   const contractId = Number(params.id);
@@ -46,7 +46,7 @@ export default async function ContractDetailPage({ params }: { params: { id: str
 
       <div>
         <h2 className="mb-3 text-lg font-semibold">Events</h2>
-        <EventsTable contractId={contractId} />
+        <EventsTable contractId={contractId} network={contract.network} contractAddress={contract.address} />
       </div>
 
       <div>
