@@ -1,8 +1,17 @@
 #!/usr/bin/env node
-import { Command } from "commander";
+import { Command, InvalidArgumentError, Option } from "commander";
 import { createClientFromEnv } from "./client.js";
 import { addContract, listContracts } from "./commands/contracts.js";
 import { tailEvents } from "./commands/events.js";
+import { listenForWebhooks } from "./commands/webhooks.js";
+
+function parsePort(value: string): number {
+  const port = Number(value);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    throw new InvalidArgumentError("must be an integer between 0 and 65535");
+  }
+  return port;
+}
 
 const program = new Command();
 
@@ -40,4 +49,24 @@ eventsCommand
     await tailEvents(createClientFromEnv(), Number(contractId));
   });
 
-program.parseAsync(process.argv);
+const webhooksCommand = program.command("webhooks").description("Develop webhook consumers locally");
+
+webhooksCommand
+  .command("listen")
+  .description("Run a local receiver that verifies and pretty-prints webhook deliveries")
+  .option("-p, --port <port>", "Port to listen on", parsePort, 4000)
+  .option("--host <host>", "Interface to bind to", "127.0.0.1")
+  .addOption(
+    new Option("-s, --secret <secret>", "The webhook's signing secret")
+      .env("STELLARLENS_WEBHOOK_SECRET")
+      .makeOptionMandatory()
+  )
+  .option("--forward-to <url>", "Re-POST verified payloads to this url (e.g. your local app)")
+  .action(async (options: { port: number; host: string; secret: string; forwardTo?: string }) => {
+    await listenForWebhooks(options);
+  });
+
+program.parseAsync(process.argv).catch((err: unknown) => {
+  console.error(`error: ${err instanceof Error ? err.message : String(err)}`);
+  process.exitCode = 1;
+});

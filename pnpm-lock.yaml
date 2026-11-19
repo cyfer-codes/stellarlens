@@ -108,6 +108,9 @@ importers:
       '@stellarlens/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@stellarlens/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2

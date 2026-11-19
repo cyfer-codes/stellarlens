@@ -16,6 +16,7 @@
   "dependencies": {
     "@stellar/stellar-sdk": "^17.0.1",
     "@stellarlens/db": "workspace:*",
+    "@stellarlens/sdk": "workspace:*",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2"
   },

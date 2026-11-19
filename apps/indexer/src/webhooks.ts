@@ -1,4 +1,3 @@
-import { createHmac } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { and, eq } from "drizzle-orm";
@@ -7,6 +6,7 @@ import {
   webhooks as webhooksTable,
   type Database
 } from "@stellarlens/db";
+import { signWebhookPayload } from "@stellarlens/sdk/webhooks";
 import {
   WEBHOOK_CONCURRENCY,
   WEBHOOK_MAX_RETRIES,
@@ -116,7 +116,7 @@ async function postWebhook(url: string, body: string, signature: string): Promis
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Webhook-Signature": `sha256=${signature}`
+        "X-Webhook-Signature": signature
       },
       body,
       signal: controller.signal
@@ -225,7 +225,7 @@ export async function deliverWebhooksForEvent(
         let attempts = 0;
 
         try {
-          const signature = createHmac("sha256", webhook.secret).update(body).digest("hex");
+          const signature = signWebhookPayload(body, webhook.secret);
           await withRetry(
             `webhook:${webhook.id}`,
             async () => {
