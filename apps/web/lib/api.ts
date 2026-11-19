@@ -104,7 +104,21 @@ export interface CreateWebhookInput {
   eventTypes?: string[];
 }
 
-export class ApiNotFoundError extends Error {}
+/** Thrown for any non-2xx response from the api. `status` is the upstream status code. */
+export class ApiProxyError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+export class ApiNotFoundError extends ApiProxyError {
+  constructor(path: string) {
+    super(404, `not found: ${path}`);
+  }
+}
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
@@ -119,12 +133,16 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (response.status === 404) {
-    throw new ApiNotFoundError(`not found: ${path}`);
+    throw new ApiNotFoundError(path);
   }
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`api request to ${path} failed with ${response.status}: ${body}`);
+    // Full internal detail (path, upstream status and body) is logged here,
+    // server-side only. Callers get ApiProxyError.status to map to a
+    // sanitized, user-facing message — never this message itself.
+    console.error(`api request to ${path} failed with ${response.status}: ${body}`);
+    throw new ApiProxyError(response.status, `api request to ${path} failed with ${response.status}`);
   }
 
   if (response.status === 204) {
