@@ -37,7 +37,7 @@ function delivery(id: number, overrides: Record<string, unknown> = {}) {
   };
 }
 
-describe("WebhooksManager deliveries panel", () => {
+describe("WebhooksManager", () => {
   beforeEach(() => {
     fetchMock.mockImplementation((input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
@@ -125,5 +125,67 @@ describe("WebhooksManager deliveries panel", () => {
     await userEvent.click(toggle);
 
     expect(await screen.findByText(/request failed with 502/i)).toBeInTheDocument();
+  });
+
+  function rotateMock() {
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.endsWith("/webhooks/1/rotate-secret") && init?.method === "POST") {
+        return Promise.resolve(
+          jsonResponse({
+            id: 1,
+            contractId: 1,
+            url: webhook.url,
+            eventTypes: webhook.eventTypes,
+            secret: "new-secret-value",
+            createdAt: webhook.createdAt
+          })
+        );
+      }
+      if (url.endsWith("/webhooks")) {
+        return Promise.resolve(jsonResponse([webhook]));
+      }
+      return Promise.resolve(jsonResponse({ error: "unexpected url" }, 500));
+    });
+  }
+
+  it("rotates a webhook secret and reveals it once", async () => {
+    rotateMock();
+
+    render(<WebhooksManager contractId={1} authenticated={true} />);
+    await userEvent.click(await screen.findByRole("button", { name: /^rotate$/i }));
+
+    expect(screen.getByText(/stop working immediately/i)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /rotate secret/i }));
+    expect(await screen.findByText("new-secret-value")).toBeInTheDocument();
+  });
+
+  it("dismissing the revealed secret removes it from the DOM", async () => {
+    rotateMock();
+
+    render(<WebhooksManager contractId={1} authenticated={true} />);
+    await userEvent.click(await screen.findByRole("button", { name: /^rotate$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /rotate secret/i }));
+
+    expect(await screen.findByText("new-secret-value")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /dismiss/i }));
+    expect(screen.queryByText("new-secret-value")).not.toBeInTheDocument();
+  });
+
+  it("copy button copies the revealed secret", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    rotateMock();
+
+    render(<WebhooksManager contractId={1} authenticated={true} />);
+    await userEvent.click(await screen.findByRole("button", { name: /^rotate$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /rotate secret/i }));
+
+    const copyButton = await screen.findByRole("button", { name: /copy/i });
+    await userEvent.click(copyButton);
+
+    expect(writeText).toHaveBeenCalledWith("new-secret-value");
   });
 });
