@@ -1,8 +1,14 @@
-import { addContract } from "@/app/(dashboard)/contracts/actions";
+"use client";
+
+import { useFormState } from "react-dom";
+import { StrKey } from "@stellar/stellar-sdk";
+import { addContract, initialAddContractState } from "@/app/(dashboard)/contracts/actions";
 
 export function AddContractForm() {
+  const [state, formAction] = useFormState(addContract, initialAddContractState);
+
   return (
-    <form action={addContract} className="max-w-sm space-y-3">
+    <form action={formAction} className="max-w-sm space-y-3">
       <div>
         <label htmlFor="address" className="block text-sm font-medium text-gray-700">
           Address
@@ -12,8 +18,15 @@ export function AddContractForm() {
           name="address"
           required
           placeholder="G... or C..."
+          onChange={(event) => {
+            const value = event.target.value.trim();
+            event.target.setCustomValidity(
+              value && !StrKey.isValidContract(value) ? "Enter a valid Stellar contract address." : ""
+            );
+          }}
           className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
         />
+        {state.fieldErrors.address && <p className="mt-1 text-sm text-red-600">{state.fieldErrors.address}</p>}
       </div>
       <div>
         <label htmlFor="network" className="block text-sm font-medium text-gray-700">
@@ -26,7 +39,9 @@ export function AddContractForm() {
           defaultValue="testnet"
           className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
         />
+        {state.fieldErrors.network && <p className="mt-1 text-sm text-red-600">{state.fieldErrors.network}</p>}
       </div>
+      {state.formError && <p className="text-sm text-red-600">{state.formError}</p>}
       <div>
         <label htmlFor="name" className="block text-sm font-medium text-gray-700">
           Name <span className="text-gray-400">(optional)</span>

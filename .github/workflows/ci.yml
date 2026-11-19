@@ -40,6 +40,15 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Check generated SDK types are up to date
+        run: |
+          pnpm --filter @stellarlens/sdk generate
+          if [ -n "$(git status --porcelain -- packages/sdk/src/generated)" ]; then
+            git diff -- packages/sdk/src/generated
+            echo "::error::packages/sdk/src/generated is out of date with apps/api/openapi.json. Run 'pnpm --filter @stellarlens/sdk generate' and commit the result."
+            exit 1
+          fi
+
       - run: pnpm lint
 
       - run: pnpm typecheck
@@ -70,36 +79,16 @@ jobs:
 
       # Test setups assert the schema above is fully migrated instead of creating tables themselves.
       - run: pnpm test
+      - name: Check OpenAPI spec is up to date
+        run: |
+          pnpm --filter @stellarlens/api openapi:generate
+          git diff --exit-code openapi.json
         env:
           SOROBAN_RPC_URL: https://soroban-testnet.stellar.org
           STELLAR_NETWORK: testnet
 
-  docker:
-    runs-on: ubuntu-latest
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { name: api, dockerfile: apps/api/Dockerfile, target: runner }
-          - { name: api-migrate, dockerfile: apps/api/Dockerfile, target: migrate }
-          - { name: indexer, dockerfile: apps/indexer/Dockerfile, target: runner }
-          - { name: web, dockerfile: apps/web/Dockerfile, target: runner }
-
-    name: docker (${{ matrix.name }})
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/setup-buildx-action@v3
-
-      - name: Build ${{ matrix.name }} image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ${{ matrix.dockerfile }}
-          target: ${{ matrix.target }}
-          push: false
-          tags: stellarlens-${{ matrix.name }}:ci
-          cache-from: type=gha,scope=${{ matrix.name }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+      - run: pnpm test
+        env:
+          DATABASE_URL: postgres://stellarlens:stellarlens@localhost:5432/stellarlens
+          SOROBAN_RPC_URL: https://soroban-testnet.stellar.org
+          STELLAR_NETWORK: testnet

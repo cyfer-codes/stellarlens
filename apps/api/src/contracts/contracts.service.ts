@@ -1,6 +1,6 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { and, asc, eq, gt, ilike, inArray } from "drizzle-orm";
-import { contracts, type Database } from "@stellarlens/db";
+import { and, asc, eq, gt, ilike, inArray, max } from "drizzle-orm";
+import { contracts, events, indexerCheckpoints, type Database } from "@stellarlens/db";
 import { DATABASE } from "../database/database.module";
 import {
   BulkCreateContractsDto,
@@ -33,7 +33,7 @@ type PreparedBulkItem =
 
 @Injectable()
 export class ContractsService {
-  constructor(@Inject(DATABASE) private readonly db: Database) {}
+  constructor(@Inject(DATABASE) private readonly db: Database) { }
 
   async register(dto: CreateContractDto) {
     const [contract] = await this.db
@@ -206,7 +206,46 @@ export class ContractsService {
     if (!contract) {
       throw new NotFoundException(`contract ${id} not found`);
     }
-    return contract;
+
+    // Token metadata is cached on the contract row by the indexer (via a
+    // read-only simulation of SEP-41 `decimals()`, `symbol()` and `name()`).
+    // Non-token contracts have these columns null, so expose them as null.
+    return {
+      ...contract,
+      decimals: contract.decimals ?? null,
+      symbol: contract.symbol ?? null,
+      name: contract.name ?? null
+    };
+  }
+
+  async findStatus(id: number) {
+    const contract = await this.findOne(id);
+    const [checkpoint] = await this.db
+      .select({ latestLedger: indexerCheckpoints.latestLedger, updatedAt: indexerCheckpoints.updatedAt })
+      .from(indexerCheckpoints)
+      .where(eq(indexerCheckpoints.network, contract.network));
+
+    if (!checkpoint) {
+      return { status: "not_indexed" as const, lag: null };
+    }
+
+    const [indexed] = await this.db
+      .select({ ledger: max(events.ledger) })
+      .from(events)
+      .where(eq(events.contractId, id));
+    const indexedLedger = indexed?.ledger ?? null;
+    const lag = checkpoint.latestLedger !== null && indexedLedger !== null
+      ? Math.max(0, checkpoint.latestLedger - indexedLedger)
+      : 0;
+    const stale = Date.now() - checkpoint.updatedAt.getTime() > 120_000;
+
+    return {
+      status: stale || lag > 0 ? "behind" as const : "live" as const,
+      lag,
+      latestLedger: checkpoint.latestLedger,
+      indexedLedger,
+      updatedAt: checkpoint.updatedAt.toISOString()
+    };
   }
 
   async update(id: number, dto: UpdateContractDto) {

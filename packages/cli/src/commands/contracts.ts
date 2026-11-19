@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 import { StellarLensApiError, type StellarLensClient } from "@stellarlens/sdk";
 import { isValidStellarAddress } from "../strkey.js";
+import type { Contract, StellarLensClient } from "@stellarlens/sdk";
 
 /** Matches the api's `ArrayMaxSize` on `POST /contracts/bulk`. */
 export const BULK_CHUNK_SIZE = 100;
@@ -311,20 +312,50 @@ export async function runAddContracts(
   return failed === 0;
 }
 
+/** Fetches every registered contract, following `nextCursor` until the last page. */
+async function fetchAllContracts(client: StellarLensClient): Promise<Contract[]> {
+  const contracts: Contract[] = [];
+  let cursor: number | undefined;
+  do {
+    const page = await client.listContracts({ cursor, limit: 100 });
+    contracts.push(...page.data);
+    cursor = page.nextCursor ?? undefined;
+  } while (cursor !== undefined);
+  return contracts;
+}
+
 export async function listContracts(client: StellarLensClient): Promise<void> {
-  const contracts = await client.listContracts();
+  const contracts = await fetchAllContracts(client);
+export interface ListContractsOptions {
+  /** Case-insensitive substring filter on contract name. */
+  name?: string;
+  /** Exact network filter, e.g. "testnet". */
+  network?: string;
+  /** Page size used while paginating through the api (1–100). */
+  pageSize?: number;
+}
 
-  if (contracts.length === 0) {
-    console.log("No contracts registered.");
-    return;
-  }
+/** Prints every registered contract matching the filters, following the api's cursor pagination to the end. */
+export async function listContracts(client: StellarLensClient, options: ListContractsOptions = {}): Promise<void> {
+  const rows: Record<string, string | number>[] = [];
 
-  console.table(
-    contracts.map((contract) => ({
+  for await (const contract of client.listAllContracts({
+    name: options.name,
+    network: options.network,
+    limit: options.pageSize
+  })) {
+    rows.push({
       id: contract.id,
       address: contract.address,
       name: contract.name ?? "—",
       network: contract.network
-    }))
-  );
+    });
+  }
+
+  if (rows.length === 0) {
+    console.log("No contracts registered.");
+    return;
+  }
+
+  console.table(rows);
 }
