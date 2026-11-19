@@ -4,6 +4,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import type { Webhook, WebhookDelivery } from "@/lib/api";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingState } from "@/components/ui/LoadingState";
+import { CopyButton } from "@/components/ui/CopyButton";
 
 function parseEventTypes(input: string): string[] | undefined {
   const eventTypes = input
@@ -40,6 +41,9 @@ export function WebhooksManager({ contractId, authenticated }: { contractId: num
   const [creating, setCreating] = useState(false);
   const [justCreatedSecret, setJustCreatedSecret] = useState<string | null>(null);
   const [deliveries, setDeliveries] = useState<Record<number, DeliveriesState>>({});
+  const [confirmRotate, setConfirmRotate] = useState<number | null>(null);
+  const [rotating, setRotating] = useState<number | null>(null);
+  const [revealedSecret, setRevealedSecret] = useState<{ id: number; secret: string } | null>(null);
 
   function patchDeliveries(id: number, patch: Partial<DeliveriesState>) {
     setDeliveries((current) => {
@@ -107,6 +111,27 @@ export function WebhooksManager({ contractId, authenticated }: { contractId: num
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "failed to delete webhook");
+    }
+  }
+
+  async function handleRotate(id: number) {
+    setRotating(id);
+    try {
+      const response = await fetch(
+        `/api/contracts/${contractId}/webhooks/${id}/rotate-secret`,
+        { method: "POST" }
+      );
+      if (!response.ok) {
+        throw new Error(`request failed with ${response.status}`);
+      }
+      const body = (await response.json()) as { secret: string };
+      setRevealedSecret({ id, secret: body.secret });
+      setConfirmRotate(null);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "failed to rotate webhook secret");
+    } finally {
+      setRotating(null);
     }
   }
 
@@ -178,7 +203,36 @@ export function WebhooksManager({ contractId, authenticated }: { contractId: num
           <p className="text-sm font-medium text-amber-900">
             New webhook secret — copy it now, it won&apos;t be shown again:
           </p>
-          <code className="mt-2 block break-all rounded bg-white px-3 py-2 text-xs">{justCreatedSecret}</code>
+          <div className="mt-2 flex items-center gap-2">
+            <code className="flex-1 break-all rounded bg-white px-3 py-2 text-xs">{justCreatedSecret}</code>
+            <CopyButton value={justCreatedSecret} />
+            <button
+              type="button"
+              onClick={() => setJustCreatedSecret(null)}
+              className="rounded border border-gray-300 bg-white px-3 py-2 text-xs hover:bg-gray-100"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
+      {revealedSecret && (
+        <div className="rounded border border-amber-300 bg-amber-50 p-4">
+          <p className="text-sm font-medium text-amber-900">
+            Webhook secret rotated — copy it now, it won&apos;t be shown again:
+          </p>
+          <div className="mt-2 flex items-center gap-2">
+            <code className="flex-1 break-all rounded bg-white px-3 py-2 text-xs">{revealedSecret.secret}</code>
+            <CopyButton value={revealedSecret.secret} />
+            <button
+              type="button"
+              onClick={() => setRevealedSecret(null)}
+              className="rounded border border-gray-300 bg-white px-3 py-2 text-xs hover:bg-gray-100"
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
       )}
 
@@ -256,6 +310,11 @@ export function WebhooksManager({ contractId, authenticated }: { contractId: num
                     webhook={webhook}
                     state={state}
                     authenticated={authenticated}
+                    confirming={confirmRotate === webhook.id}
+                    rotating={rotating === webhook.id}
+                    onRequestRotate={() => setConfirmRotate(webhook.id)}
+                    onCancelRotate={() => setConfirmRotate(null)}
+                    onConfirmRotate={() => handleRotate(webhook.id)}
                     onToggleDeliveries={() => handleToggleDeliveries(webhook.id)}
                     onLoadMoreDeliveries={() => handleLoadMoreDeliveries(webhook.id)}
                     onDelete={() => handleDelete(webhook.id)}
@@ -274,6 +333,11 @@ function WebhookRow({
   webhook,
   state,
   authenticated,
+  confirming,
+  rotating,
+  onRequestRotate,
+  onCancelRotate,
+  onConfirmRotate,
   onToggleDeliveries,
   onLoadMoreDeliveries,
   onDelete
@@ -281,6 +345,11 @@ function WebhookRow({
   webhook: Webhook;
   state: DeliveriesState;
   authenticated: boolean;
+  confirming: boolean;
+  rotating: boolean;
+  onRequestRotate: () => void;
+  onCancelRotate: () => void;
+  onConfirmRotate: () => void;
   onToggleDeliveries: () => void;
   onLoadMoreDeliveries: () => void;
   onDelete: () => void;
@@ -303,16 +372,55 @@ function WebhookRow({
         </td>
         {authenticated && (
           <td className="py-2 text-right">
-            <button
-              type="button"
-              onClick={onDelete}
-              className="text-xs font-medium text-red-600 hover:underline"
-            >
-              Delete
-            </button>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={onRequestRotate}
+                disabled={rotating || confirming}
+                className="text-xs font-medium text-gray-700 hover:underline disabled:opacity-50"
+              >
+                Rotate
+              </button>
+              <button
+                type="button"
+                onClick={onDelete}
+                className="text-xs font-medium text-red-600 hover:underline"
+              >
+                Delete
+              </button>
+            </div>
           </td>
         )}
       </tr>
+      {confirming && (
+        <tr className="border-b border-gray-100 bg-amber-50">
+          <td colSpan={authenticated ? 5 : 4} className="px-3 py-3">
+            <p className="text-sm font-medium text-amber-900">Rotate webhook secret?</p>
+                      <p className="mt-1 text-xs text-amber-800">
+              The current secret will stop working immediately. Any receiver still using the old secret will
+              fail signature verification until you deploy the new one. This cannot be undone.
+            </p>
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={onConfirmRotate}
+                disabled={rotating}
+                className="rounded bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+              >
+                {rotating ? "Rotating…" : "Rotate secret"}
+              </button>
+              <button
+                type="button"
+                onClick={onCancelRotate}
+                disabled={rotating}
+                className="rounded border border-gray-300 bg-white px-3 py-1 text-xs hover:bg-gray-100 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </td>
+        </tr>
+      )}
       {state.expanded && (
         <tr className="border-b border-gray-100 bg-gray-50">
           <td colSpan={authenticated ? 5 : 4} className="px-3 py-3">

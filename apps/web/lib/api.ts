@@ -251,6 +251,20 @@ export function deleteWebhook(contractId: number, id: number): Promise<void> {
   return apiFetch<void>(`/contracts/${contractId}/webhooks/${id}`, { method: "DELETE" });
 }
 
+export interface RotatedWebhook {
+  id: number;
+  contractId: number;
+  url: string;
+  eventTypes: string[] | null;
+  secret: string;
+  createdAt: string;
+}
+
+export function rotateWebhookSecret(contractId: number, id: number): Promise<RotatedWebhook> {
+  return apiFetch<RotatedWebhook>(`/contracts/${contractId}/webhooks/${id}/rotate-secret`, {
+    method: "POST"
+  });
+}
 
 export interface WebhookDelivery {
   id: number;
