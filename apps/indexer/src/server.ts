@@ -3,6 +3,9 @@ import type { Database } from "@stellarlens/db";
 import { REGISTRY_PORT } from "./config.js";
 import { registerContract } from "./registry.js";
 
+/** Hard cap on registration request bodies so one oversized POST cannot exhaust memory. */
+export const MAX_REGISTRATION_BODY_BYTES = 64 * 1024;
+
 /**
  * Minimal stub for registering contracts to index. Not a full API — just
  * enough to unblock the registration flow without pulling in a web framework.
@@ -18,11 +21,24 @@ export function startRegistryServer(db: Database, port: number = REGISTRY_PORT):
 
     if (req.method === "POST" && req.url === "/contracts") {
       let body = "";
-      req.on("data", (chunk) => {
+      let bodyBytes = 0;
+      let tooLarge = false;
+
+      req.on("data", (chunk: Buffer) => {
+        if (tooLarge) return;
+
+        bodyBytes += chunk.length;
+        if (bodyBytes > MAX_REGISTRATION_BODY_BYTES) {
+          tooLarge = true;
+          body = "";
+          res.writeHead(413, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "request body too large" }));
+          return;
+        }
         body += chunk;
       });
       req.on("end", () => {
-        void handleRegister(db, body, res);
+        if (!tooLarge) void handleRegister(db, body, res);
       });
       return;
     }
