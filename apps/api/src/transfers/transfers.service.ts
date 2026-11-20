@@ -73,6 +73,8 @@ export class TransfersService {
     const hasMore = rows.length > query.limit;
     const data = hasMore ? rows.slice(0, query.limit) : rows;
     return { data, nextCursor: hasMore ? data[data.length - 1].id : null };
+  }
+
   async findByTxHash(hash: string) {
     return this.db
       .select()
