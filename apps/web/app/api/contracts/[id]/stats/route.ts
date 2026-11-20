@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { ApiNotFoundError, getContractStats } from "@/lib/api";
+import { getContractStats } from "@/lib/api";
+import { sanitizeApiError } from "@/lib/apiError";
 
 export async function GET(_request: Request, { params }: { params: { id: string } }) {
   const contractId = Number(params.id);
@@ -8,10 +9,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
     const stats = await getContractStats(contractId);
     return NextResponse.json(stats);
   } catch (err) {
-    if (err instanceof ApiNotFoundError) {
-      return NextResponse.json({ error: `contract ${contractId} not found` }, { status: 404 });
-    }
-    const message = err instanceof Error ? err.message : "unknown error";
-    return NextResponse.json({ error: message }, { status: 502 });
+    const { status, error } = sanitizeApiError(err);
+    return NextResponse.json({ error }, { status });
   }
 }

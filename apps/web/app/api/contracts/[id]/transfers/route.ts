@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listTransfers } from "@/lib/api";
+import { sanitizeApiError } from "@/lib/apiError";
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const contractId = Number(params.id);
@@ -13,7 +14,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     });
     return NextResponse.json(transfers);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "unknown error";
-    return NextResponse.json({ error: message }, { status: 502 });
+    const { status, error } = sanitizeApiError(err);
+    return NextResponse.json({ error }, { status });
   }
 }
