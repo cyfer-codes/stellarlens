@@ -36,6 +36,8 @@ export interface StellarLensResponseInfo {
   response: Response;
   /** Milliseconds from just before `fetch` was called until the response headers arrived. */
   durationMs: number;
+}
+
 const DEFAULT_WATCH_INTERVAL_MS = 5000;
 const DEFAULT_WATCH_MAX_BACKOFF_MS = 60_000;
 const DEFAULT_WATCH_PAGE_SIZE = 100;
@@ -106,7 +108,18 @@ export class StellarLensClient {
   private readonly onResponse: StellarLensClientOptions["onResponse"];
 
   constructor(options: StellarLensClientOptions) {
-    this.baseUrl = options.baseUrl.replace(/\/+$/, "");
+    const rawBaseUrl = options.baseUrl;
+    let parsedBaseUrl: URL;
+    try {
+      parsedBaseUrl = new URL(rawBaseUrl);
+    } catch {
+      throw new TypeError(`Invalid baseUrl: ${JSON.stringify(rawBaseUrl)}. Expected a valid absolute URL.`);
+    }
+    // A relative URL or a non-http scheme can be parsed but cannot be used as an API base URL.
+    if (!["http:", "https:"].includes(parsedBaseUrl.protocol) || !parsedBaseUrl.hostname) {
+      throw new TypeError(`Invalid baseUrl: ${JSON.stringify(rawBaseUrl)}. Expected an http(s) URL.`);
+    }
+    this.baseUrl = rawBaseUrl.replace(/\/+$/, "");
     this.apiKey = options.apiKey;
     this.fetchImpl = options.fetch ?? globalThis.fetch;
     this.onRequest = options.onRequest;
@@ -172,9 +185,11 @@ export class StellarLensClient {
     });
   }
 
-  /** Cursor-paginated registered contracts, oldest first. */
+  /** Cursor-paginated registered contracts, ordered by id. Filter with `name` (substring) and `network`. */
   listContracts(params?: ListContractsParams): Promise<Page<Contract>> {
     return this.request<Page<Contract>>(`/contracts${buildQuery(params)}`);
+  }
+
   /**
    * Registers up to 100 contracts in one request (`POST /contracts/bulk`), reporting a result per
    * item. Unlike `registerContract`, already-registered addresses are left untouched (`existing`).
@@ -184,16 +199,6 @@ export class StellarLensClient {
       method: "POST",
       body: JSON.stringify({ items })
     });
-  }
-
-  listContracts(): Promise<Contract[]> {
-    return this.request<Contract[]>("/contracts");
-  /** Cursor-paginated registered contracts, ordered by id. Filter with `name` (substring) and `network`. */
-  listContracts(params?: ListContractsParams): Promise<Page<Contract>> {
-    return this.request<Page<Contract>>(`/contracts${buildQuery(params)}`);
-  /** One cursor-paginated page of registered contracts, ordered by id. */
-  listContracts(params?: ListContractsParams): Promise<Page<Contract>> {
-    return this.request<Page<Contract>>(`/contracts${buildQuery(params)}`);
   }
 
   /**

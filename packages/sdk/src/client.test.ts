@@ -24,16 +24,6 @@ describe("StellarLensClient", () => {
     const contracts = await makeClient(fetchMock).getContract(1);
 
     expect(contracts).toEqual({ id: 1, address: "C123", name: null, network: "testnet" });
-      return jsonResponse({ data: [{ id: 1, address: "C123", name: null, network: "testnet" }], nextCursor: null });
-    }) as unknown as typeof fetch;
-
-    const page = await makeClient(fetchMock).listContracts();
-
-    expect(contracts).toEqual({
-      data: [{ id: 1, address: "C123", name: null, network: "testnet" }],
-      nextCursor: null
-    });
-    expect(page).toEqual({ data: [{ id: 1, address: "C123", name: null, network: "testnet" }], nextCursor: null });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -94,6 +84,23 @@ describe("StellarLensClient", () => {
     }) as unknown as typeof fetch;
 
     await makeClient(fetchMock, "https://api.example.com/").listContracts();
+  });
+
+  it("accepts a well-formed baseUrl with or without a trailing slash", () => {
+    const fetchMock = vi.fn() as unknown as typeof fetch;
+
+    expect(() => makeClient(fetchMock, "https://api.example.com")).not.toThrow();
+    expect(() => makeClient(fetchMock, "https://api.example.com/")).not.toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("throws immediately when baseUrl is malformed", () => {
+    const fetchMock = vi.fn() as unknown as typeof fetch;
+
+    expect(() => makeClient(fetchMock, "not a url")).toThrow(TypeError);
+    expect(() => makeClient(fetchMock, "not a url")).toThrow(/Invalid baseUrl/);
+    expect(() => makeClient(fetchMock, "ftp://api.example.com")).toThrow(/http\(s\)/);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("passes contract list pagination and filters as query params", async () => {
