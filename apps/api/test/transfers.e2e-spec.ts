@@ -175,4 +175,110 @@ describe("transfers (e2e)", () => {
     expect(response.body.data).toHaveLength(2);
     expect(response.body.data.every((transfer: { from: string; to: string }) => transfer.from === "FROM_A" || transfer.to === "FROM_A")).toBe(true);
   });
+
+  it("filters transfers by ledger close time, not ingestion time", async () => {
+    const contractId = await registerContract(apiKey);
+    const closeTime = new Date("2024-03-01T12:00:00.000Z");
+    const ingestionTime = new Date("2024-06-01T12:00:00.000Z");
+
+    await getTestDb()
+      .insert(tokenTransfers)
+      .values([
+        {
+          contractId,
+          from: "FROM_CLOSE",
+          to: "TO_CLOSE",
+          amount: "1",
+          asset: "USDC",
+          txHash: "d".repeat(64),
+          ledger: 3000,
+          closedAt: closeTime,
+          createdAt: ingestionTime
+        },
+        {
+          contractId,
+          from: "FROM_INGEST",
+          to: "TO_INGEST",
+          amount: "2",
+          asset: "USDC",
+          txHash: "e".repeat(64),
+          ledger: 3001,
+          closedAt: ingestionTime,
+          createdAt: closeTime
+        }
+      ]);
+
+    // Window around the close time should select only the first transfer,
+    // even though the second one was ingested during that window.
+    const response = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/transfers`)
+      .query({
+        from: new Date(closeTime.getTime() - 60_000).toISOString(),
+        to: new Date(closeTime.getTime() + 60_000).toISOString()
+      })
+      .set("x-api-key", apiKey);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].from).toBe("FROM_CLOSE");
+    expect(response.body.data[0].ledgerClosedAt).toBe(closeTime.toISOString());
+  });
+
+  it("filters transfers by minAmount/maxAmount without losing i128 precision", async () => {
+    const contractId = await registerContract(apiKey);
+    const base = 10n ** 20n;
+    const amounts = [base + 1n, base + 2n, base + 3n];
+
+    await getTestDb()
+      .insert(tokenTransfers)
+      .values(
+        amounts.map((amount, index) => ({
+          contractId,
+          from: `FROM_${index}`,
+          to: `TO_${index}`,
+          amount: amount.toString(),
+          asset: "USDC",
+          txHash: String(index + 5).repeat(64),
+          ledger: 4000 + index,
+          closedAt: T0
+        }))
+      );
+
+    const response = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/transfers`)
+      .query({
+        minAmount: (base + 2n).toString(),
+        maxAmount: (base + 2n).toString()
+      })
+      .set("x-api-key", apiKey);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].amount).toBe((base + 2n).toString());
+
+    const rangeResponse = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/transfers`)
+      .query({
+        minAmount: (base + 2n).toString(),
+        maxAmount: (base + 3n).toString()
+      })
+      .set("x-api-key", apiKey);
+
+    expect(rangeResponse.status).toBe(200);
+    expect(rangeResponse.body.data.map((transfer: { amount: string }) => transfer.amount)).toEqual([
+      (base + 2n).toString(),
+      (base + 3n).toString()
+    ]);
+  });
+
+  it("rejects minAmount greater than maxAmount", async () => {
+    const contractId = await registerContract(apiKey);
+
+    const response = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/transfers`)
+      .query({ minAmount: "20", maxAmount: "10" })
+      .set("x-api-key", apiKey);
+
+    expect(response.status).toBe(400);
+  });
 });

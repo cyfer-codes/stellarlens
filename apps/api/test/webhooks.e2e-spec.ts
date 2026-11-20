@@ -220,6 +220,125 @@ describe("webhooks (e2e)", () => {
     expect(secondPage.body.nextCursor).toBeNull();
   });
 
+  it("filters deliveries by status, from and to, and returns eventId", async () => {
+    const contractId = await registerContract(apiKey, "CONTRACT_WEBHOOKS_FILTERS");
+    const created = await request(getApp().getHttpServer())
+      .post(`/contracts/${contractId}/webhooks`)
+      .set("x-api-key", apiKey)
+      .send({ url: "https://example.com/webhook" });
+    const webhookId = created.body.id;
+
+    const db = getTestDb();
+    const [event] = await db
+      .insert(events)
+      .values({ contractId, ledger: 1, txHash: "b".repeat(64), topic: "[]" })
+      .returning({ id: events.id });
+
+    const base = Date.now();
+    const seeded = [
+      { status: "delivered", createdAt: new Date(base - 3 * 60 * 60 * 1000) },
+      { status: "failed", createdAt: new Date(base - 2 * 60 * 60 * 1000) },
+      { status: "delivered", createdAt: new Date(base - 60 * 60 * 1000) },
+      { status: "pending", createdAt: new Date(base) }
+    ];
+    for (const row of seeded) {
+      await db.insert(webhookDeliveries).values({
+        webhookId,
+        eventId: event.id,
+        status: row.status,
+        attempts: 1,
+        createdAt: row.createdAt
+      });
+    }
+
+    const allResponse = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/webhooks/${webhookId}/deliveries`)
+      .set("x-api-key", apiKey);
+    expect(allResponse.status).toBe(200);
+    expect(allResponse.body.data).toHaveLength(4);
+    for (const row of allResponse.body.data) {
+      expect(row.eventId).toBe(event.id);
+    }
+
+    const statusResponse = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/webhooks/${webhookId}/deliveries?status=failed`)
+      .set("x-api-key", apiKey);
+    expect(statusResponse.status).toBe(200);
+    expect(statusResponse.body.data).toHaveLength(1);
+    expect(statusResponse.body.data[0].status).toBe("failed");
+    expect(statusResponse.body.data[0].eventId).toBe(event.id);
+
+    const from = new Date(base - 2.5 * 60 * 60 * 1000).toISOString();
+    const to = new Date(base - 0.5 * 60 * 60 * 1000).toISOString();
+    const rangeResponse = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/webhooks/${webhookId}/deliveries?from=${from}&to=${to}`)
+      .set("x-api-key", apiKey);
+    expect(rangeResponse.status).toBe(200);
+    expect(rangeResponse.body.data).toHaveLength(2);
+    for (const row of rangeResponse.body.data) {
+      expect(row.eventId).toBe(event.id);
+    }
+
+    const combinedResponse = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/webhooks/${webhookId}/deliveries?status=delivered&from=${from}&to=${to}`)
+      .set("x-api-key", apiKey);
+    expect(combinedResponse.status).toBe(200);
+    expect(combinedResponse.body.data).toHaveLength(1);
+    expect(combinedResponse.body.data[0].eventId).toBe(event.id);
+  });
+
+  it("returns a health summary for a webhook via the stats endpoint", async () => {
+    const contractId = await registerContract(apiKey, "CONTRACT_WEBHOOKS_STATS");
+    const created = await request(getApp().getHttpServer())
+      .post(`/contracts/${contractId}/webhooks`)
+      .set("x-api-key", apiKey)
+      .send({ url: "https://example.com/webhook" });
+    const webhookId = created.body.id;
+
+    const db = getTestDb();
+    const [event] = await db
+      .insert(events)
+      .values({ contractId, ledger: 1, txHash: "c".repeat(64), topic: "[]" })
+      .returning({ id: events.id });
+
+    const base = Date.now();
+    const lastSuccessAt = new Date(base - 30 * 60 * 1000);
+    const lastFailureAt = new Date(base - 10 * 60 * 1000);
+    const seeded = [
+      { status: "delivered", createdAt: new Date(base - 4 * 60 * 60 * 1000) },
+      { status: "failed", createdAt: new Date(base - 3 * 60 * 60 * 1000) },
+      { status: "delivered", createdAt: lastSuccessAt },
+      { status: "failed", createdAt: new Date(base - 20 * 60 * 1000) },
+      { status: "failed", createdAt: lastFailureAt }
+    ];
+    for (const row of seeded) {
+      await db.insert(webhookDeliveries).values({
+        webhookId,
+        eventId: event.id,
+        status: row.status,
+        attempts: 1,
+        createdAt: row.createdAt
+      });
+    }
+
+    const response = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/webhooks/${webhookId}/stats?window=24h`)
+      .set("x-api-key", apiKey);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      total: 5,
+      success: 2,
+      failed: 3,
+      successRate: 0.4,
+      consecutiveFailures: 2
+    });
+    expect(typeof response.body.lastSuccessAt).toBe("string");
+    expect(typeof response.body.lastFailureAt).toBe("string");
+    expect(new Date(response.body.lastSuccessAt).getTime()).toBe(lastSuccessAt.getTime());
+    expect(new Date(response.body.lastFailureAt).getTime()).toBe(lastFailureAt.getTime());
+  });
+
   it("returns 404 listing deliveries for a webhook that doesn't belong to the contract", async () => {
     const contractA = await registerContract(apiKey, "CONTRACT_WEBHOOKS_K");
     const contractB = await registerContract(apiKey, "CONTRACT_WEBHOOKS_L");
