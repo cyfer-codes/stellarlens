@@ -11,8 +11,12 @@ import type {
   ListTransfersParams,
   Page,
   RegisterContractInput,
+  CreateWebhookInput,
+  HealthStatus,
   TransferRecord,
-  WatchEventsOptions
+  WatchEventsOptions,
+  Webhook,
+  WebhookSummary
 } from "./types.js";
 
 /**
@@ -305,5 +309,40 @@ export class StellarLensClient {
   /** Transfer summary stats for a contract, optionally scoped to a time window. */
   getStats(contractId: number, params?: GetStatsParams): Promise<ContractStats> {
     return this.request<ContractStats>(`/contracts/${contractId}/stats${buildQuery(params)}`);
+  }
+
+  /**
+   * Health-check probe wrapping `GET /health` (#19).
+   * Useful for verifying `baseUrl` and connectivity before issuing further requests.
+   */
+  ping(): Promise<HealthStatus> {
+    return this.request<HealthStatus>("/health");
+  }
+
+  /**
+   * Registers a new webhook for a contract (`POST /contracts/:contractId/webhooks`),
+   * returning the created webhook including its signing `secret` (#20).
+   */
+  registerWebhook(contractId: number, input: CreateWebhookInput): Promise<Webhook> {
+    return this.request<Webhook>(`/contracts/${contractId}/webhooks`, {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
+  }
+
+  /**
+   * Lists all webhooks registered for a contract (`GET /contracts/:contractId/webhooks`) (#20).
+   */
+  listWebhooks(contractId: number): Promise<WebhookSummary[]> {
+    return this.request<WebhookSummary[]>(`/contracts/${contractId}/webhooks`);
+  }
+
+  /**
+   * Removes a webhook from a contract (`DELETE /contracts/:contractId/webhooks/:id`) (#20).
+   */
+  removeWebhook(contractId: number, webhookId: number): Promise<void> {
+    return this.request<void>(`/contracts/${contractId}/webhooks/${webhookId}`, {
+      method: "DELETE"
+    });
   }
 }

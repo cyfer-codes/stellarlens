@@ -11,6 +11,7 @@ type Schemas = components["schemas"];
 type QueryOf<Op extends keyof operations> = NonNullable<operations[Op]["parameters"]["query"]>;
 
 export type ApiError = Schemas["ApiError"];
+export type HealthStatus = Schemas["HealthStatus"];
 
 export type Contract = Schemas["Contract"];
 export type RegisterContractInput = Schemas["RegisterContractInput"];
@@ -39,6 +40,7 @@ export type Webhook = Schemas["Webhook"];
 export type WebhookSummary = Schemas["WebhookSummary"];
 export type UpdatedWebhook = Schemas["UpdatedWebhook"];
 export type CreateWebhookInput = Schemas["CreateWebhookInput"];
+export type RegisterWebhookInput = CreateWebhookInput;
 export type UpdateWebhookInput = Schemas["UpdateWebhookInput"];
 export type WebhookDelivery = Schemas["WebhookDelivery"];
 

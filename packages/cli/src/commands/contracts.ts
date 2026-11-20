@@ -379,3 +379,28 @@ export async function listContracts(client: StellarLensClient, options: ListCont
 
   console.table(rows);
 }
+
+/**
+ * Fetches and prints a single contract by id (#25).
+ * Sets a non-zero exit code and logs a clear error when the contract does not exist.
+ */
+export async function getContract(client: StellarLensClient, id: number): Promise<void> {
+  try {
+    const contract = await client.getContract(id);
+    console.table([
+      {
+        id: contract.id,
+        address: contract.address,
+        name: contract.name ?? "—",
+        network: contract.network
+      }
+    ]);
+  } catch (error) {
+    if (error instanceof StellarLensApiError && error.status === 404) {
+      console.error(`Contract ${id} not found.`);
+    } else {
+      console.error(`Failed to fetch contract ${id}: ${describeError(error)}`);
+    }
+    process.exitCode = 1;
+  }
+}

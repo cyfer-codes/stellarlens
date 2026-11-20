@@ -178,6 +178,27 @@ console.log(formatAmount(total, 7));
 ```
 
 `formatAmount` never adds grouping separators, so its output always parses back with `parseAmount`.
+
+### Managing webhooks
+
+```ts
+// Verify connectivity first (#19)
+await client.ping(); // { status: "ok" }
+
+// Register a webhook for a contract (#20)
+const webhook = await client.registerWebhook(contract.id, {
+  url: "https://app.example.com/webhooks/stellarlens",
+  events: ["transfer"]
+});
+console.log("Signing secret:", webhook.secret);
+
+// List registered webhooks for a contract
+const webhooks = await client.listWebhooks(contract.id);
+
+// Remove a webhook by id
+await client.removeWebhook(contract.id, webhook.id);
+```
+
 ### Verifying webhooks
 
 Every webhook delivery is signed with HMAC-SHA256 using the secret returned when the webhook was registered.
@@ -340,6 +361,10 @@ try {
 | `watchEvents(contractId, options?)` | Async iterator yielding new events as they're indexed, until `signal` aborts |
 | `listTransfers(contractId, params?)` | Cursor-paginated token transfers for a contract (`cursor`, `limit`) |
 | `getStats(contractId, params?)` | Transfer summary stats for a contract (`from`, `to`) |
+| `ping()` | Health-check probe wrapping `GET /health` |
+| `registerWebhook(contractId, input)` | Register a webhook for a contract |
+| `listWebhooks(contractId)` | List all webhooks for a contract |
+| `removeWebhook(contractId, webhookId)` | Remove a webhook from a contract |
 | `formatAmount(amount, decimals, { maxFractionDigits }?)` | Format a base-unit amount for display, using `bigint` |
 | `parseAmount(display, decimals)` | Parse a display amount into base units as a `bigint` |
 

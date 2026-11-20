@@ -26,6 +26,8 @@ export {
 } from "./tokens.js";
 export type {
   ApiError,
+  HealthStatus,
+  RegisterWebhookInput,
   Contract,
   ListContractsParams,
   RegisterContractInput,

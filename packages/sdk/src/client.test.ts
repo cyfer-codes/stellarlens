@@ -219,4 +219,71 @@ describe("StellarLensClient", () => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe("ping and webhook methods (#19, #20)", () => {
+    it("ping() calls GET /health and returns status ok (#19)", async () => {
+      const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+        expect(String(url)).toBe("https://api.example.com/health");
+        expect(init?.method).toBe("GET");
+        return jsonResponse({ status: "ok" });
+      }) as unknown as typeof fetch;
+
+      await expect(makeClient(fetchMock).ping()).resolves.toEqual({ status: "ok" });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("registerWebhook() posts to /contracts/:contractId/webhooks (#20)", async () => {
+      const webhook = {
+        id: 7,
+        contractId: 1,
+        url: "https://example.com/hook",
+        events: ["transfer"],
+        secret: "whsec_123",
+        createdAt: "2026-01-01T00:00:00.000Z"
+      };
+      const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+        expect(String(url)).toBe("https://api.example.com/contracts/1/webhooks");
+        expect(init?.method).toBe("POST");
+        expect(init?.body).toBe(JSON.stringify({ url: "https://example.com/hook", events: ["transfer"] }));
+        return jsonResponse(webhook, 201);
+      }) as unknown as typeof fetch;
+
+      await expect(
+        makeClient(fetchMock).registerWebhook(1, {
+          url: "https://example.com/hook",
+          events: ["transfer"]
+        })
+      ).resolves.toEqual(webhook);
+    });
+
+    it("listWebhooks() calls GET /contracts/:contractId/webhooks (#20)", async () => {
+      const list = [
+        {
+          id: 7,
+          contractId: 1,
+          url: "https://example.com/hook",
+          events: ["transfer"],
+          createdAt: "2026-01-01T00:00:00.000Z"
+        }
+      ];
+      const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+        expect(String(url)).toBe("https://api.example.com/contracts/1/webhooks");
+        expect(init?.method).toBe("GET");
+        return jsonResponse(list);
+      }) as unknown as typeof fetch;
+
+      await expect(makeClient(fetchMock).listWebhooks(1)).resolves.toEqual(list);
+    });
+
+    it("removeWebhook() sends DELETE /contracts/:contractId/webhooks/:id and handles 204 (#20)", async () => {
+      const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+        expect(String(url)).toBe("https://api.example.com/contracts/1/webhooks/7");
+        expect(init?.method).toBe("DELETE");
+        return new Response(null, { status: 204 });
+      }) as unknown as typeof fetch;
+
+      await expect(makeClient(fetchMock).removeWebhook(1, 7)).resolves.toBeUndefined();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+  });
 });
