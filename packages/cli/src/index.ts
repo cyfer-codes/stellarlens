@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 import { Argument, Command, InvalidArgumentError, Option } from "commander";
 import { createClientFromEnv } from "./client.js";
-import { addContract, listContracts } from "./commands/contracts.js";
+import { addContract, getContract, listContracts } from "./commands/contracts.js";
+import { listTransfers } from "./commands/transfers.js";
+import { showStats } from "./commands/stats.js";
 import { runDecode } from "./commands/decode.js";
 import { StellarLensApiError } from "@stellarlens/sdk";
 import { listEvents, tailEvents } from "./commands/events.js";
@@ -99,6 +101,37 @@ contractsCommand
   .option("--page-size <size>", "Contracts fetched per api request (1-100)", parsePageSize, 100)
   .action(async (options: { name?: string; network?: string; pageSize: number }) => {
     await listContracts(createClientFromEnv(), options);
+  });
+
+
+contractsCommand
+  .command("get")
+  .description("Fetch a single registered contract by id")
+  .addArgument(new Argument("<id>", "Contract id").argParser(parseContractId))
+  .action(async (id: number) => {
+    await getContract(createClientFromEnv(), id);
+  });
+
+const transfersCommand = program.command("transfers").description("Work with indexed token transfers");
+
+transfersCommand
+  .command("list")
+  .description("List a page of a contract's token transfers, oldest first")
+  .addArgument(new Argument("<contractId>", "Contract id").argParser(parseContractId))
+  .option("-l, --limit <n>", "Transfers per page (1-100)", parsePositiveInt)
+  .option("-c, --cursor <id>", "Only transfers after this transfer id (from a previous page)", parsePositiveInt)
+  .action(async (contractId: number, options: { limit?: number; cursor?: number }) => {
+    await listTransfers(createClientFromEnv(), contractId, options);
+  });
+
+program
+  .command("stats")
+  .description("Print transfer summary stats for a contract")
+  .addArgument(new Argument("<contractId>", "Contract id").argParser(parseContractId))
+  .option("--from <date>", "Only transfers created at or after this ISO-8601 date/time")
+  .option("--to <date>", "Only transfers created at or before this ISO-8601 date/time")
+  .action(async (contractId: number, options: { from?: string; to?: string }) => {
+    await showStats(createClientFromEnv(), contractId, options);
   });
 
 const eventsCommand = program.command("events").description("Work with indexed contract events");

@@ -1,3 +1,4 @@
+import { getContract } from "./contracts.js";
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { StellarLensApiError, type StellarLensClient } from "@stellarlens/sdk";
@@ -404,5 +405,44 @@ describe("listContracts", () => {
       { id: 2, address: "C2", name: "—", network: "mainnet" }
     ]);
     tableSpy.mockRestore();
+  });
+});
+
+describe("getContract (#25)", () => {
+  afterEach(() => {
+    process.exitCode = undefined;
+    vi.restoreAllMocks();
+  });
+
+  it("prints contract details when found", async () => {
+    const client = {
+      getContract: vi.fn().mockResolvedValue({
+        id: 1,
+        address: "C123",
+        name: "MyToken",
+        network: "testnet"
+      })
+    } as unknown as StellarLensClient;
+    const tableSpy = vi.spyOn(console, "table").mockImplementation(() => {});
+
+    await getContract(client, 1);
+
+    expect(client.getContract).toHaveBeenCalledWith(1);
+    expect(tableSpy).toHaveBeenCalledWith([
+      { id: 1, address: "C123", name: "MyToken", network: "testnet" }
+    ]);
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it("prints a clear error message and sets a non-zero exitCode when not found", async () => {
+    const client = {
+      getContract: vi.fn().mockRejectedValue(new StellarLensApiError(404, { message: "Not found" }))
+    } as unknown as StellarLensClient;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await getContract(client, 999);
+
+    expect(errorSpy).toHaveBeenCalledWith("Contract 999 not found.");
+    expect(process.exitCode).toBe(1);
   });
 });
