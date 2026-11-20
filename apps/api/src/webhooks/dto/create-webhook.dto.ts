@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { IsArray, IsOptional, IsString, IsUrl } from "class-validator";
+import type { WebhookFilter } from "@stellarlens/db";
+import { IsValidWebhookFilter } from "./is-valid-webhook-filter.decorator";
 
 export class CreateWebhookDto {
   @ApiProperty({
@@ -18,4 +20,13 @@ export class CreateWebhookDto {
   @IsArray()
   @IsString({ each: true })
   eventTypes?: string[];
+
+  @ApiPropertyOptional({
+    description: "Optional structured filter for events, supporting positional topic matching and wildcards.",
+    example: { topics: ["transfer", null, "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"] },
+    type: Object,
+  })
+  @IsOptional()
+  @IsValidWebhookFilter()
+  filter?: WebhookFilter;
 }
