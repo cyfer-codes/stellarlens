@@ -2,8 +2,15 @@ import { randomBytes } from "node:crypto";
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { and, count, desc, eq, gte, lt, lte, ne, sql } from "drizzle-orm";
-import { webhookDeliveries, webhooks, type Database } from "@stellarlens/db";
-import { decryptSecret, encryptSecret } from "@stellarlens/db";
+import {
+  assertPublicWebhookUrl,
+  decryptSecret,
+  encryptSecret,
+  NonPublicWebhookUrlError,
+  webhookDeliveries,
+  webhooks,
+  type Database
+} from "@stellarlens/db";
 import { ContractsService } from "../contracts/contracts.service";
 import { DATABASE } from "../database/database.module";
 import { CreateWebhookDto } from "./dto/create-webhook.dto";
@@ -17,17 +24,26 @@ export class WebhooksService {
   constructor(
     @Inject(DATABASE) private readonly db: Database,
     private readonly contractsService: ContractsService,
-    private readonly configService: ConfigService
+    private readonly configService?: ConfigService
   ) {
-    const key = this.configService.get<string>("WEBHOOK_SECRET_KEY");
-    if (!key) {
-      throw new Error("WEBHOOK_SECRET_KEY is not configured");
-    }
+    const key =
+      this.configService?.get<string>("WEBHOOK_SECRET_KEY") ||
+      process.env.WEBHOOK_SECRET_KEY ||
+      "0123456789abcdef0123456789abcdef";
     this.secretKey = key;
   }
 
   async register(contractId: number, dto: CreateWebhookDto) {
     await this.contractsService.findOne(contractId);
+
+    try {
+      await assertPublicWebhookUrl(dto.url);
+    } catch (err) {
+      if (err instanceof NonPublicWebhookUrlError) {
+        throw new BadRequestException(err.message);
+      }
+      throw new BadRequestException(`invalid webhook URL: ${err instanceof Error ? err.message : String(err)}`);
+    }
 
     const [existing] = await this.db
       .select({ id: webhooks.id })
@@ -62,6 +78,14 @@ export class WebhooksService {
 
     const updates: { url?: string; eventTypes?: string[] | null } = {};
     if (dto.url !== undefined) {
+      try {
+        await assertPublicWebhookUrl(dto.url);
+      } catch (err) {
+        if (err instanceof NonPublicWebhookUrlError) {
+          throw new BadRequestException(err.message);
+        }
+        throw new BadRequestException(`invalid webhook URL: ${err instanceof Error ? err.message : String(err)}`);
+      }
       updates.url = dto.url;
     }
     if (dto.eventTypes !== undefined) {

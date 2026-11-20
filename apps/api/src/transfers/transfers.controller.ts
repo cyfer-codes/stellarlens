@@ -1,9 +1,6 @@
 import { Controller, Get, Param, ParseIntPipe, Query } from "@nestjs/common";
-import { AccountTransfersQueryDto } from "./dto/account-transfers-query.dto";
-import { FindTransfersQueryDto } from "./dto/find-transfers-query.dto";
-import { StatsQueryDto } from "./dto/stats-query.dto";
-import { TopAccountsQueryDto } from "./dto/top-accounts-query.dto";
-import { VolumeQueryDto } from "./dto/volume-query.dto";
+import { AccountTransfersQueryDto, FindTransfersQueryDto } from "./dto/find-transfers-query.dto";
+import { StatsQueryDto, TopAccountsQueryDto, VolumeQueryDto } from "./dto/stats-query.dto";
 import { TransfersService } from "./transfers.service";
 
 @Controller("contracts/:contractId")
@@ -22,7 +19,7 @@ export class TransfersController {
 
   @Get("stats/volume")
   getVolume(@Param("contractId", ParseIntPipe) contractId: number, @Query() query: VolumeQueryDto) {
-    return this.transfersService.getVolume(contractId, query);
+    return this.transfersService.getVolumeTimeSeries(contractId, query);
   }
 
   @Get("stats/top-accounts")

@@ -7,3 +7,4 @@ export {
   truncateAllTables
 } from "./migrations.js";
 export * from "./schema/index.js";
+export * from "./webhook-url.js";

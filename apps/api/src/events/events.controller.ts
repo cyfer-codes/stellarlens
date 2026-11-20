@@ -40,8 +40,6 @@ export class EventsController {
     return this.eventsService.findRecent(query.limit);
   }
 
-  @Get("contracts/:contractId/events")
-  findByContract(@Param("contractId", ParseIntPipe) contractId: number, @Query() query: FindEventsQueryDto) {
   @Get()
   @ApiOperation({
     summary: "List events for a contract",

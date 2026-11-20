@@ -14,7 +14,6 @@
     "seed-demo": "tsx scripts/seed-demo.ts",
     "seed-api-key": "tsx scripts/seed-api-key.ts",
     "test:e2e": "playwright test"
-    "seed-api-key": "tsx scripts/seed-api-key.ts"
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^17.0.1",
@@ -48,7 +47,6 @@
     "tailwindcss": "^3.4.0",
     "tsx": "^4.23.13",
     "typescript": "^5.7.0",
-    "vitest": "^2.1.9"
     "vitest": "^2.1.9",
     "vitest-axe": "^0.1.0"
   }

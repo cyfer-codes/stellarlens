@@ -226,6 +226,8 @@ export class EventsService {
       .innerJoin(contracts, eq(events.contractId, contracts.id))
       .orderBy(desc(events.ledger), desc(events.id))
       .limit(limit);
+  }
+
   async findByTxHash(hash: string) {
     return this.db
       .select()

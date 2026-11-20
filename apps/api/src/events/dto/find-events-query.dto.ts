@@ -39,6 +39,7 @@ export class FindEventsQueryDto {
   @IsIn(EVENT_ORDERS)
   order: EventOrder = "asc";
 
+  /**
    * Matches the topic value at any position (containment semantics).
    * Use `topic0`..`topic3` to target a specific decoded topic index.
    */
