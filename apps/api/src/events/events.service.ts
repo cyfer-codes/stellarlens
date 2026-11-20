@@ -166,10 +166,10 @@ export class EventsService {
       );
     }
     if (query.from) {
-      conditions.push(gte(events.createdAt, new Date(query.from)));
+      conditions.push(gte(events.ledgerClosedAt, new Date(query.from)));
     }
     if (query.to) {
-      conditions.push(lte(events.createdAt, new Date(query.to)));
+      conditions.push(lte(events.ledgerClosedAt, new Date(query.to)));
     }
     // `topic` uses JSONB containment, so it matches the given value at ANY
     // position in the decoded topics array (e.g. filtering transfers "to" an
@@ -184,15 +184,13 @@ export class EventsService {
     positionalTopics.forEach((value, index) => {
       if (value) {
         conditions.push(
-          sql`${events.decodedData} -> 'decoded' -> 'topic' ->> ${sql.raw(String(index))} = ${value}`
+          sql`${events.decodedData} -> 'decoded' -> 'topic' ->> ${index} = ${value}`
         );
       }
     });
     if (query.topics && query.topics.length > 0) {
       conditions.push(
-        sql`${events.decodedData} -> 'decoded' -> 'topic' ?| ${sql.raw(
-          `ARRAY[${query.topics.map((t) => `'${t.replace(/'/g, "''")}'`).join(", ")}]::text[]`
-        )}`
+        sql`${events.decodedData} -> 'decoded' -> 'topic' ?| ${query.topics}::text[]`
       );
     }
 
@@ -221,6 +219,7 @@ export class EventsService {
         txHash: events.txHash,
         topic: events.topic,
         decodedData: events.decodedData,
+        ledgerClosedAt: events.ledgerClosedAt,
         createdAt: events.createdAt
       })
       .from(events)

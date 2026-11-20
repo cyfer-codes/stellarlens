@@ -1,6 +1,39 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsIn, IsInt, IsNumber, IsOptional, IsString, Max, Min } from "class-validator";
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  Min,
+  Validate,
+  ValidationArguments,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
+} from "class-validator";
+
+const INTEGER_DECIMAL_STRING = /^-?\d+$/;
+
+@ValidatorConstraint({ name: "minAmountNotGreaterThanMaxAmount", async: false })
+class MinAmountNotGreaterThanMaxAmountConstraint implements ValidatorConstraintInterface {
+  validate(_value: unknown, args: ValidationArguments): boolean {
+    const dto = args.object as FindTransfersQueryDto;
+    if (dto.minAmount === undefined || dto.maxAmount === undefined) {
+      return true;
+    }
+    if (!INTEGER_DECIMAL_STRING.test(dto.minAmount) || !INTEGER_DECIMAL_STRING.test(dto.maxAmount)) {
+      // Let the per-field @Matches validators report format errors.
+      return true;
+    }
+    return BigInt(dto.minAmount) <= BigInt(dto.maxAmount);
+  }
+
+  defaultMessage(): string {
+    return "minAmount must not be greater than maxAmount";
+  }
+}
 
 export class FindTransfersQueryDto {
   @ApiPropertyOptional({
@@ -29,22 +62,32 @@ export class FindTransfersQueryDto {
   limit: number = 20;
 
   @ApiPropertyOptional({
-    description: "Minimum transfer amount (inclusive)",
-    example: 10,
+    description:
+      "Minimum transfer amount (inclusive) as an integer decimal string in base units",
+    example: "100000000000000000000",
+    type: String,
   })
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  minAmount?: number;
+  @IsString()
+  @Matches(INTEGER_DECIMAL_STRING, {
+    message: "minAmount must be an integer decimal string",
+  })
+  @Validate(MinAmountNotGreaterThanMaxAmountConstraint)
+  minAmount?: string;
 
   @ApiPropertyOptional({
-    description: "Maximum transfer amount (inclusive)",
-    example: 1000,
+    description:
+      "Maximum transfer amount (inclusive) as an integer decimal string in base units",
+    example: "100000000000000000001",
+    type: String,
   })
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  maxAmount?: number;
+  @IsString()
+  @Matches(INTEGER_DECIMAL_STRING, {
+    message: "maxAmount must be an integer decimal string",
+  })
+  @Validate(MinAmountNotGreaterThanMaxAmountConstraint)
+  maxAmount?: string;
 
   @ApiPropertyOptional({
     description: "Filter transfers sent from this account",

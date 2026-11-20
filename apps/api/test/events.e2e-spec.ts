@@ -97,6 +97,75 @@ describe("events (e2e)", () => {
       .set("x-api-key", apiKey);
 
     expect(response.status).toBe(400);
+  });
+
+  it("filters events by ledger close time rather than ingestion time", async () => {
+    const contractId = await registerContract(apiKey, "CONTRACT_EVENTS_CLOSE_TIME");
+    const db = getTestDb();
+    const closeTimes = [
+      new Date("2024-01-01T00:00:00.000Z"),
+      new Date("2024-02-01T00:00:00.000Z"),
+      new Date("2024-03-01T00:00:00.000Z")
+    ];
+    // Ingestion times are deliberately inverted relative to close times.
+    const ingestionTimes = [
+      new Date("2024-06-01T00:00:00.000Z"),
+      new Date("2024-05-01T00:00:00.000Z"),
+      new Date("2024-04-01T00:00:00.000Z")
+    ];
+    for (let i = 0; i < closeTimes.length; i += 1) {
+      await db.insert(events).values({
+        contractId,
+        ledger: 6000 + i,
+        txHash: i.toString().repeat(64).slice(0, 64),
+        topic: JSON.stringify(["fee"]),
+        ledgerClosedAt: closeTimes[i],
+        createdAt: ingestionTimes[i]
+      });
+    }
+
+    const response = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/events`)
+      .query({ from: "2024-01-15T00:00:00.000Z", to: "2024-02-15T00:00:00.000Z" })
+      .set("x-api-key", apiKey);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].ledger).toBe(6001);
+    expect(new Date(response.body.data[0].ledgerClosedAt).toISOString()).toBe(closeTimes[1].toISOString());
+  });
+
+  it("handles topics containing quotes, backslashes, comments and unicode safely", async () => {
+    const contractId = await registerContract(apiKey, "CONTRACT_EVENTS_TOPIC_ESCAPES");
+    const db = getTestDb();
+    const topicSets = [
+      ["it's"],
+      ["back\\slash"],
+      ["--"],
+      ["héllo-🌌"],
+      ["fee"]
+    ];
+    for (let i = 0; i < topicSets.length; i += 1) {
+      await db.insert(events).values({
+        contractId,
+        ledger: 7000 + i,
+        txHash: i.toString().repeat(64).slice(0, 64),
+        topic: JSON.stringify(topicSets[i]),
+        decodedData: { decoded: { topic: topicSets[i], value: null } }
+      });
+    }
+
+    const response = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/events`)
+      .query({ topics: "it's,back\\slash,--,héllo-🌌" })
+      .set("x-api-key", apiKey);
+
+    expect(response.status).toBe(200);
+    const ledgers = response.body.data.map((event: { ledger: number }) => event.ledger).sort();
+    expect(ledgers).toEqual([7000, 7001, 7002, 7003]);
+    expect(response.body.data.every((event: { ledger: number }) => event.ledger !== 7004)).toBe(true);
+  });
+
   it("returns recent events across contracts newest first with contract names", async () => {
     const contractA = await registerContract(apiKey, "CONTRACT_RECENT_A");
     const contractB = await registerContract(apiKey, "CONTRACT_RECENT_B");
