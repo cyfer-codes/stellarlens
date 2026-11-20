@@ -10,6 +10,8 @@ export const webhooks = pgTable(
       .notNull()
       .references(() => contracts.id),
     url: text("url").notNull(),
+    // Encrypted at rest with AES-256-GCM (see packages/db/src/crypto/webhook-secret.ts).
+    // Stored as a versioned payload: "v1:<iv>:<tag>:<ciphertext>" (base64 segments).
     secret: text("secret").notNull(),
     eventTypes: text("event_types").array(),
     active: boolean("active").default(true).notNull(),

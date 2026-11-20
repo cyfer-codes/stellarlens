@@ -48,6 +48,9 @@ export class ApiKeyGuard implements CanActivate {
       throw new UnauthorizedException("invalid api key");
     }
 
+    // Expired keys are rejected here. Key rotation relies on this: the old key
+    // gets an `expiresAt` set to the end of the overlap window, so it keeps
+    // working until then and fails afterwards.
     if (apiKey.expiresAt && apiKey.expiresAt.getTime() <= Date.now()) {
       throw new UnauthorizedException("invalid api key");
     }

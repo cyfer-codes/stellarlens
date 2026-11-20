@@ -1,4 +1,8 @@
+import { escapeCsvCell, toCsv, toCsvRows } from "@stellarlens/sdk";
 import type { EventRow, TransferRow } from "@/lib/api";
+
+// CSV escaping (including formula-injection protection) lives in the SDK so the CLI export shares it.
+export { escapeCsvCell, toCsv, toCsvRows };
 
 type CsvRecord = Record<string, string>;
 
@@ -7,9 +11,6 @@ type CsvRecord = Record<string, string>;
 // backfill or catch-up. Rename to a ledger-close-time column once the api
 // returns one.
 const BASE_EVENT_COLUMNS = ["id", "contract_id", "ledger", "tx_hash", "indexed_at", "event_type"];
-
-// Spreadsheet apps evaluate cells starting with these characters as formulas.
-const FORMULA_PREFIX = /^[=+\-@\t\r]/;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -128,6 +129,7 @@ export function toCsv(headers: string[], rows: string[][]): string {
 // (not "Ledger Timestamp"): transfer.createdAt is ingestion time, which can
 // lag the real ledger close time after a backfill or catch-up. Rename to
 // "Ledger Closed At" and read ledgerClosedAt once the api returns it.
+// Matches the columns shown on the contract transfers table.
 export const TRANSFER_CSV_HEADERS = [
   "Sender",
   "Receiver",

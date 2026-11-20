@@ -1,6 +1,6 @@
 import { nativeToScVal } from "@stellar/stellar-sdk";
 import { describe, expect, it } from "vitest";
-import { decodeScVal, tryDecodeScVal } from "../src/decode.js";
+import { decodeScVal, tryDecodeScVal } from "./index.js";
 
 // An scvI128 type tag with no body, so reading the i128 parts runs off the end of the buffer.
 const MALFORMED_XDR = "AAAACg==";

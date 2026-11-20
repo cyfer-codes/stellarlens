@@ -15,6 +15,10 @@ function toJsonSafe(value: unknown): unknown {
   return value;
 }
 
+/**
+ * Decodes a base64 `ScVal` into plain JSON: the indexer stores event topics/values this way, and
+ * `stellarlens decode` uses the same function so both always agree. Throws on invalid XDR.
+ */
 export function decodeScVal(base64Xdr: string): unknown {
   const scVal = xdr.ScVal.fromXdr(base64Xdr, "base64");
   return toJsonSafe(scValToNative(scVal));

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Sidebar } from "../../components/Sidebar";
-import { getSession } from "@/lib/session";
+import { getSession } from "@/lib/session-server";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
