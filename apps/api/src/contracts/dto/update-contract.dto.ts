@@ -1,5 +1,6 @@
+import { STELLAR_NETWORKS } from "@stellarlens/db";
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsNotEmpty, IsOptional, IsString, ValidateIf } from "class-validator";
+import { IsIn, IsNotEmpty, IsOptional, IsString, ValidateIf } from "class-validator";
 
 export class UpdateContractDto {
   @ApiPropertyOptional({
@@ -15,10 +16,12 @@ export class UpdateContractDto {
   @ApiPropertyOptional({
     description: "Stellar network the contract is deployed on.",
     example: "testnet",
+    enum: [...STELLAR_NETWORKS],
     type: String,
   })
   @ValidateIf((_object, value) => value !== undefined)
   @IsString()
   @IsNotEmpty()
+  @IsIn(STELLAR_NETWORKS)
   network?: string;
 }
