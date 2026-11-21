@@ -237,8 +237,11 @@ describe("StellarLensClient.watchEvents", () => {
 
     const next = watch.next();
     await vi.advanceTimersByTimeAsync(0);
-    expect(seenSignal).toBe(controller.signal);
+    // fetch gets the client's combined signal (caller signal + request timeout), which follows the caller's abort.
+    expect(seenSignal).toBeInstanceOf(AbortSignal);
+    expect(seenSignal?.aborted).toBe(false);
     controller.abort();
+    expect(seenSignal?.aborted).toBe(true);
 
     await expect(next).resolves.toEqual({ done: true, value: undefined });
     expect(onError).not.toHaveBeenCalled();
