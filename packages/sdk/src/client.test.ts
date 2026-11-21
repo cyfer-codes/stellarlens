@@ -198,6 +198,71 @@ describe("StellarLensClient", () => {
     await expect(makeClient(fetchMock).ping()).rejects.toBeInstanceOf(StellarLensApiError);
   });
 
+  describe("webhooks", () => {
+    const webhook = {
+      id: 7,
+      contractId: 1,
+      url: "https://example.com/hook",
+      secret: "whsec_test",
+      eventTypes: ["transfer"],
+      active: true,
+      createdAt: "2026-01-01T00:00:00.000Z"
+    };
+
+    it("registerWebhook posts the url and event types and returns the webhook with its secret", async () => {
+      const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+        expect(String(url)).toBe("https://api.example.com/contracts/1/webhooks");
+        expect(init?.method).toBe("POST");
+        expect(init?.body).toBe(JSON.stringify({ url: "https://example.com/hook", eventTypes: ["transfer"] }));
+        return jsonResponse(webhook, 201);
+      }) as unknown as typeof fetch;
+
+      const created = await makeClient(fetchMock).registerWebhook(1, {
+        url: "https://example.com/hook",
+        eventTypes: ["transfer"]
+      });
+
+      expect(created).toEqual(webhook);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("listWebhooks gets the contract's webhooks", async () => {
+      const summaries = [
+        { id: 7, url: "https://example.com/hook", eventTypes: null, createdAt: "2026-01-01T00:00:00.000Z" }
+      ];
+      const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+        expect(String(url)).toBe("https://api.example.com/contracts/1/webhooks");
+        expect(init?.method).toBe("GET");
+        return jsonResponse(summaries);
+      }) as unknown as typeof fetch;
+
+      await expect(makeClient(fetchMock).listWebhooks(1)).resolves.toEqual(summaries);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("removeWebhook deletes the webhook and resolves on 204", async () => {
+      const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+        expect(String(url)).toBe("https://api.example.com/contracts/1/webhooks/7");
+        expect(init?.method).toBe("DELETE");
+        return new Response(null, { status: 204 });
+      }) as unknown as typeof fetch;
+
+      await expect(makeClient(fetchMock).removeWebhook(1, 7)).resolves.toBeUndefined();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("removeWebhook rejects with StellarLensApiError when the webhook doesn't exist", async () => {
+      const fetchMock = vi.fn(
+        async () => new Response(JSON.stringify({ message: "webhook 99 not found" }), { status: 404 })
+      ) as unknown as typeof fetch;
+
+      await expect(makeClient(fetchMock).removeWebhook(1, 99)).rejects.toMatchObject({
+        status: 404,
+        body: { message: "webhook 99 not found" }
+      });
+    });
+  });
+
   it("throws StellarLensApiError with the parsed json body on failure", async () => {
     const fetchMock = vi.fn(
       async () => new Response(JSON.stringify({ message: "not found" }), { status: 404 })

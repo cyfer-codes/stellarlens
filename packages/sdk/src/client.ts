@@ -4,6 +4,7 @@ import type {
   BulkRegisterContractsResponse,
   Contract,
   ContractStats,
+  CreateWebhookInput,
   EventRecord,
   GetStatsParams,
   HealthStatus,
@@ -13,7 +14,9 @@ import type {
   Page,
   RegisterContractInput,
   TransferRecord,
-  WatchEventsOptions
+  WatchEventsOptions,
+  Webhook,
+  WebhookSummary
 } from "./types.js";
 
 /**
@@ -337,5 +340,26 @@ export class StellarLensClient {
   /** Transfer summary stats for a contract, optionally scoped to a time window. */
   getStats(contractId: number, params?: GetStatsParams): Promise<ContractStats> {
     return this.request<ContractStats>(`/contracts/${contractId}/stats${buildQuery(params)}`);
+  }
+
+  /**
+   * Registers a webhook for a contract. The response includes the signing `secret`, which is only returned
+   * here (and on secret rotation) — store it, it can't be fetched again.
+   */
+  registerWebhook(contractId: number, input: CreateWebhookInput): Promise<Webhook> {
+    return this.request<Webhook>(`/contracts/${contractId}/webhooks`, {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
+  }
+
+  /** Every webhook registered for a contract (without their secrets). */
+  listWebhooks(contractId: number): Promise<WebhookSummary[]> {
+    return this.request<WebhookSummary[]>(`/contracts/${contractId}/webhooks`);
+  }
+
+  /** Deletes a webhook from a contract. Resolves once the api confirms (`204 No Content`). */
+  removeWebhook(contractId: number, id: number): Promise<void> {
+    return this.request<void>(`/contracts/${contractId}/webhooks/${id}`, { method: "DELETE" });
   }
 }
