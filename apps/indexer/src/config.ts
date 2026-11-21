@@ -37,6 +37,8 @@ if (!isStellarNetwork(stellarNetwork)) {
 }
 export const STELLAR_NETWORK = stellarNetwork;
 export const REGISTRY_PORT = Number(process.env.REGISTRY_PORT ?? 3002);
+/** Shared secret clients must send in the X-Registry-Secret header when registering contracts. */
+export const REGISTRY_SECRET = requireEnv("REGISTRY_SECRET");
 export const WEBHOOK_CONCURRENCY = positiveIntegerEnv("WEBHOOK_CONCURRENCY", 10);
 export const POLL_ONCE = process.env.POLL_ONCE === "true";
 export const POLL_INTERVAL_MS = positiveIntegerEnv("POLL_INTERVAL_MS", 5000);

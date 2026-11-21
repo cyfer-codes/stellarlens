@@ -10,6 +10,7 @@ jobs:
 
     env:
       DATABASE_URL: postgres://stellarlens:stellarlens@localhost:5432/stellarlens
+      REGISTRY_SECRET: ci-registry-secret
 
     services:
       postgres:
@@ -120,6 +121,7 @@ jobs:
       SEED_ADMIN_EMAIL: admin@stellarlens.local
       SEED_ADMIN_PASSWORD: e2e-admin-password-1
       SESSION_SECRET: e2e-session-secret-at-least-16-bytes
+      REGISTRY_SECRET: e2e-registry-secret
       API_URL: http://localhost:3400
       PORT: 3400
 

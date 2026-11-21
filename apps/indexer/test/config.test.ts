@@ -8,6 +8,7 @@ describe("indexer configuration", () => {
 
   it("accepts a recognized Stellar network", async () => {
     vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+    vi.stubEnv("REGISTRY_SECRET", "test-registry-secret");
     vi.stubEnv("STELLAR_NETWORK", "testnet");
     vi.resetModules();
 
@@ -16,8 +17,20 @@ describe("indexer configuration", () => {
     expect(config.STELLAR_NETWORK).toBe("testnet");
   });
 
+  it("fails startup when REGISTRY_SECRET is not set", async () => {
+    vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+    vi.stubEnv("STELLAR_NETWORK", "testnet");
+    vi.stubEnv("REGISTRY_SECRET", undefined);
+    vi.resetModules();
+
+    await expect(import("../src/config.js")).rejects.toThrow(
+      "REGISTRY_SECRET environment variable is required"
+    );
+  });
+
   it("fails startup with a clear error for an unknown Stellar network", async () => {
     vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+    vi.stubEnv("REGISTRY_SECRET", "test-registry-secret");
     vi.stubEnv("STELLAR_NETWORK", "testnetwork");
     vi.resetModules();
 
@@ -28,6 +41,7 @@ describe("indexer configuration", () => {
 
   it("defaults POLL_INTERVAL_MS to 5000", async () => {
     vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+    vi.stubEnv("REGISTRY_SECRET", "test-registry-secret");
     vi.stubEnv("STELLAR_NETWORK", "testnet");
     vi.stubEnv("POLL_INTERVAL_MS", undefined);
     vi.resetModules();
@@ -39,6 +53,7 @@ describe("indexer configuration", () => {
 
   it("reads POLL_INTERVAL_MS from the environment", async () => {
     vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+    vi.stubEnv("REGISTRY_SECRET", "test-registry-secret");
     vi.stubEnv("STELLAR_NETWORK", "testnet");
     vi.stubEnv("POLL_INTERVAL_MS", "2000");
     vi.resetModules();
@@ -50,6 +65,7 @@ describe("indexer configuration", () => {
 
   it("rejects a non-positive POLL_INTERVAL_MS", async () => {
     vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+    vi.stubEnv("REGISTRY_SECRET", "test-registry-secret");
     vi.stubEnv("STELLAR_NETWORK", "testnet");
     vi.stubEnv("POLL_INTERVAL_MS", "0");
     vi.resetModules();
