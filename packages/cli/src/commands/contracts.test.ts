@@ -447,3 +447,56 @@ describe("getContract", () => {
     await expect(getContract(client, 1)).rejects.toBe(error);
   });
 });
+
+describe("--json output", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("listContracts prints a JSON array instead of a table", async () => {
+    const contracts = [
+      { id: 1, address: C1, name: "one", network: "testnet" },
+      { id: 2, address: C2, name: null, network: "mainnet" }
+    ];
+    const client = {
+      listAllContracts: async function* () {
+        yield* contracts;
+      }
+    } as unknown as StellarLensClient;
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const tableSpy = vi.spyOn(console, "table").mockImplementation(() => {});
+
+    await listContracts(client, { json: true });
+
+    expect(tableSpy).not.toHaveBeenCalled();
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(logSpy.mock.calls[0][0] as string)).toEqual(contracts);
+  });
+
+  it("listContracts prints an empty JSON array when there are no contracts", async () => {
+    const client = {
+      listAllContracts: async function* () {}
+    } as unknown as StellarLensClient;
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await listContracts(client, { json: true });
+
+    expect(logSpy).toHaveBeenCalledWith("[]");
+  });
+
+  it("runAddContracts prints the results as JSON and still reports failures", async () => {
+    const registerContract = singleResponder();
+    const client = { registerContract } as unknown as StellarLensClient;
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const ok = await runAddContracts(client, [{ address: C1 }], { network: "testnet", json: true });
+
+    expect(ok).toBe(true);
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(logSpy.mock.calls[0][0] as string)).toEqual([
+      { address: C1, network: "testnet", status: "registered", id: 1 }
+    ]);
+  });
+});

@@ -19,6 +19,9 @@ stellarlens events list <contractId> [--limit 20] [--cursor <id>] [--topic t] [-
 stellarlens events tail <contractId>   # follows new events every 5s, ctrl+c to stop
 ```
 
+Add the global `--json` flag to `contracts list`, `contracts add` or `events tail` to get machine-readable
+output for scripting, e.g. `stellarlens contracts list --json` prints a JSON array instead of a table.
+
 ### Decoding XDR
 
 ```bash
