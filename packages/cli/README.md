@@ -17,6 +17,7 @@ stellarlens contracts list                   # every contract, across all pages
 stellarlens contracts get <id>               # one contract's details; exits non-zero if it doesn't exist
 stellarlens events list <contractId> [--limit 20] [--cursor <id>] [--topic t] [--from d] [--to d]
 stellarlens events tail <contractId>   # follows new events every 5s, ctrl+c to stop
+stellarlens transfers list <contractId> [--limit 20] [--cursor <id>]   # ledger, from, to, amount, asset, tx hash
 ```
 
 Add the global `--json` flag to `contracts list`, `contracts add` or `events tail` to get machine-readable

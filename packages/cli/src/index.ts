@@ -6,6 +6,7 @@ import { runDecode } from "./commands/decode.js";
 import { StellarLensApiError } from "@stellarlens/sdk";
 import { listEvents, tailEvents } from "./commands/events.js";
 import { runExport, type ExportFormat, type ExportKind } from "./commands/export.js";
+import { listTransfers } from "./commands/transfers.js";
 import { listenForWebhooks } from "./commands/webhooks.js";
 
 function parsePort(value: string): number {
@@ -163,6 +164,18 @@ eventsCommand
       signal: controller.signal,
       json: jsonOutput()
     });
+  });
+
+const transfersCommand = program.command("transfers").description("Work with indexed token transfers");
+
+transfersCommand
+  .command("list")
+  .description("List a page of a contract's transfers, oldest first")
+  .addArgument(new Argument("<contractId>", "Contract id").argParser(parseContractId))
+  .option("-l, --limit <n>", "Transfers per page (1-100)", parsePositiveInt)
+  .option("-c, --cursor <id>", "Only transfers after this transfer id (from a previous page)", parsePositiveInt)
+  .action(async (contractId: number, options: { limit?: number; cursor?: number }) => {
+    await listTransfers(createClientFromEnv(), contractId, options);
   });
 
 program
