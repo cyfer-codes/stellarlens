@@ -130,10 +130,12 @@ export interface CreateWebhookInput {
 /** Thrown for any non-2xx response from the api. `status` is the upstream status code. */
 export class ApiProxyError extends Error {
   status: number;
+  body: unknown;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, body?: unknown) {
     super(message);
     this.status = status;
+    this.body = body;
   }
 }
 
@@ -166,7 +168,17 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     // server-side only. Callers get ApiProxyError.status to map to a
     // sanitized, user-facing message — never this message itself.
     console.error(`api request to ${path} failed with ${response.status}: ${body}`);
-    throw new ApiProxyError(response.status, `api request to ${path} failed with ${response.status}`);
+    let parsedBody: unknown = body;
+    try {
+      parsedBody = body ? JSON.parse(body) : undefined;
+    } catch {
+      // Keep non-JSON response bodies available to callers as text.
+    }
+    throw new ApiProxyError(
+      response.status,
+      `api request to ${path} failed with ${response.status}`,
+      parsedBody
+    );
   }
 
   if (response.status === 204) {

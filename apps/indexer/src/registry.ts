@@ -134,6 +134,15 @@ export interface RegisterContractOptions {
   networkPassphrase?: string;
 }
 
+export class ContractAlreadyRegisteredError extends Error {
+  readonly statusCode = 409;
+
+  constructor(readonly existingId: number) {
+    super(`contract is already registered (id: ${existingId})`);
+    this.name = "ContractAlreadyRegisteredError";
+  }
+}
+
 export async function registerContract(
   db: Database,
   registration: ContractRegistration,
@@ -156,18 +165,14 @@ export async function registerContract(
       symbol: metadata?.symbol ?? null,
       tokenName: metadata?.name ?? null
     })
-    .onConflictDoUpdate({
-      target: contracts.address,
-      set: {
-        name: registration.name ?? null,
-        network: registration.network,
-        decimals: metadata?.decimals ?? null,
-        symbol: metadata?.symbol ?? null,
-        tokenName: metadata?.name ?? null
-      }
-    })
+    .onConflictDoNothing({ target: contracts.address })
     .returning();
-  return row;
+
+  if (row) return row;
+
+  const [existing] = await db.select({ id: contracts.id }).from(contracts).where(eq(contracts.address, registration.address));
+  if (existing) throw new ContractAlreadyRegisteredError(existing.id);
+  throw new Error("contract registration conflicted; please retry");
 }
 
 /** Maps registered contract address -> internal id, scoped to one network. */

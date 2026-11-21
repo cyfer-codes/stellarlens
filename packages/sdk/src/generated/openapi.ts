@@ -636,6 +636,19 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
+            /** @description A contract with this address is already registered. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        statusCode: 409;
+                        message: string;
+                        existingId: number;
+                    };
+                };
+            };
             /** @description Rate limit exceeded. */
             429: {
                 headers: {

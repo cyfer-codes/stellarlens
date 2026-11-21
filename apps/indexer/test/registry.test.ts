@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import { StrKey } from "@stellar/stellar-sdk";
 import { describe, expect, it } from "vitest";
-import { assertValidStellarAddress } from "../src/registry.js";
+import { assertValidStellarAddress, registerContract } from "../src/registry.js";
+import { contracts } from "@stellarlens/db";
+import { getTestDb } from "./setup.js";
 
 /** A known-valid, checksummed contract (C...) strkey derived from a label. */
 function contractAddress(label: string): string {
@@ -40,4 +42,23 @@ describe("assertValidStellarAddress", () => {
   it("rejects a lowercase-looking contract address (strkeys are base32)", () => {
     expect(() => assertValidStellarAddress(`c${"A".repeat(55)}`)).toThrow(/invalid Stellar address/);
   });
+
+  it("rejects re-registration without changing the stored name or network", async () => {
+    const db = getTestDb();
+    const address = contractAddress("DUPLICATE_REGISTRATION");
+    const created = await registerContract(db, { address, name: "Original", network: "testnet" });
+
+    await expect(registerContract(db, { address, name: "Replacement", network: "mainnet" }))
+      .rejects.toMatchObject({ name: "ContractAlreadyRegisteredError", existingId: created.id, statusCode: 409 });
+
+    const [stored] = await db.select().from(contracts);
+    expect(stored).toMatchObject({
+      id: created.id,
+      address,
+      name: "Original",
+      network: "testnet"
+    });
+  });
+
+
 });
