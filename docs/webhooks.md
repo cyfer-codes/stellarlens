@@ -163,8 +163,8 @@ In detail:
 
 ## Retry schedule
 
-Constants live in [`apps/indexer/src/config.ts`](../apps/indexer/src/config.ts) and aren't
-configurable through env vars.
+Defaults live in [`apps/indexer/src/config.ts`](../apps/indexer/src/config.ts) and can be tuned
+through env vars (see [Configuration](#configuration)). The table below assumes the defaults.
 
 | Attempt | Waits before attempt | Timeout | Cumulative worst case |
 |---|---|---|---|
@@ -312,10 +312,15 @@ Indexer env vars that affect webhooks:
 | Variable | Default | Effect |
 |---|---|---|
 | `WEBHOOK_CONCURRENCY` | `10` | Max webhooks delivered to in parallel **for one event**. Must be a positive integer; the indexer refuses to start otherwise. Events themselves are always delivered one at a time. |
+| `WEBHOOK_MAX_RETRIES` | `3` | Retries after the first delivery attempt. Must be a non-negative integer; `0` disables retries. |
+| `WEBHOOK_RETRY_BASE_DELAY_MS` | `500` | Base delay for exponential backoff between attempts. Must be a positive integer. |
+| `WEBHOOK_RETRY_MAX_DELAY_MS` | `5000` | Cap on any single backoff delay, including a receiver's `Retry-After`. Must be a positive integer ≥ `WEBHOOK_RETRY_BASE_DELAY_MS`. |
+| `WEBHOOK_TIMEOUT_MS` | `5000` | Per-attempt request timeout; the POST is aborted (and retried) once it elapses. Must be a positive integer. |
 | `POLL_INTERVAL_MS` | `5000` | Sleep between poll cycles. Together with delivery time, sets how quickly new events reach endpoints. |
 | `POLL_ONCE` | `false` | `true` runs one poll cycle (deliveries included) and exits. |
 | `DATABASE_URL` | — | Where webhooks are read from and delivery history is written. |
 | `SOROBAN_RPC_URL`, `STELLAR_NETWORK` | — | Required by the indexer; only events from that network are indexed and delivered. |
 
-Retry counts, backoff and the 5s request timeout are code constants (see [Retry schedule](#retry-schedule)).
+Invalid values for any of these make the indexer refuse to start. See [Retry schedule](#retry-schedule)
+for how the retry and timeout settings combine.
 The api has no webhook-specific settings.

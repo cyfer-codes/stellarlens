@@ -97,6 +97,53 @@ describe("webhooks (e2e)", () => {
     expect(response.body[0].secret).toBeUndefined();
   });
 
+  it("gets a single webhook without exposing the secret", async () => {
+    const contractId = await registerContract(apiKey, "CONTRACT_WEBHOOKS_GET_A");
+    const created = await request(getApp().getHttpServer())
+      .post(`/contracts/${contractId}/webhooks`)
+      .set("x-api-key", apiKey)
+      .send({ url: "https://example.com/webhook", eventTypes: ["transfer"] });
+
+    const response = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/webhooks/${created.body.id}`)
+      .set("x-api-key", apiKey);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      id: created.body.id,
+      url: "https://example.com/webhook",
+      eventTypes: ["transfer"],
+      createdAt: created.body.createdAt
+    });
+    expect(response.body.secret).toBeUndefined();
+  });
+
+  it("returns 404 getting a webhook that doesn't exist", async () => {
+    const contractId = await registerContract(apiKey, "CONTRACT_WEBHOOKS_GET_B");
+
+    const response = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/webhooks/999999`)
+      .set("x-api-key", apiKey);
+
+    expect(response.status).toBe(404);
+  });
+
+  it("returns 404 getting a webhook through a different contract", async () => {
+    const owner = await registerContract(apiKey, "CONTRACT_WEBHOOKS_GET_C");
+    const other = await registerContract(apiKey, "CONTRACT_WEBHOOKS_GET_D");
+    const created = await request(getApp().getHttpServer())
+      .post(`/contracts/${owner}/webhooks`)
+      .set("x-api-key", apiKey)
+      .send({ url: "https://example.com/webhook" });
+
+    const response = await request(getApp().getHttpServer())
+      .get(`/contracts/${other}/webhooks/${created.body.id}`)
+      .set("x-api-key", apiKey);
+
+    expect(response.status).toBe(404);
+    expect(response.body.secret).toBeUndefined();
+  });
+
   it("deletes a webhook", async () => {
     const contractId = await registerContract(apiKey, "CONTRACT_WEBHOOKS_D");
     const created = await request(getApp().getHttpServer())
