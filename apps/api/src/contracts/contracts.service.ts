@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, asc, eq, gt, ilike, inArray, max } from "drizzle-orm";
 import { contracts, events, indexerCheckpoints, type Database } from "@stellarlens/db";
 import { DATABASE } from "../database/database.module";
@@ -35,16 +35,36 @@ type PreparedBulkItem =
 export class ContractsService {
   constructor(@Inject(DATABASE) private readonly db: Database) { }
 
+  /**
+   * Registers a new contract. Re-registering an address is a conflict: callers
+   * must use PATCH /contracts/:id to intentionally change its name or network.
+   */
   async register(dto: CreateContractDto) {
     const [contract] = await this.db
       .insert(contracts)
       .values({ address: dto.address, name: dto.name ?? null, network: dto.network })
-      .onConflictDoUpdate({
-        target: contracts.address,
-        set: { name: dto.name ?? null, network: dto.network }
-      })
+      .onConflictDoNothing({ target: contracts.address })
       .returning();
-    return contract;
+
+    if (contract) {
+      return contract;
+    }
+
+    const [existing] = await this.db
+      .select()
+      .from(contracts)
+      .where(eq(contracts.address, dto.address));
+
+    if (!existing) {
+      // A concurrent delete may occur between the conflicting insert and lookup.
+      // Let the caller retry rather than returning a misleading duplicate response.
+      throw new ConflictException("Contract registration conflicted; please retry.");
+    }
+
+    throw new ConflictException({
+      message: "A contract with this address is already registered. Use PATCH /contracts/:id to update it.",
+      existingId: existing.id
+    });
   }
 
   /**
