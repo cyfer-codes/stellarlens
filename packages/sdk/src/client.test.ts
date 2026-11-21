@@ -221,6 +221,32 @@ describe("StellarLensClient", () => {
       expect(page.data).toHaveLength(1);
     });
 
+    it("pages through contracts across multiple pages by feeding nextCursor back as cursor", async () => {
+      const pages: Record<string, unknown> = {
+        "": { data: [contract(1), contract(2)], nextCursor: 2 },
+        "2": { data: [contract(3), contract(4)], nextCursor: 4 },
+        "4": { data: [contract(5)], nextCursor: null }
+      };
+      const urls: string[] = [];
+      const fetchMock = vi.fn(async (url: string | URL) => {
+        const parsed = new URL(String(url));
+        urls.push(parsed.search);
+        return jsonResponse(pages[parsed.searchParams.get("cursor") ?? ""]);
+      }) as unknown as typeof fetch;
+      const client = makeClient(fetchMock);
+
+      const ids: number[] = [];
+      let cursor: number | undefined;
+      do {
+        const page = await client.listContracts({ limit: 2, cursor });
+        ids.push(...page.data.map((c) => c.id));
+        cursor = page.nextCursor ?? undefined;
+      } while (cursor !== undefined);
+
+      expect(ids).toEqual([1, 2, 3, 4, 5]);
+      expect(urls).toEqual(["?limit=2", "?limit=2&cursor=2", "?limit=2&cursor=4"]);
+    });
+
     it("listAllContracts follows nextCursor until it is null, keeping the filters", async () => {
       const urls: string[] = [];
       const pages: Record<string, unknown> = {
