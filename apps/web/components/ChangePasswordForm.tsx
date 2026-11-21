@@ -45,17 +45,17 @@ export function ChangePasswordForm() {
   return (
     <form onSubmit={handleSubmit} className="max-w-sm space-y-4">
       {error && (
-        <div role="alert" className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+        <div role="alert" className="rounded border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-600 dark:text-red-400">
           {error}
         </div>
       )}
       {success && (
-        <div role="status" className="rounded border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+        <div role="status" className="rounded border border-green-200 dark:border-green-900 bg-green-50 dark:bg-green-950/40 px-4 py-3 text-sm text-green-700 dark:text-green-400">
           Password updated.
         </div>
       )}
       <div>
-        <label htmlFor="current-password" className="block text-sm font-medium text-gray-700">
+        <label htmlFor="current-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
           Current password
         </label>
         <input
@@ -64,11 +64,11 @@ export function ChangePasswordForm() {
           required
           value={currentPassword}
           onChange={(event) => setCurrentPassword(event.target.value)}
-          className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+          className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm"
         />
       </div>
       <div>
-        <label htmlFor="new-password" className="block text-sm font-medium text-gray-700">
+        <label htmlFor="new-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
           New password
         </label>
         <input
@@ -78,11 +78,11 @@ export function ChangePasswordForm() {
           minLength={8}
           value={newPassword}
           onChange={(event) => setNewPassword(event.target.value)}
-          className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+          className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm"
         />
       </div>
       <div>
-        <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700">
+        <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
           Confirm new password
         </label>
         <input
@@ -92,13 +92,13 @@ export function ChangePasswordForm() {
           minLength={8}
           value={confirmPassword}
           onChange={(event) => setConfirmPassword(event.target.value)}
-          className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+          className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm"
         />
       </div>
       <button
         type="submit"
         disabled={submitting}
-        className="rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+        className="rounded bg-gray-900 dark:bg-gray-100 px-4 py-2 text-sm font-medium text-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-200 disabled:opacity-50"
       >
         {submitting ? "Updating…" : "Update password"}
       </button>

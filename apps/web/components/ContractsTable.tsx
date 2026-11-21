@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { Contract } from "@/lib/api";
+import { CopyButton } from "@/components/ui/CopyButton";
 import { loadContracts } from "@/app/(dashboard)/contracts/actions";
 
 type SortKey = "address" | "name" | "network";
@@ -113,7 +114,7 @@ export function ContractsTable({ initialContracts, initialNextCursor }: Contract
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Filter by address or name"
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm"
           />
         </div>
         <div>
@@ -126,7 +127,7 @@ export function ContractsTable({ initialContracts, initialNextCursor }: Contract
             value={network}
             onChange={(event) => setNetwork(event.target.value)}
             placeholder="Network (exact)"
-            className="rounded border border-gray-300 px-3 py-2 text-sm"
+            className="rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm"
           />
         </div>
       </div>
@@ -137,7 +138,7 @@ export function ContractsTable({ initialContracts, initialNextCursor }: Contract
             Registered contracts with address, name and network. Column headers sort the loaded rows.
           </caption>
           <thead>
-            <tr className="border-b border-gray-200 text-gray-500">
+            <tr className="border-b border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400">
               {COLUMNS.map((column) => {
                 const direction = sort?.key === column.key ? sort.direction : null;
                 return (
@@ -152,10 +153,10 @@ export function ContractsTable({ initialContracts, initialNextCursor }: Contract
                     <button
                       type="button"
                       onClick={() => handleSort(column.key)}
-                      className="inline-flex items-center gap-1 hover:text-gray-900"
+                      className="inline-flex items-center gap-1 hover:text-gray-900 dark:hover:text-gray-100"
                     >
                       {column.label}
-                      <span aria-hidden="true" className={direction ? "" : "text-gray-300"}>
+                      <span aria-hidden="true" className={direction ? "" : "text-gray-300 dark:text-gray-600"}>
                         {direction === "desc" ? "↓" : "↑"}
                       </span>
                     </button>
@@ -166,11 +167,14 @@ export function ContractsTable({ initialContracts, initialNextCursor }: Contract
           </thead>
           <tbody>
             {sorted.map((contract) => (
-              <tr key={contract.id} className="border-b border-gray-100">
+              <tr key={contract.id} className="border-b border-gray-100 dark:border-gray-800">
                 <td className="py-2 font-mono text-xs">
-                  <Link href={`/contracts/${contract.id}`} className="hover:underline">
-                    {contract.address}
-                  </Link>
+                  <span className="inline-flex items-center gap-2">
+                    <Link href={`/contracts/${contract.id}`} className="hover:underline">
+                      {contract.address}
+                    </Link>
+                    <CopyButton value={contract.address} ariaLabel={`Copy address ${contract.address}`} />
+                  </span>
                 </td>
                 <td className="py-2">{contract.name ?? "—"}</td>
                 <td className="py-2">{contract.network}</td>
@@ -180,10 +184,10 @@ export function ContractsTable({ initialContracts, initialNextCursor }: Contract
         </table>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       {sorted.length === 0 && !loading && (
-        <p className="text-sm text-gray-500">No contracts match the current filters.</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">No contracts match the current filters.</p>
       )}
 
       {nextCursor !== null && (
@@ -192,7 +196,7 @@ export function ContractsTable({ initialContracts, initialNextCursor }: Contract
             type="button"
             onClick={handleLoadMore}
             disabled={loading}
-            className="rounded border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+            className="rounded border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
           >
             {loading ? "Loading…" : "Load more"}
           </button>
