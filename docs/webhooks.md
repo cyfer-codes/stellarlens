@@ -84,6 +84,9 @@ requests, so they need a `full`-scope key; a `read`-scope key gets `403`.
 POST /your/webhook/path HTTP/1.1
 Content-Type: application/json
 X-Webhook-Signature: sha256=<64 lowercase hex characters>
+X-Webhook-Id: wh_<webhookId>_evt_<eventId>
+X-Webhook-Event: transfer
+X-Webhook-Attempt: 1
 
 {"eventId":4182,"contractId":7,"ledger":512345,"txHash":"9f2c…","topic":["transfer","GABC…","GDEF…"],"value":"1000000"}
 ```
@@ -97,7 +100,13 @@ X-Webhook-Signature: sha256=<64 lowercase hex characters>
 | `topic` | array | Decoded topic values (`scValToNative`); 64/128/256-bit integers are decimal strings |
 | `value` | any | Decoded event value, same conversion rules as `topic` |
 
-There is no event-type, delivery-id or timestamp header, and the body has no envelope or version
+| Header | Meaning |
+|---|---|
+| `X-Webhook-Id` | Delivery id for this webhook/event pair; identical on every retry — **use it to deduplicate** |
+| `X-Webhook-Event` | `topic[0]` when it is a string, otherwise `unknown` |
+| `X-Webhook-Attempt` | `1` for the first attempt, incremented on each retry |
+
+There is no timestamp header, and the body has no envelope or version
 field. The raw XDR isn't included; fetch it from `GET /contracts/:contractId/events` if you need it.
 
 Respond with any `2xx` status within **5 seconds**. The response body is ignored. Any other status, a
@@ -262,6 +271,7 @@ x-api-key: <key>
   "data": [
     {
       "id": 125,
+      "idempotencyKey": "wh_12_evt_4183",
       "status": "failed",
       "attempts": 4,
       "lastError": "webhook responded with status 503",
@@ -270,6 +280,7 @@ x-api-key: <key>
     },
     {
       "id": 124,
+      "idempotencyKey": "wh_12_evt_4182",
       "status": "success",
       "attempts": 1,
       "lastError": null,

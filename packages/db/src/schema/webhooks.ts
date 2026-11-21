@@ -30,6 +30,8 @@ export const webhookDeliveries = pgTable(
     eventId: bigint("event_id", { mode: "number" })
       .notNull()
       .references(() => events.id, { onDelete: "cascade" }),
+    // Value sent as the X-Webhook-Id header; identical for every retry of a webhook/event pair.
+    idempotencyKey: text("idempotency_key"),
     status: text("status").notNull(),
     attempts: integer("attempts").default(0).notNull(),
     lastError: text("last_error"),

@@ -120,7 +120,22 @@ export async function assertPublicWebhookUrl(
   }
 }
 
-async function postWebhook(url: string, body: string, signature: string): Promise<void> {
+/** Stable across every retry of the same webhook/event pair so receivers can deduplicate. */
+export function webhookDeliveryId(webhookId: number, eventId: number): string {
+  return `wh_${webhookId}_evt_${eventId}`;
+}
+
+function webhookEventType(payload: WebhookEventPayload): string {
+  const eventType = payload.topic[0];
+  return typeof eventType === "string" ? eventType : "unknown";
+}
+
+async function postWebhook(
+  url: string,
+  body: string,
+  signature: string,
+  deliveryHeaders: Record<string, string>
+): Promise<void> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
 
@@ -129,6 +144,7 @@ async function postWebhook(url: string, body: string, signature: string): Promis
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...deliveryHeaders,
         "X-Webhook-Signature": signature
         [WEBHOOK_SIGNATURE_HEADER]: signature
       },
@@ -185,6 +201,7 @@ async function recordDelivery(
   outcome: {
     webhookId: number;
     eventId: number;
+    idempotencyKey: string;
     status: "success" | "failed";
     attempts: number;
     lastError: string | null;
@@ -236,6 +253,7 @@ export async function deliverWebhooksForEvent(
     Array.from({ length: workerCount }, async () => {
       while (nextRecipientIndex < recipients.length) {
         const webhook = recipients[nextRecipientIndex++];
+        const deliveryId = webhookDeliveryId(webhook.id, payload.eventId);
         let attempts = 0;
 
         let secret: string;
@@ -247,7 +265,11 @@ export async function deliverWebhooksForEvent(
             async () => {
               attempts += 1;
               await assertPublicWebhookUrl(webhook.url);
-              return postWebhook(webhook.url, body, signature);
+              return postWebhook(webhook.url, body, signature, {
+                "X-Webhook-Id": deliveryId,
+                "X-Webhook-Event": webhookEventType(payload),
+                "X-Webhook-Attempt": String(attempts)
+              });
             },
             {
               maxRetries: WEBHOOK_MAX_RETRIES,
@@ -260,6 +282,7 @@ export async function deliverWebhooksForEvent(
           await recordDelivery(db, {
             webhookId: webhook.id,
             eventId: payload.eventId,
+            idempotencyKey: deliveryId,
             status: "success",
             attempts,
             lastError: null,
@@ -277,6 +300,7 @@ export async function deliverWebhooksForEvent(
           await recordDelivery(db, {
             webhookId: webhook.id,
             eventId: payload.eventId,
+            idempotencyKey: deliveryId,
             status: "failed",
             attempts,
             lastError: dnsFailure

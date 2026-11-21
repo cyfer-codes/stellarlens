@@ -507,6 +507,94 @@ describe("webhook delivery", () => {
     expect(webhookSpy).toHaveBeenCalledTimes(2);
   });
 
+  it("sends a stable X-Webhook-Id with event and attempt headers across retries", async () => {
+    const db = getTestDb();
+    const contract = await registerContract(db, {
+      address: contractAddress("CONTRACT_HOOK_IDEMPOTENCY"),
+      network: NETWORK
+    });
+    await registerWebhook(contract.id, "idempotency-secret");
+    const [webhook] = await db
+      .select()
+      .from(webhooksTable)
+      .where(eq(webhooksTable.contractId, contract.id));
+    const [event] = await db
+      .insert(eventsTable)
+      .values({ contractId: contract.id, ledger: 1, txHash: "5".repeat(64), topic: "[]" })
+      .returning({ id: eventsTable.id });
+
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const received: Array<{ id: string | null; event: string | null; attempt: string | null }> = [];
+    mswServer.use(
+      http.post(WEBHOOK_URL, ({ request }) => {
+        received.push({
+          id: request.headers.get("x-webhook-id"),
+          event: request.headers.get("x-webhook-event"),
+          attempt: request.headers.get("x-webhook-attempt")
+        });
+        return received.length < 3
+          ? new HttpResponse(null, { status: 500 })
+          : HttpResponse.json({ ok: true });
+      })
+    );
+
+    await deliverWebhooksForEvent(db, {
+      eventId: event.id,
+      contractId: contract.id,
+      contractAddress: contractAddress("CONTRACT_HOOK_IDEMPOTENCY"),
+      ledger: 1,
+      txHash: "5".repeat(64),
+      topic: ["transfer", "GABC"],
+      value: "1"
+    });
+    consoleError.mockRestore();
+
+    const expectedId = `wh_${webhook.id}_evt_${event.id}`;
+    expect(received).toEqual([
+      { id: expectedId, event: "transfer", attempt: "1" },
+      { id: expectedId, event: "transfer", attempt: "2" },
+      { id: expectedId, event: "transfer", attempt: "3" }
+    ]);
+
+    const [delivery] = await db.select().from(webhookDeliveries);
+    expect(delivery.status).toBe("success");
+    expect(delivery.attempts).toBe(3);
+    expect(delivery.idempotencyKey).toBe(expectedId);
+  });
+
+  it("sends X-Webhook-Event: unknown when topic[0] is not a string", async () => {
+    const db = getTestDb();
+    const contract = await registerContract(db, {
+      address: contractAddress("CONTRACT_HOOK_UNKNOWN_EVENT"),
+      network: NETWORK
+    });
+    await registerWebhook(contract.id, "unknown-event-secret");
+    const [event] = await db
+      .insert(eventsTable)
+      .values({ contractId: contract.id, ledger: 1, txHash: "6".repeat(64), topic: "[]" })
+      .returning({ id: eventsTable.id });
+
+    let eventHeader: string | null = null;
+    mswServer.use(
+      http.post(WEBHOOK_URL, ({ request }) => {
+        eventHeader = request.headers.get("x-webhook-event");
+        return HttpResponse.json({ ok: true });
+      })
+    );
+
+    await deliverWebhooksForEvent(db, {
+      eventId: event.id,
+      contractId: contract.id,
+      contractAddress: contractAddress("CONTRACT_HOOK_UNKNOWN_EVENT"),
+      ledger: 1,
+      txHash: "6".repeat(64),
+      topic: [42],
+      value: "1"
+    });
+
+    expect(eventHeader).toBe("unknown");
+  });
+
   it("skips a webhook whose eventTypes doesn't include the event's topic", async () => {
     const db = getTestDb();
     const contract = await registerContract(db, {
