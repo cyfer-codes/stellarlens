@@ -171,6 +171,7 @@ describe("StellarLensClient", () => {
       makeClient(fetchMock).registerContract({ address: "C1", network: "testnet" })
     ).rejects.toMatchObject({
       status: 409,
+      existingId: 42,
       body: { existingId: 42 }
     });
   });
