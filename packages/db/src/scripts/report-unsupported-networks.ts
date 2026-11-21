@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { and, notInArray } from "drizzle-orm";
+import { notInArray } from "drizzle-orm";
 import { createDb, STELLAR_NETWORKS } from "../index.js";
 import { contracts } from "../schema/contracts.js";
 
