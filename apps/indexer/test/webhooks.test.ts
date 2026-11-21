@@ -17,7 +17,7 @@ import {
 } from "../src/config.js";
 import { processEventsBatch } from "../src/events.js";
 import { registerContract } from "../src/registry.js";
-import { assertPublicWebhookUrl, deliverWebhooksForEvent } from "../src/webhooks.js";
+import { assertPublicWebhookUrl, deliverWebhooksForEvent, ipIsPublic } from "../src/webhooks.js";
 import { contractAddress } from "./addresses.js";
 import { mockJsonRpc, TEST_RPC_URL } from "./rpc-mocks.js";
 import { getTestDb, mswServer } from "./setup.js";
@@ -78,6 +78,115 @@ describe("webhook URL IP validation", () => {
         { address: "93.184.216.34" }
       ])
     ).resolves.toBeUndefined();
+  });
+});
+
+// One or more addresses from every IANA IPv4/IPv6 special-purpose block that is not
+// globally reachable, plus boundary checks just outside each private range.
+const NON_PUBLIC_ADDRESSES: Array<[string, string]> = [
+  ["0.0.0.0", "this network 0.0.0.0/8"],
+  ["0.255.255.255", "this network 0.0.0.0/8"],
+  ["10.0.0.1", "private 10.0.0.0/8"],
+  ["10.255.255.255", "private 10.0.0.0/8"],
+  ["100.64.0.1", "shared address space 100.64.0.0/10"],
+  ["100.127.255.254", "shared address space 100.64.0.0/10"],
+  ["127.0.0.1", "loopback 127.0.0.0/8"],
+  ["169.254.169.254", "link-local 169.254.0.0/16"],
+  ["172.16.0.1", "private 172.16.0.0/12"],
+  ["172.31.255.255", "private 172.16.0.0/12"],
+  ["192.0.0.1", "IETF protocol assignments 192.0.0.0/24"],
+  ["192.0.0.9", "IETF protocol assignments 192.0.0.0/24"],
+  ["192.0.2.1", "documentation 192.0.2.0/24"],
+  ["192.88.99.1", "6to4 relay anycast 192.88.99.0/24"],
+  ["192.168.1.1", "private 192.168.0.0/16"],
+  ["198.18.0.1", "benchmarking 198.18.0.0/15"],
+  ["198.19.255.255", "benchmarking 198.18.0.0/15"],
+  ["198.51.100.1", "documentation 198.51.100.0/24"],
+  ["203.0.113.1", "documentation 203.0.113.0/24"],
+  ["224.0.0.1", "multicast 224.0.0.0/4"],
+  ["239.255.255.255", "multicast 224.0.0.0/4"],
+  ["240.0.0.1", "reserved 240.0.0.0/4"],
+  ["255.255.255.255", "limited broadcast"],
+  ["::", "unspecified ::/128"],
+  ["::1", "loopback ::1/128"],
+  ["::10.0.0.1", "IPv4-compatible ::/96"],
+  ["::ffff:10.0.0.1", "IPv4-mapped private"],
+  ["::ffff:127.0.0.1", "IPv4-mapped loopback"],
+  ["::ffff:169.254.169.254", "IPv4-mapped link-local"],
+  ["64:ff9b::a00:1", "NAT64 64:ff9b::/96"],
+  ["64:ff9b::1.1.1.1", "NAT64 64:ff9b::/96"],
+  ["64:ff9b:1::1", "local-use NAT64 64:ff9b:1::/48"],
+  ["100::1", "discard-only 100::/64"],
+  ["2001::1", "Teredo 2001::/32"],
+  ["2001:0:4136:e378:8000:63bf:3fff:fdd2", "Teredo 2001::/32"],
+  ["2001:1::1", "IETF protocol assignments 2001::/23"],
+  ["2001:2::1", "benchmarking 2001:2::/48"],
+  ["2001:3::1", "AMT 2001:3::/32"],
+  ["2001:4:112::1", "AS112-v6 2001:4:112::/48"],
+  ["2001:10::1", "deprecated ORCHID 2001:10::/28"],
+  ["2001:20::1", "ORCHIDv2 2001:20::/28"],
+  ["2001:2f:ffff::1", "ORCHIDv2 2001:20::/28"],
+  ["2001:1ff:ffff::1", "IETF protocol assignments 2001::/23"],
+  ["2001:db8::1", "documentation 2001:db8::/32"],
+  ["2002:a00:1::1", "6to4 2002::/16"],
+  ["2002:c000:204::1", "6to4 2002::/16"],
+  ["3fff::1", "documentation 3fff::/20"],
+  ["3fff:fff:ffff::1", "documentation 3fff::/20"],
+  ["5f00::1", "SRv6 SIDs 5f00::/16"],
+  ["fc00::1", "unique-local fc00::/7"],
+  ["fd12::1", "unique-local fc00::/7"],
+  ["fe80::1", "link-local fe80::/10"],
+  ["fe80::1%eth0", "link-local with zone id"],
+  ["ff02::1", "multicast ff00::/8"]
+];
+
+const PUBLIC_ADDRESSES = [
+  "1.1.1.1",
+  "8.8.8.8",
+  "93.184.216.34",
+  "100.63.255.255",
+  "100.128.0.1",
+  "172.15.255.255",
+  "172.32.0.1",
+  "192.169.0.1",
+  "198.17.255.255",
+  "198.20.0.1",
+  "223.255.255.255",
+  "::ffff:1.1.1.1",
+  "2606:4700::1111",
+  "2001:4860:4860::8888",
+  "2001:200::1",
+  "2a00:1450:4001::1",
+  "2400:cb00::1",
+  "3fff:1000::1"
+];
+
+const MALFORMED_ADDRESSES = [
+  "",
+  "not-an-ip",
+  "256.1.1.1",
+  "1.2.3",
+  "01.2.3.4",
+  "::ffff:999.1.1.1",
+  "1:2:3:4:5:6:7:8:9",
+  "[::1]",
+  "2001:db8::g",
+  "1.1.1.1/32",
+  " 1.1.1.1"
+];
+
+describe("ipIsPublic", () => {
+  it.each(NON_PUBLIC_ADDRESSES)("rejects %s (%s)", (address) => {
+    expect(ipIsPublic(address)).toBe(false);
+  });
+
+  it.each(PUBLIC_ADDRESSES)("accepts public address %s", (address) => {
+    expect(ipIsPublic(address)).toBe(true);
+  });
+
+  it.each(MALFORMED_ADDRESSES)("returns false without throwing for malformed input %j", (address) => {
+    expect(() => ipIsPublic(address)).not.toThrow();
+    expect(ipIsPublic(address)).toBe(false);
   });
 });
 

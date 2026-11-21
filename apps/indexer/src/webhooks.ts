@@ -70,25 +70,35 @@ function ipv6ToBigInt(address: string): bigint {
   return groups.reduce((value, group) => (value << 16n) | BigInt(`0x${group || "0"}`), 0n);
 }
 
-function ipIsPublic(address: string): boolean {
-  const family = isIP(address);
-  if (family === 4) {
-    return ipv4IsPublic(address);
-  }
-  if (family !== 6) {
+/**
+ * True only for globally routable unicast addresses. Anything outside 2000::/3 (loopback,
+ * IPv4-compatible, NAT64 64:ff9b::/96 and 64:ff9b:1::/48, discard-only 100::/64, ULA,
+ * link-local, multicast) is rejected, as is the whole IETF protocol assignment block
+ * 2001::/23 (Teredo, benchmarking, ORCHIDv2, ...). Malformed input returns false.
+ */
+export function ipIsPublic(address: string): boolean {
+  try {
+    const family = isIP(address);
+    if (family === 4) {
+      return ipv4IsPublic(address);
+    }
+    if (family !== 6) {
+      return false;
+    }
+
+    const value = ipv6ToBigInt(address);
+    if (value >> 32n === 0xffffn) {
+      const ipv4Bytes = (value & 0xffffffffn).toString(16).padStart(8, "0").match(/.{2}/g)!;
+      return ipv4IsPublic(ipv4Bytes.map((byte) => parseInt(byte, 16)).join("."));
+    }
+
+    const globalUnicast = value >> 125n === 0b001n;
+    const documentation = value >> 96n === 0x20010db8n || value >> 108n === 0x3fff0n;
+    const specialUse = value >> 105n === 0x100080n || value >> 112n === 0x2002n;
+    return globalUnicast && !documentation && !specialUse;
+  } catch {
     return false;
   }
-
-  const value = ipv6ToBigInt(address);
-  if (value >> 32n === 0xffffn) {
-    const ipv4Bytes = (value & 0xffffffffn).toString(16).padStart(8, "0").match(/.{2}/g)!;
-    return ipv4IsPublic(ipv4Bytes.map((byte) => parseInt(byte, 16)).join("."));
-  }
-
-  const globalUnicast = value >> 125n === 0b001n;
-  const documentation = value >> 96n === 0x20010db8n;
-  const specialUse = value >> 105n === 0x100080n || value >> 112n === 0x2002n;
-  return globalUnicast && !documentation && !specialUse;
 }
 
 export class NonPublicWebhookUrlError extends Error {
