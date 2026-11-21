@@ -1,10 +1,16 @@
 export {
+  DEFAULT_TIMEOUT_MS,
   StellarLensClient,
   type StellarLensClientOptions,
   type StellarLensRequestInit,
   type StellarLensResponseInfo
 } from "./client.js";
-export { StellarLensApiError, StellarLensHookError, type StellarLensHook } from "./errors.js";
+export {
+  StellarLensApiError,
+  StellarLensHookError,
+  StellarLensTimeoutError,
+  type StellarLensHook
+} from "./errors.js";
 export { formatAmount, parseAmount, type FormatAmountOptions } from "./amount.js";
 export { escapeCsvCell, toCsv, toCsvRows } from "./csv.js";
 export {
@@ -52,6 +58,7 @@ export type {
   CreateWebhookInput,
   UpdateWebhookInput,
   WebhookDelivery,
-  Page
+  Page,
+  RequestOptions
 } from "./types.js";
 export type { components, operations, paths } from "./generated/openapi.js";
