@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { registerContract, ContractAlreadyRegisteredError } from "./registry.js";
+import { registerContract } from "./registry.js";
 
 const address = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4";
 const registration = { address, name: "New name", network: "testnet" };
