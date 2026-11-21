@@ -17,7 +17,7 @@ import {
 } from "../src/config.js";
 import { processEventsBatch } from "../src/events.js";
 import { registerContract } from "../src/registry.js";
-import { assertPublicWebhookUrl, deliverWebhooksForEvent } from "../src/webhooks.js";
+import { assertPublicWebhookUrl, deliverWebhooksForEvent, parseRetryAfterMs } from "../src/webhooks.js";
 import { contractAddress } from "./addresses.js";
 import { mockJsonRpc, TEST_RPC_URL } from "./rpc-mocks.js";
 import { getTestDb, mswServer } from "./setup.js";
@@ -540,5 +540,125 @@ describe("webhook delivery", () => {
       .from(contracts)
       .where(eq(contracts.address, contractAddress("CONTRACT_NO_HOOK")));
     expect(row).toBeDefined();
+  });
+});
+
+describe("webhook HTTP retry semantics", () => {
+  const TX_HASH = "9".repeat(64);
+
+  async function seedWebhook(label: string) {
+    const db = getTestDb();
+    const address = contractAddress(label);
+    const contract = await registerContract(db, { address, network: NETWORK });
+    await registerWebhook(contract.id, "http-secret");
+    const [event] = await db
+      .insert(eventsTable)
+      .values({ contractId: contract.id, ledger: 1, txHash: TX_HASH, topic: "[]" })
+      .returning({ id: eventsTable.id });
+
+    return { db, contract, address, eventId: event.id };
+  }
+
+  function deliver(db: Database, contractId: number, address: string, eventId: number) {
+    return deliverWebhooksForEvent(db, {
+      eventId,
+      contractId,
+      contractAddress: address,
+      ledger: 1,
+      txHash: TX_HASH,
+      topic: ["fee"],
+      value: "-1"
+    });
+  }
+
+  it("does not retry a 4xx response that can never succeed", async () => {
+    const { db, contract, address, eventId } = await seedWebhook("CONTRACT_HOOK_404");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const webhookSpy = vi.fn(() => new HttpResponse(null, { status: 404 }));
+
+    mswServer.use(http.post(WEBHOOK_URL, webhookSpy));
+    await deliver(db, contract.id, address, eventId);
+    consoleError.mockRestore();
+
+    expect(webhookSpy).toHaveBeenCalledTimes(1);
+    const [delivery] = await db.select().from(webhookDeliveries);
+    expect(delivery.status).toBe("failed");
+    expect(delivery.attempts).toBe(1);
+    expect(delivery.lastError).toContain("status 404");
+  });
+
+  it("retries a 408 Request Timeout until it succeeds", async () => {
+    const { db, contract, address, eventId } = await seedWebhook("CONTRACT_HOOK_408");
+    let callCount = 0;
+    const webhookSpy = vi.fn(() => {
+      callCount += 1;
+      return callCount < 2
+        ? new HttpResponse(null, { status: 408 })
+        : HttpResponse.json({ ok: true });
+    });
+
+    mswServer.use(http.post(WEBHOOK_URL, webhookSpy));
+    await deliver(db, contract.id, address, eventId);
+
+    expect(webhookSpy).toHaveBeenCalledTimes(2);
+    const [delivery] = await db.select().from(webhookDeliveries);
+    expect(delivery.status).toBe("success");
+  });
+
+  it("retries a 429 and honours the Retry-After delay", async () => {
+    const { db, contract, address, eventId } = await seedWebhook("CONTRACT_HOOK_429");
+    let callCount = 0;
+    const webhookSpy = vi.fn(() => {
+      callCount += 1;
+      return callCount < 2
+        ? new HttpResponse(null, { status: 429, headers: { "Retry-After": "0" } })
+        : HttpResponse.json({ ok: true });
+    });
+
+    mswServer.use(http.post(WEBHOOK_URL, webhookSpy));
+    await deliver(db, contract.id, address, eventId);
+
+    expect(webhookSpy).toHaveBeenCalledTimes(2);
+    const [delivery] = await db.select().from(webhookDeliveries);
+    expect(delivery.status).toBe("success");
+  });
+
+  it("pauses the webhook on a 410 Gone instead of retrying", async () => {
+    const { db, contract, address, eventId } = await seedWebhook("CONTRACT_HOOK_410");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const webhookSpy = vi.fn(() => new HttpResponse(null, { status: 410 }));
+
+    mswServer.use(http.post(WEBHOOK_URL, webhookSpy));
+    await deliver(db, contract.id, address, eventId);
+
+    expect(webhookSpy).toHaveBeenCalledTimes(1);
+    expect(consoleWarn).toHaveBeenCalledWith(expect.stringContaining("410 Gone"));
+
+    const [updated] = await db
+      .select()
+      .from(webhooksTable)
+      .where(eq(webhooksTable.contractId, contract.id));
+    expect(updated.active).toBe(false);
+
+    const [delivery] = await db.select().from(webhookDeliveries);
+    expect(delivery.status).toBe("failed");
+    expect(delivery.attempts).toBe(1);
+    expect(delivery.lastError).toContain("status 410");
+
+    consoleError.mockRestore();
+    consoleWarn.mockRestore();
+  });
+
+  it("parses Retry-After as seconds or an HTTP date", () => {
+    expect(parseRetryAfterMs("120")).toBe(120_000);
+    expect(parseRetryAfterMs("0")).toBe(0);
+    expect(parseRetryAfterMs(null)).toBeUndefined();
+    expect(parseRetryAfterMs("not-a-date")).toBeUndefined();
+
+    const now = Date.parse("2026-01-01T00:00:00.000Z");
+    expect(parseRetryAfterMs("Thu, 01 Jan 2026 00:00:30 GMT", now)).toBe(30_000);
+    // A date already in the past yields no wait rather than a negative delay.
+    expect(parseRetryAfterMs("Thu, 01 Jan 2020 00:00:00 GMT", now)).toBe(0);
   });
 });

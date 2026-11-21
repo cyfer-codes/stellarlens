@@ -2,18 +2,15 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { and, eq } from "drizzle-orm";
 import {
-  decryptWebhookSecret,
   webhookDeliveries as webhookDeliveriesTable,
   webhooks as webhooksTable,
   type Database
 } from "@stellarlens/db";
-import { signWebhookPayload } from "@stellarlens/sdk/webhooks";
 import {
   WEBHOOK_CONCURRENCY,
   WEBHOOK_MAX_RETRIES,
   WEBHOOK_RETRY_BASE_DELAY_MS,
   WEBHOOK_RETRY_MAX_DELAY_MS,
-  WEBHOOK_SECRET_KEY,
   WEBHOOK_TIMEOUT_MS
 } from "./config.js";
 import { withRetry } from "./retry.js";
@@ -110,6 +107,47 @@ export async function assertPublicWebhookUrl(
   }
 }
 
+/**
+ * A non-2xx response from a webhook endpoint. Carries the status code and, when the receiver sent a
+ * `Retry-After` header, the delay it asked us to wait before the next attempt.
+ */
+export class WebhookResponseError extends Error {
+  readonly status: number;
+  readonly retryAfterMs: number | undefined;
+
+  constructor(status: number, retryAfterMs?: number) {
+    super(`webhook responded with status ${status}`);
+    this.name = "WebhookResponseError";
+    this.status = status;
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+/**
+ * Parses a `Retry-After` header, which is either a delay in seconds or an HTTP date. Returns the
+ * delay in milliseconds, or `undefined` when the header is absent or malformed.
+ */
+export function parseRetryAfterMs(header: string | null, now = Date.now()): number | undefined {
+  if (header === null) {
+    return undefined;
+  }
+
+  const value = header.trim();
+  if (value === "") {
+    return undefined;
+  }
+
+  if (/^\d+$/.test(value)) {
+    return Number(value) * 1000;
+  }
+
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) {
+    return undefined;
+  }
+  return Math.max(0, timestamp - now);
+}
+
 async function postWebhook(url: string, body: string, signature: string): Promise<void> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
@@ -119,7 +157,6 @@ async function postWebhook(url: string, body: string, signature: string): Promis
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Webhook-Signature": signature
         [WEBHOOK_SIGNATURE_HEADER]: signature
       },
       body,
@@ -127,7 +164,10 @@ async function postWebhook(url: string, body: string, signature: string): Promis
     });
 
     if (!response.ok) {
-      throw new Error(`webhook responded with status ${response.status}`);
+      throw new WebhookResponseError(
+        response.status,
+        parseRetryAfterMs(response.headers.get("retry-after"))
+      );
     }
   } finally {
     clearTimeout(timeout);
@@ -164,6 +204,48 @@ function isDnsResolutionFailure(err: unknown): boolean {
   }
 
   return false;
+}
+
+/**
+ * HTTP-aware retry policy for webhook deliveries:
+ * - 4xx responses other than 408 (Request Timeout) and 429 (Too Many Requests) will never
+ *   succeed, so retrying them only wastes time and delays the next event.
+ * - 410 Gone means the receiver is permanently gone, so there is nothing left to retry.
+ * Blocked destinations and DNS failures were already non-retryable.
+ */
+function shouldRetryWebhookDelivery(err: unknown): boolean {
+  if (err instanceof NonPublicWebhookUrlError || isDnsResolutionFailure(err)) {
+    return false;
+  }
+
+  if (err instanceof WebhookResponseError) {
+    const { status } = err;
+    if (status === 410) {
+      return false;
+    }
+    if (status >= 400 && status < 500 && status !== 408 && status !== 429) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/** Honour a receiver's `Retry-After` delay when it sent one; `withRetry` caps it at `maxDelayMs`. */
+function webhookRetryDelayMs(err: unknown): number | undefined {
+  return err instanceof WebhookResponseError ? err.retryAfterMs : undefined;
+}
+
+/** A 410 Gone means the endpoint is permanently gone, so pause the webhook until an operator resumes it. */
+async function pauseWebhook(db: Database, webhook: { id: number; url: string }): Promise<void> {
+  try {
+    await db.update(webhooksTable).set({ active: false }).where(eq(webhooksTable.id, webhook.id));
+    console.warn(
+      `webhook ${webhook.id} for ${webhook.url} paused (active = false) after a 410 Gone response`
+    );
+  } catch (err) {
+    console.error(`webhook ${webhook.id} could not be paused after a 410 Gone response:`, err);
+  }
 }
 
 /**
@@ -228,9 +310,7 @@ export async function deliverWebhooksForEvent(
         const webhook = recipients[nextRecipientIndex++];
         let attempts = 0;
 
-        let secret: string;
         try {
-          const signature = signWebhookPayload(body, webhook.secret);
           const signature = signWebhookPayload(webhook.secret, body);
           await withRetry(
             `webhook:${webhook.id}`,
@@ -243,7 +323,8 @@ export async function deliverWebhooksForEvent(
               maxRetries: WEBHOOK_MAX_RETRIES,
               baseDelayMs: WEBHOOK_RETRY_BASE_DELAY_MS,
               maxDelayMs: WEBHOOK_RETRY_MAX_DELAY_MS,
-              shouldRetry: (err) => !(err instanceof NonPublicWebhookUrlError) && !isDnsResolutionFailure(err)
+              shouldRetry: shouldRetryWebhookDelivery,
+              retryDelayMs: webhookRetryDelayMs
             }
           );
 
@@ -257,12 +338,20 @@ export async function deliverWebhooksForEvent(
           });
         } catch (err) {
           const dnsFailure = isDnsResolutionFailure(err);
+          const gone = err instanceof WebhookResponseError && err.status === 410;
+
           console.error(
             dnsFailure
               ? `webhook ${webhook.id} for contract ${contractAddress} endpoint ${webhook.url} is unreachable due to DNS resolution failure:`
-              : `webhook ${webhook.id} for contract ${contractAddress} delivery failed after retries:`,
+              : gone
+                ? `webhook ${webhook.id} for contract ${contractAddress} endpoint ${webhook.url} is permanently gone (410 Gone):`
+                : `webhook ${webhook.id} for contract ${contractAddress} delivery failed after retries:`,
             err
           );
+
+          if (gone) {
+            await pauseWebhook(db, webhook);
+          }
 
           await recordDelivery(db, {
             webhookId: webhook.id,
