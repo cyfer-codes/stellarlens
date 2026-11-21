@@ -49,27 +49,34 @@ describe("contracts (e2e)", () => {
     });
   });
 
-  it("upserts on re-registering the same address", async () => {
-    await request(getApp().getHttpServer())
+  it("returns 409 with the existing id and preserves data when re-registering an address", async () => {
+    const address = contractAddress("CONTRACT_REGISTER_C");
+    const created = await request(getApp().getHttpServer())
       .post("/contracts")
       .set("x-api-key", apiKey)
-      .send({
-        address: contractAddress("CONTRACT_REGISTER_C"),
-        network: "testnet",
-        name: "Original"
-      });
+      .send({ address, network: "testnet", name: "Original" });
 
-    const updateResponse = await request(getApp().getHttpServer())
+    expect(created.status).toBe(201);
+
+    const duplicate = await request(getApp().getHttpServer())
       .post("/contracts")
       .set("x-api-key", apiKey)
-      .send({
-        address: contractAddress("CONTRACT_REGISTER_C"),
-        network: "testnet",
-        name: "Renamed"
-      });
+      .send({ address, network: "mainnet", name: "Renamed" });
 
-    expect(updateResponse.status).toBe(201);
-    expect(updateResponse.body.name).toBe("Renamed");
+    expect(duplicate.status).toBe(409);
+    expect(duplicate.body.existingId).toBe(created.body.id);
+
+    const stored = await request(getApp().getHttpServer())
+      .get(`/contracts/${created.body.id}`)
+      .set("x-api-key", apiKey);
+
+    expect(stored.status).toBe(200);
+    expect(stored.body).toMatchObject({
+      id: created.body.id,
+      address,
+      network: "testnet",
+      name: "Original"
+    });
 
     const listResponse = await request(getApp().getHttpServer())
       .get("/contracts")
