@@ -31,7 +31,7 @@ describe("registerContract", () => {
     where.mockResolvedValueOnce([{ id: 19 }]);
 
     await expect(registerContract(db, { ...registration, name: "Replacement", network: "mainnet" }))
-      .rejects.toBeInstanceOf(ContractAlreadyRegisteredError);
-    await expect(registerContract(db, registration)).rejects.toBeInstanceOf(Error);
+      .rejects.toMatchObject({ name: "ContractAlreadyRegisteredError", existingId: 19, statusCode: 409 });
+    expect(onConflictDoNothing).toHaveBeenCalledTimes(1);
   });
 });
