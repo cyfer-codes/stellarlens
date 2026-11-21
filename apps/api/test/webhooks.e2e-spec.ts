@@ -1,6 +1,6 @@
 import { webhookDeliveries } from "@stellarlens/db";
 import request from "supertest";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApiKey } from "./helpers";
 import { getApp, getTestDb } from "./setup";
 
@@ -183,5 +183,69 @@ describe("webhooks (e2e)", () => {
       .set("x-api-key", apiKey);
 
     expect(response.status).toBe(404);
+  });
+
+  describe("url scheme", () => {
+    const originalAllowInsecure = process.env.ALLOW_INSECURE_WEBHOOK_URLS;
+
+    afterEach(() => {
+      if (originalAllowInsecure === undefined) {
+        delete process.env.ALLOW_INSECURE_WEBHOOK_URLS;
+      } else {
+        process.env.ALLOW_INSECURE_WEBHOOK_URLS = originalAllowInsecure;
+      }
+    });
+
+    it("rejects a plain http:// url with a descriptive error", async () => {
+      delete process.env.ALLOW_INSECURE_WEBHOOK_URLS;
+      const contractId = await registerContract(apiKey, "CONTRACT_WEBHOOKS_M");
+
+      const response = await request(getApp().getHttpServer())
+        .post(`/contracts/${contractId}/webhooks`)
+        .set("x-api-key", apiKey)
+        .send({ url: "http://example.com/webhook" });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toEqual(
+        expect.arrayContaining([expect.stringContaining("url must use https://")])
+      );
+    });
+
+    it("rejects http:// when ALLOW_INSECURE_WEBHOOK_URLS is set to anything other than true", async () => {
+      process.env.ALLOW_INSECURE_WEBHOOK_URLS = "1";
+      const contractId = await registerContract(apiKey, "CONTRACT_WEBHOOKS_N");
+
+      const response = await request(getApp().getHttpServer())
+        .post(`/contracts/${contractId}/webhooks`)
+        .set("x-api-key", apiKey)
+        .send({ url: "http://localhost:4000/webhook" });
+
+      expect(response.status).toBe(400);
+    });
+
+    it("accepts an https:// url", async () => {
+      delete process.env.ALLOW_INSECURE_WEBHOOK_URLS;
+      const contractId = await registerContract(apiKey, "CONTRACT_WEBHOOKS_O");
+
+      const response = await request(getApp().getHttpServer())
+        .post(`/contracts/${contractId}/webhooks`)
+        .set("x-api-key", apiKey)
+        .send({ url: "https://example.com/webhook" });
+
+      expect(response.status).toBe(201);
+    });
+
+    it("accepts an http:// url when ALLOW_INSECURE_WEBHOOK_URLS=true for local development", async () => {
+      process.env.ALLOW_INSECURE_WEBHOOK_URLS = "true";
+      const contractId = await registerContract(apiKey, "CONTRACT_WEBHOOKS_P");
+
+      const response = await request(getApp().getHttpServer())
+        .post(`/contracts/${contractId}/webhooks`)
+        .set("x-api-key", apiKey)
+        .send({ url: "http://localhost:4000/webhook" });
+
+      expect(response.status).toBe(201);
+      expect(response.body.url).toBe("http://localhost:4000/webhook");
+    });
   });
 });

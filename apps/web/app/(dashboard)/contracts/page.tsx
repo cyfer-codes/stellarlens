@@ -1,9 +1,14 @@
+import type { Metadata } from "next";
 import { AddContractForm } from "@/components/AddContractForm";
 import { ContractsTable } from "@/components/ContractsTable";
 import { ContractsOnboarding } from "@/components/ContractsOnboarding";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { listContracts } from "@/lib/api";
 import { getSession } from "@/lib/session";
+
+export const metadata: Metadata = {
+  title: "Contracts"
+};
 
 export default async function ContractsPage() {
   const [contracts, session] = await Promise.all([listContracts(), getSession()]);

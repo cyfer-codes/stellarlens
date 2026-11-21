@@ -1,4 +1,9 @@
+import type { Metadata } from "next";
 import { ApiKeysManager } from "@/components/ApiKeysManager";
+
+export const metadata: Metadata = {
+  title: "Settings"
+};
 
 export default function SettingsPage() {
   return (

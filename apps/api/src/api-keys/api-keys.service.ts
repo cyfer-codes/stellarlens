@@ -27,7 +27,8 @@ export class ApiKeysService {
         id: apiKeys.id,
         name: apiKeys.name,
         createdAt: apiKeys.createdAt,
-        revokedAt: apiKeys.revokedAt
+        revokedAt: apiKeys.revokedAt,
+        lastUsedAt: apiKeys.lastUsedAt
       })
       .from(apiKeys)
       .orderBy(desc(apiKeys.createdAt));

@@ -1,5 +1,10 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { EmptyState } from "@/components/ui/EmptyState";
+
+export const metadata: Metadata = {
+  title: "Transfers"
+};
 
 export default function TransfersPage() {
   return (

@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "stellarlens",
+  title: {
+    default: "stellarlens",
+    template: "%s · stellarlens"
+  },
   description: "stellarlens web app"
 };
 
