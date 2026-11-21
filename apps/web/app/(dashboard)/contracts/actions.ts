@@ -18,7 +18,11 @@ function getApiValidationMessage(error: unknown): string {
     return message;
   }
   try {
-    const parsed = JSON.parse(body) as { message?: string | string[] };
+    const parsed = JSON.parse(body) as { message?: string | string[]; existingId?: number; statusCode?: number };
+    if (parsed.statusCode === 409 && typeof parsed.existingId === "number") {
+      const detail = Array.isArray(parsed.message) ? parsed.message.join(" ") : parsed.message;
+      return `Contract #${parsed.existingId} is already registered. ${detail ?? "Use the existing contract to make changes."}`;
+    }
     return Array.isArray(parsed.message) ? parsed.message.join(" ") : parsed.message ?? message;
   } catch {
     return message;
