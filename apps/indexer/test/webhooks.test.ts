@@ -51,12 +51,20 @@ async function registerWebhook(
   contractId: number,
   secret: string,
   eventTypes?: string[],
-  active = true
+  active = true,
+  filter?: { topics?: Array<string | null> }
 ) {
   const db = getTestDb();
   await db
     .insert(webhooksTable)
-    .values({ contractId, url: WEBHOOK_URL, secret, eventTypes: eventTypes ?? null, active });
+    .values({
+      contractId,
+      url: WEBHOOK_URL,
+      secret,
+      eventTypes: eventTypes ?? null,
+      filter: filter ?? null,
+      active
+    });
 }
 
 describe("webhook URL IP validation", () => {
@@ -506,6 +514,83 @@ describe("webhook delivery", () => {
     await processEventsBatch(db, makeServer());
 
     expect(webhookSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("fires a webhook whose structured filter matches positional topics with wildcard", async () => {
+    const db = getTestDb();
+    const contract = await registerContract(db, {
+      address: contractAddress("CONTRACT_HOOK_FILTER_MATCH"),
+      network: NETWORK
+    });
+    // Subscribe to events where topic[0] == "transfer" and topic[2] == "RECIPIENT_XYZ"
+    await registerWebhook(contract.id, "filter-secret", undefined, true, {
+      topics: ["transfer", null, "RECIPIENT_XYZ"]
+    });
+
+    const webhookSpy = vi.fn(() => HttpResponse.json({ ok: true }));
+
+    mswServer.use(
+      mockJsonRpc({
+        getLatestLedger: () => buildLatestLedger(8600),
+        getEvents: () => ({
+          events: [
+            {
+              id: "0000000000000000000-0000000000",
+              ledger: 8605,
+              txHash: "e".repeat(64),
+              contractId: contractAddress("CONTRACT_HOOK_FILTER_MATCH"),
+              topic: [symbolXdr("transfer"), symbolXdr("SENDER_123"), symbolXdr("RECIPIENT_XYZ")],
+              value: i128Xdr(500n)
+            }
+          ],
+          cursor: "CURSOR_HOOK_FILTER_MATCH",
+          latestLedger: 8605
+        })
+      }),
+      http.post(WEBHOOK_URL, webhookSpy)
+    );
+
+    await processEventsBatch(db, makeServer());
+
+    expect(webhookSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips a webhook whose structured filter does not match positional topic", async () => {
+    const db = getTestDb();
+    const contract = await registerContract(db, {
+      address: contractAddress("CONTRACT_HOOK_FILTER_MISMATCH"),
+      network: NETWORK
+    });
+    await registerWebhook(contract.id, "filter-secret-mismatch", undefined, true, {
+      topics: ["transfer", null, "EXPECTED_RECIPIENT"]
+    });
+
+    const webhookSpy = vi.fn(() => HttpResponse.json({ ok: true }));
+
+    mswServer.use(
+      mockJsonRpc({
+        getLatestLedger: () => buildLatestLedger(8700),
+        getEvents: () => ({
+          events: [
+            {
+              id: "0000000000000000000-0000000000",
+              ledger: 8705,
+              txHash: "f".repeat(64),
+              contractId: contractAddress("CONTRACT_HOOK_FILTER_MISMATCH"),
+              topic: [symbolXdr("transfer"), symbolXdr("SENDER_123"), symbolXdr("DIFFERENT_RECIPIENT")],
+              value: i128Xdr(500n)
+            }
+          ],
+          cursor: "CURSOR_HOOK_FILTER_MISMATCH",
+          latestLedger: 8705
+        })
+      }),
+      http.post(WEBHOOK_URL, webhookSpy)
+    );
+
+    await processEventsBatch(db, makeServer());
+
+    expect(webhookSpy).not.toHaveBeenCalled();
   });
 
   it("does not throw when a webhook contract has no registered endpoints", async () => {
