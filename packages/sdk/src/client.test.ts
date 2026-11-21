@@ -77,6 +77,40 @@ describe("StellarLensClient", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  describe("limit validation", () => {
+    it("passes an in-range limit through unchanged", async () => {
+      const eventFetch = vi.fn(async (url: string | URL) => {
+        expect(String(url)).toBe("https://api.example.com/contracts/1/events?limit=100");
+        return jsonResponse({ data: [], nextCursor: null });
+      }) as unknown as typeof fetch;
+      const transferFetch = vi.fn(async (url: string | URL) => {
+        expect(String(url)).toBe("https://api.example.com/contracts/1/transfers?limit=1");
+        return jsonResponse({ data: [], nextCursor: null });
+      }) as unknown as typeof fetch;
+
+      await makeClient(eventFetch).listEvents(1, { limit: 100 });
+      await makeClient(transferFetch).listTransfers(1, { limit: 1 });
+
+      expect(eventFetch).toHaveBeenCalledTimes(1);
+      expect(transferFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("rejects limits outside 1-100 before making a request", async () => {
+      const fetchMock = vi.fn() as unknown as typeof fetch;
+      const client = makeClient(fetchMock);
+
+      await expect(client.listEvents(1, { limit: 0 })).rejects.toThrow(RangeError);
+      await expect(client.listEvents(1, { limit: 101 })).rejects.toThrow(
+        /limit must be an integer between 1 and 100/
+      );
+      await expect(client.listTransfers(1, { limit: 0 })).rejects.toThrow(RangeError);
+      await expect(client.listTransfers(1, { limit: 101 })).rejects.toThrow(
+        /limit must be an integer between 1 and 100/
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
   it("strips a trailing slash from baseUrl", async () => {
     const fetchMock = vi.fn(async (url: string | URL) => {
       expect(String(url)).toBe("https://api.example.com/contracts");

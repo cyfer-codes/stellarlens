@@ -41,6 +41,8 @@ export interface StellarLensResponseInfo {
 const DEFAULT_WATCH_INTERVAL_MS = 5000;
 const DEFAULT_WATCH_MAX_BACKOFF_MS = 60_000;
 const DEFAULT_WATCH_PAGE_SIZE = 100;
+const MIN_PAGE_LIMIT = 1;
+const MAX_PAGE_LIMIT = 100;
 
 /** Resolves after `ms`, or immediately once `signal` aborts. Never rejects. */
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -98,6 +100,18 @@ function buildQuery(params?: object): string {
   }
   const qs = search.toString();
   return qs ? `?${qs}` : "";
+}
+
+/** Rejects page sizes the api would reject, before a request is sent. */
+function assertValidLimit(limit: number | undefined): void {
+  if (limit === undefined) {
+    return;
+  }
+  if (!Number.isInteger(limit) || limit < MIN_PAGE_LIMIT || limit > MAX_PAGE_LIMIT) {
+    throw new RangeError(
+      `limit must be an integer between ${MIN_PAGE_LIMIT} and ${MAX_PAGE_LIMIT} (got ${String(limit)})`
+    );
+  }
 }
 
 export class StellarLensClient {
@@ -186,7 +200,8 @@ export class StellarLensClient {
   }
 
   /** Cursor-paginated registered contracts, ordered by id. Filter with `name` (substring) and `network`. */
-  listContracts(params?: ListContractsParams): Promise<Page<Contract>> {
+  async listContracts(params?: ListContractsParams): Promise<Page<Contract>> {
+    assertValidLimit(params?.limit);
     return this.request<Page<Contract>>(`/contracts${buildQuery(params)}`);
   }
 
@@ -222,7 +237,8 @@ export class StellarLensClient {
    * Cursor-paginated events for a contract, oldest first. Pass `order: "desc"` to page newest-first instead
    * (`{ order: "desc", limit: 1 }` returns the latest event).
    */
-  listEvents(contractId: number, params?: ListEventsParams): Promise<Page<EventRecord>> {
+  async listEvents(contractId: number, params?: ListEventsParams): Promise<Page<EventRecord>> {
+    assertValidLimit(params?.limit);
     return this.request<Page<EventRecord>>(`/contracts/${contractId}/events${buildQuery(params)}`);
   }
 
@@ -247,6 +263,7 @@ export class StellarLensClient {
       topic,
       onError
     } = options;
+    assertValidLimit(limit);
     const path = (cursor: number | undefined) =>
       `/contracts/${contractId}/events${buildQuery({ cursor, limit, topic })}`;
 
@@ -303,7 +320,8 @@ export class StellarLensClient {
   }
 
   /** Cursor-paginated token transfers for a contract, oldest first. */
-  listTransfers(contractId: number, params?: ListTransfersParams): Promise<Page<TransferRecord>> {
+  async listTransfers(contractId: number, params?: ListTransfersParams): Promise<Page<TransferRecord>> {
+    assertValidLimit(params?.limit);
     return this.request<Page<TransferRecord>>(`/contracts/${contractId}/transfers${buildQuery(params)}`);
   }
 
