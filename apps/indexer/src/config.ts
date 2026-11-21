@@ -1,4 +1,7 @@
 import "dotenv/config";
+import { STELLAR_NETWORKS, type StellarNetwork } from "@stellarlens/db";
+
+export { STELLAR_NETWORKS, type StellarNetwork };
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -22,8 +25,6 @@ function positiveIntegerEnv(name: string, defaultValue: number): number {
 }
 
 export const SOROBAN_RPC_URL = requireEnv("SOROBAN_RPC_URL");
-export const STELLAR_NETWORKS = ["testnet", "futurenet", "mainnet", "standalone"] as const;
-export type StellarNetwork = (typeof STELLAR_NETWORKS)[number];
 
 const stellarNetwork = requireEnv("STELLAR_NETWORK");
 function isStellarNetwork(value: string): value is StellarNetwork {
