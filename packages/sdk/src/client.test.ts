@@ -179,6 +179,25 @@ describe("StellarLensClient", () => {
     expect(response.results[0]).toMatchObject({ status: "created", id: 1 });
   });
 
+  it("ping calls GET /health and resolves with its status", async () => {
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      expect(String(url)).toBe("https://api.example.com/health");
+      expect(init?.method).toBe("GET");
+      return jsonResponse({ status: "ok" });
+    }) as unknown as typeof fetch;
+
+    await expect(makeClient(fetchMock).ping()).resolves.toEqual({ status: "ok" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("ping rejects with StellarLensApiError when the api is unhealthy", async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ status: "error" }), { status: 503 })
+    ) as unknown as typeof fetch;
+
+    await expect(makeClient(fetchMock).ping()).rejects.toBeInstanceOf(StellarLensApiError);
+  });
+
   it("throws StellarLensApiError with the parsed json body on failure", async () => {
     const fetchMock = vi.fn(
       async () => new Response(JSON.stringify({ message: "not found" }), { status: 404 })

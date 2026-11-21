@@ -11,6 +11,7 @@ type Schemas = components["schemas"];
 type QueryOf<Op extends keyof operations> = NonNullable<operations[Op]["parameters"]["query"]>;
 
 export type ApiError = Schemas["ApiError"];
+export type HealthStatus = Schemas["HealthStatus"];
 
 export type Contract = Schemas["Contract"];
 export type RegisterContractInput = Schemas["RegisterContractInput"];

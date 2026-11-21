@@ -6,6 +6,7 @@ import type {
   ContractStats,
   EventRecord,
   GetStatsParams,
+  HealthStatus,
   ListContractsParams,
   ListEventsParams,
   ListTransfersParams,
@@ -189,6 +190,14 @@ export class StellarLensClient {
     }
 
     return (await response.json()) as T;
+  }
+
+  /**
+   * Calls `GET /health` and resolves once the api answers — the quickest check that `baseUrl` points at a live
+   * stellarlens api. Rejects with a {@link StellarLensApiError} on a non-2xx response.
+   */
+  ping(): Promise<HealthStatus> {
+    return this.request<HealthStatus>("/health");
   }
 
   /** Registers a new contract, or updates the name/network of one already registered at that address. */
