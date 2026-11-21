@@ -67,7 +67,7 @@ describe("ContractsService", () => {
 
   describe("findOne", () => {
     it("returns the found contract", async () => {
-      const contract = { id: 1, address: inputAddress(), name: "Contract", network: "testnet" };
+      const contract = { id: 1, address: inputAddress(), name: "Contract", network: "testnet", decimals: null, symbol: null };
       mockWhere.mockResolvedValueOnce([contract]);
       await expect(service.findOne(1)).resolves.toEqual(contract);
     });
