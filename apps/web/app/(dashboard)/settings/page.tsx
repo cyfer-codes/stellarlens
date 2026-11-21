@@ -10,7 +10,7 @@ export default async function SettingsPage() {
     <div className="space-y-10">
       <div>
         <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
           Manage the api keys used to authenticate against the stellarlens api.
         </p>
       </div>

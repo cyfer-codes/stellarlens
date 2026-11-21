@@ -70,8 +70,8 @@ export function ContractHeader({ contract, authenticated }: { contract: Contract
       {editing ? (
         <form onSubmit={handleSave} className="max-w-sm space-y-2">
           <div>
-            <label htmlFor="contract-name" className="block text-sm font-medium text-gray-700">
-              Name <span className="text-gray-400">(optional)</span>
+            <label htmlFor="contract-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Name <span className="text-gray-400 dark:text-gray-500">(optional)</span>
             </label>
             <input
               id="contract-name"
@@ -79,15 +79,15 @@ export function ContractHeader({ contract, authenticated }: { contract: Contract
               onChange={(event) => setNameInput(event.target.value)}
               placeholder="Contract name"
               autoFocus
-              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm"
             />
           </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
           <div className="flex items-center gap-2">
             <button
               type="submit"
               disabled={saving}
-              className="rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+              className="rounded bg-gray-900 dark:bg-gray-100 px-4 py-2 text-sm font-medium text-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-200 disabled:opacity-50"
             >
               {saving ? "Saving…" : "Save"}
             </button>
@@ -95,7 +95,7 @@ export function ContractHeader({ contract, authenticated }: { contract: Contract
               type="button"
               onClick={handleCancel}
               disabled={saving}
-              className="rounded border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              className="rounded border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
             >
               Cancel
             </button>
@@ -108,20 +108,20 @@ export function ContractHeader({ contract, authenticated }: { contract: Contract
             <button
               type="button"
               onClick={startEditing}
-              className="text-xs font-medium text-gray-600 hover:underline"
+              className="text-xs font-medium text-gray-600 dark:text-gray-400 hover:underline"
             >
               Edit name
             </button>
           )}
         </div>
       )}
-      <p className="mt-1 font-mono text-xs text-gray-500">{contract.address}</p>
-      <div className="mt-1 flex items-center gap-2 text-sm text-gray-500">
+      <p className="mt-1 font-mono text-xs text-gray-500 dark:text-gray-400">{contract.address}</p>
+      <div className="mt-1 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
         <span>{contract.network}</span>
         {status && (
           <span
             title={status.status === "live" ? "The indexer is updating this network." : status.status === "behind" ? "The indexer is behind the network head." : "No indexer checkpoint exists for this network."}
-            className="rounded-full border border-gray-300 px-2 py-0.5 text-xs font-medium text-gray-700"
+            className="rounded-full border border-gray-300 dark:border-gray-600 px-2 py-0.5 text-xs font-medium text-gray-700 dark:text-gray-300"
           >
             {status.status === "live" ? "Live" : status.status === "behind" ? `Behind ${status.lag ?? 0} ledgers` : "Not indexed for this network"}
           </span>

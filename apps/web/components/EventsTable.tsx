@@ -304,7 +304,7 @@ export function EventsTable({ contractId, network, contractAddress }: { contract
   if (events.length === 0 && !loading) {
     return (
       <div>
-        {error && <p className="mb-2 text-sm text-red-600">Couldn&apos;t refresh events: {error}</p>}
+        {error && <p className="mb-2 text-sm text-red-600 dark:text-red-400">Couldn&apos;t refresh events: {error}</p>}
         <EmptyState
           title="No events found"
           description="Events will appear here automatically as the indexer picks up activity for this contract."
@@ -315,18 +315,18 @@ export function EventsTable({ contractId, network, contractAddress }: { contract
 
   return (
     <div>
-      <div className="mb-4 space-y-3 rounded border border-gray-200 p-3">
+      <div className="mb-4 space-y-3 rounded border border-gray-200 dark:border-gray-700 p-3">
         <div className="flex flex-wrap items-end gap-2">
-          <label className="text-xs text-gray-600">Topic<input value={topicDraft} onChange={(event) => setTopicDraft(event.target.value)} onKeyDown={(event) => event.key === "Enter" && (event.preventDefault(), addTopic())} className="mt-1 block rounded border border-gray-300 px-2 py-1 text-sm" /></label>
-          <button type="button" onClick={addTopic} className="rounded border border-gray-300 px-2 py-1 text-xs">Add topic</button>
-          <label className="text-xs text-gray-600">From<input type="date" value={filters.from} onChange={(event) => applyFilters({ ...filters, from: event.target.value })} className="mt-1 block rounded border border-gray-300 px-2 py-1 text-sm" /></label>
-          <label className="text-xs text-gray-600">To<input type="date" value={filters.to} onChange={(event) => applyFilters({ ...filters, to: event.target.value })} className="mt-1 block rounded border border-gray-300 px-2 py-1 text-sm" /></label>
-          {filters.topics.map((topic) => <button key={topic} type="button" title={`Remove topic ${topic}`} onClick={() => applyFilters({ ...filters, topics: filters.topics.filter((value) => value !== topic) })} className="rounded-full border border-gray-300 px-2 py-1 text-xs">{topic} ×</button>)}
+          <label className="text-xs text-gray-600 dark:text-gray-400">Topic<input value={topicDraft} onChange={(event) => setTopicDraft(event.target.value)} onKeyDown={(event) => event.key === "Enter" && (event.preventDefault(), addTopic())} className="mt-1 block rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-sm" /></label>
+          <button type="button" onClick={addTopic} className="rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-xs">Add topic</button>
+          <label className="text-xs text-gray-600 dark:text-gray-400">From<input type="date" value={filters.from} onChange={(event) => applyFilters({ ...filters, from: event.target.value })} className="mt-1 block rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-sm" /></label>
+          <label className="text-xs text-gray-600 dark:text-gray-400">To<input type="date" value={filters.to} onChange={(event) => applyFilters({ ...filters, to: event.target.value })} className="mt-1 block rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-sm" /></label>
+          {filters.topics.map((topic) => <button key={topic} type="button" title={`Remove topic ${topic}`} onClick={() => applyFilters({ ...filters, topics: filters.topics.filter((value) => value !== topic) })} className="rounded-full border border-gray-300 dark:border-gray-600 px-2 py-1 text-xs">{topic} ×</button>)}
         </div>
       </div>
-      {error && <p className="mb-2 text-sm text-red-600">Couldn&apos;t refresh events: {error}</p>}
+      {error && <p className="mb-2 text-sm text-red-600 dark:text-red-400">Couldn&apos;t refresh events: {error}</p>}
       <div className="mb-2 flex items-center justify-end gap-3">
-        <span role="status" aria-live="polite" className="text-xs text-gray-500">
+        <span role="status" aria-live="polite" className="text-xs text-gray-500 dark:text-gray-400">
           {exportStatus}
         </span>
         <button
@@ -334,17 +334,17 @@ export function EventsTable({ contractId, network, contractAddress }: { contract
           onClick={handleExport}
           disabled={exporting}
           aria-label="Export CSV of the full event history for this contract"
-          className="rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
         >
           {exporting ? "Exporting…" : "Export CSV"}
         </button>
       </div>
-      {pageError && <p className="mb-2 text-sm text-red-600">Couldn&apos;t load page: {pageError}</p>}
+      {pageError && <p className="mb-2 text-sm text-red-600 dark:text-red-400">Couldn&apos;t load page: {pageError}</p>}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] border-collapse text-left text-sm">
           <caption className="sr-only">Contract events with ledger, transaction hash, topic and decoded data</caption>
           <thead>
-            <tr className="border-b border-gray-200 text-gray-500">
+            <tr className="border-b border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400">
               <th scope="col" className="py-2 font-medium">Ledger</th>
               <th scope="col" className="py-2 font-medium">Tx hash</th>
               <th scope="col" className="py-2 font-medium">Topic</th>
@@ -353,25 +353,25 @@ export function EventsTable({ contractId, network, contractAddress }: { contract
           </thead>
           <tbody>
             {events.map((event) => (
-              <tr key={event.id} tabIndex={0} role="button" onClick={() => setSelectedEvent(event)} onKeyDown={(keyboardEvent) => (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") && (keyboardEvent.preventDefault(), setSelectedEvent(event))} className="cursor-pointer border-b border-gray-100 hover:bg-gray-50">
+              <tr key={event.id} tabIndex={0} role="button" onClick={() => setSelectedEvent(event)} onKeyDown={(keyboardEvent) => (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") && (keyboardEvent.preventDefault(), setSelectedEvent(event))} className="cursor-pointer border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800">
                 <td className="py-2">{event.ledger}</td>
                 <td className="py-2 font-mono text-xs">{event.txHash.slice(0, 12)}…</td>
                 <td className="py-2 font-mono text-xs">{formatTopic(event)}</td>
-                <td className="py-2 font-mono text-xs">{formatValue(event)} {event.decodedData?.decodeErrors?.length ? <span title={event.decodedData.decodeErrors.map((item) => `${item.field}: ${item.error}`).join("; ")} className="ml-1 rounded bg-amber-100 px-1 text-amber-800">Warning</span> : null}</td>
+                <td className="py-2 font-mono text-xs">{formatValue(event)} {event.decodedData?.decodeErrors?.length ? <span title={event.decodedData.decodeErrors.map((item) => `${item.field}: ${item.error}`).join("; ")} className="ml-1 rounded bg-amber-100 dark:bg-amber-900/40 px-1 text-amber-800 dark:text-amber-300">Warning</span> : null}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-        <label className="flex items-center gap-2 text-xs text-gray-600">
+        <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
           <span>Rows per page</span>
           <select
             value={pageSize}
             onChange={handlePageSizeChange}
             disabled={pageLoading || loading}
             aria-label="Rows per page"
-            className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 disabled:opacity-50"
+            className="rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-xs text-gray-700 dark:text-gray-300 disabled:opacity-50"
           >
             {PAGE_SIZE_OPTIONS.map((size) => (
               <option key={size} value={size}>
@@ -386,7 +386,7 @@ export function EventsTable({ contractId, network, contractAddress }: { contract
             onClick={handlePreviousPage}
             disabled={pageLoading || history.index === 0}
             aria-label="Previous page of events"
-            className="rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
           >
             Previous
           </button>
@@ -395,7 +395,7 @@ export function EventsTable({ contractId, network, contractAddress }: { contract
             onClick={handleNextPage}
             disabled={pageLoading || nextCursor === null}
             aria-label="Next page of events"
-            className="rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
           >
             Next
           </button>
@@ -418,5 +418,5 @@ function EventDetailDrawer({ event, network, contractAddress, onClose }: { event
       closeButton.current?.focus();
     }
   }
-  return <div className="fixed inset-0 z-50 flex justify-end bg-black/30" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><aside role="dialog" aria-modal="true" aria-labelledby="event-detail-title" onKeyDown={trapFocus} className="h-full w-full max-w-xl overflow-y-auto bg-white p-6 shadow-xl"><div className="flex items-center justify-between"><h2 id="event-detail-title" className="text-lg font-semibold">Event details</h2><button ref={closeButton} type="button" onClick={onClose} aria-label="Close event details" className="rounded border border-gray-300 px-2 py-1">×</button></div><dl className="mt-4 space-y-2 text-sm"><div><dt className="font-medium">Ledger</dt><dd>{event.ledger}</dd></div><div><dt className="font-medium">Transaction</dt><dd className="break-all font-mono text-xs">{event.txHash}</dd></div></dl><a className="mt-3 inline-block text-sm text-blue-700 underline" target="_blank" rel="noreferrer" href={`https://stellar.expert/explorer/${explorerNetwork}/contract/${contractAddress}`}>Open contract in explorer</a><section className="mt-5"><h3 className="font-medium">Decoded JSON</h3><pre className="mt-2 overflow-auto rounded bg-gray-100 p-3 text-xs">{JSON.stringify(decoded, null, 2)}</pre></section><section className="mt-5"><h3 className="font-medium">Raw XDR</h3><button type="button" onClick={() => navigator.clipboard.writeText(JSON.stringify(raw, null, 2))} className="mt-2 rounded border border-gray-300 px-2 py-1 text-xs">Copy raw XDR</button><pre className="mt-2 overflow-auto rounded bg-gray-100 p-3 text-xs">{JSON.stringify(raw, null, 2)}</pre></section></aside></div>;
+  return <div className="fixed inset-0 z-50 flex justify-end bg-black/30" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><aside role="dialog" aria-modal="true" aria-labelledby="event-detail-title" onKeyDown={trapFocus} className="h-full w-full max-w-xl overflow-y-auto bg-white dark:bg-gray-900 p-6 shadow-xl"><div className="flex items-center justify-between"><h2 id="event-detail-title" className="text-lg font-semibold">Event details</h2><button ref={closeButton} type="button" onClick={onClose} aria-label="Close event details" className="rounded border border-gray-300 dark:border-gray-600 px-2 py-1">×</button></div><dl className="mt-4 space-y-2 text-sm"><div><dt className="font-medium">Ledger</dt><dd>{event.ledger}</dd></div><div><dt className="font-medium">Transaction</dt><dd className="break-all font-mono text-xs">{event.txHash}</dd></div></dl><a className="mt-3 inline-block text-sm text-blue-700 dark:text-blue-400 underline" target="_blank" rel="noreferrer" href={`https://stellar.expert/explorer/${explorerNetwork}/contract/${contractAddress}`}>Open contract in explorer</a><section className="mt-5"><h3 className="font-medium">Decoded JSON</h3><pre className="mt-2 overflow-auto rounded bg-gray-100 dark:bg-gray-800 p-3 text-xs">{JSON.stringify(decoded, null, 2)}</pre></section><section className="mt-5"><h3 className="font-medium">Raw XDR</h3><button type="button" onClick={() => navigator.clipboard.writeText(JSON.stringify(raw, null, 2))} className="mt-2 rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-xs">Copy raw XDR</button><pre className="mt-2 overflow-auto rounded bg-gray-100 dark:bg-gray-800 p-3 text-xs">{JSON.stringify(raw, null, 2)}</pre></section></aside></div>;
 }

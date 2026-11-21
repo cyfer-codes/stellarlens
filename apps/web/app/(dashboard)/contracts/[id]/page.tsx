@@ -39,7 +39,7 @@ export default async function ContractDetailPage({ params }: { params: { id: str
 
       <Link
         href={`/contracts/${contractId}/transfers`}
-        className="inline-block text-sm font-medium text-gray-700 hover:underline"
+        className="inline-block text-sm font-medium text-gray-700 dark:text-gray-300 hover:underline"
       >
         View transfers →
       </Link>
