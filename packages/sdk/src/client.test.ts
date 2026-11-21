@@ -158,6 +158,23 @@ describe("StellarLensClient", () => {
     expect(contract.id).toBe(1);
   });
 
+  it("surfaces duplicate registration conflicts with the existing contract id", async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        statusCode: 409,
+        message: "A contract with this address is already registered.",
+        existingId: 42
+      }, 409)
+    ) as unknown as typeof fetch;
+
+    await expect(
+      makeClient(fetchMock).registerContract({ address: "C1", network: "testnet" })
+    ).rejects.toMatchObject({
+      status: 409,
+      body: { existingId: 42 }
+    });
+  });
+
   it("posts an items envelope to /contracts/bulk", async () => {
     const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
       expect(String(url)).toBe("https://api.example.com/contracts/bulk");
