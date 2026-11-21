@@ -379,3 +379,24 @@ export async function listContracts(client: StellarLensClient, options: ListCont
 
   console.table(rows);
 }
+
+/**
+ * Prints a single contract's details. A nonexistent id is reported as a clear error (the caller exits
+ * non-zero) rather than the raw 404.
+ */
+export async function getContract(client: StellarLensClient, id: number): Promise<void> {
+  let contract: Contract;
+  try {
+    contract = await client.getContract(id);
+  } catch (error) {
+    if (error instanceof StellarLensApiError && error.status === 404) {
+      throw new Error(`contract ${id} not found`);
+    }
+    throw error;
+  }
+
+  console.log(`id:      ${contract.id}`);
+  console.log(`address: ${contract.address}`);
+  console.log(`name:    ${contract.name ?? "—"}`);
+  console.log(`network: ${contract.network}`);
+}

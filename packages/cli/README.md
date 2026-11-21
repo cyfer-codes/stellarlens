@@ -14,6 +14,7 @@ export STELLARLENS_API_KEY=<a valid api key>
 ```bash
 stellarlens contracts add <address> --network testnet [--name "My contract"]
 stellarlens contracts list                   # every contract, across all pages
+stellarlens contracts get <id>               # one contract's details; exits non-zero if it doesn't exist
 stellarlens events list <contractId> [--limit 20] [--cursor <id>] [--topic t] [--from d] [--to d]
 stellarlens events tail <contractId>   # follows new events every 5s, ctrl+c to stop
 ```

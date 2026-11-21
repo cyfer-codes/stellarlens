@@ -4,6 +4,7 @@ import { StellarLensApiError, type StellarLensClient } from "@stellarlens/sdk";
 import {
   BULK_CHUNK_SIZE,
   addContracts,
+  getContract,
   listContracts,
   parseContractsFile,
   runAddContracts
@@ -404,5 +405,45 @@ describe("listContracts", () => {
       { id: 2, address: "C2", name: "—", network: "mainnet" }
     ]);
     tableSpy.mockRestore();
+  });
+});
+
+describe("getContract", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("prints the contract's details", async () => {
+    const getContractMock = vi.fn().mockResolvedValue({ id: 1, address: C1, name: "My token", network: "testnet" });
+    const client = { getContract: getContractMock } as unknown as StellarLensClient;
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await getContract(client, 1);
+
+    expect(getContractMock).toHaveBeenCalledWith(1);
+    const output = logSpy.mock.calls.map((call) => call[0]).join("
+");
+    expect(output).toContain("id:      1");
+    expect(output).toContain(`address: ${C1}`);
+    expect(output).toContain("name:    My token");
+    expect(output).toContain("network: testnet");
+  });
+
+  it("rejects with a clear error for a nonexistent id", async () => {
+    const getContractMock = vi
+      .fn()
+      .mockRejectedValue(new StellarLensApiError(404, { message: "Contract 999 not found" }));
+    const client = { getContract: getContractMock } as unknown as StellarLensClient;
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await expect(getContract(client, 999)).rejects.toThrow("contract 999 not found");
+    expect(logSpy).not.toHaveBeenCalled();
+  });
+
+  it("passes other api errors through unchanged", async () => {
+    const error = new StellarLensApiError(500, {});
+    const client = { getContract: vi.fn().mockRejectedValue(error) } as unknown as StellarLensClient;
+
+    await expect(getContract(client, 1)).rejects.toBe(error);
   });
 });

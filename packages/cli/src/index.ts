@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Argument, Command, InvalidArgumentError, Option } from "commander";
 import { createClientFromEnv } from "./client.js";
-import { addContract, listContracts } from "./commands/contracts.js";
+import { addContract, getContract, listContracts } from "./commands/contracts.js";
 import { runDecode } from "./commands/decode.js";
 import { StellarLensApiError } from "@stellarlens/sdk";
 import { listEvents, tailEvents } from "./commands/events.js";
@@ -99,6 +99,14 @@ contractsCommand
   .option("--page-size <size>", "Contracts fetched per api request (1-100)", parsePageSize, 100)
   .action(async (options: { name?: string; network?: string; pageSize: number }) => {
     await listContracts(createClientFromEnv(), options);
+  });
+
+contractsCommand
+  .command("get")
+  .description("Show a single registered contract by id")
+  .addArgument(new Argument("<id>", "Contract id").argParser(parseContractId))
+  .action(async (id: number) => {
+    await getContract(createClientFromEnv(), id);
   });
 
 const eventsCommand = program.command("events").description("Work with indexed contract events");
