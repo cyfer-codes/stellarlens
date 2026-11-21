@@ -1,5 +1,14 @@
 import { tryDecodeScVal } from "@stellarlens/decode";
 
+/**
+ * Optional contract spec (`contractspecv0`) used to name struct/enum fields in decoded output.
+ * The decoded value is kept unchanged; the spec-annotated view is attached under a `spec` field.
+ * When no matching spec type is available, the output falls back to the plain decoded value.
+ */
+export interface ContractSpecLookup {
+  annotate(value: unknown): unknown | undefined;
+}
+
 export class InvalidXdrError extends Error {
   constructor(reason: string) {
     super(`invalid XDR: ${reason}`);
@@ -20,7 +29,7 @@ async function readStdin(stdin: NodeJS.ReadableStream): Promise<string> {
  * Whitespace is ignored so wrapped or newline-terminated input (e.g. from `echo` or a pasted explorer
  * value) works as-is.
  */
-export function decodeXdr(input: string): string {
+export function decodeXdr(input: string, spec?: ContractSpecLookup): string {
   const base64 = input.replace(/\s+/g, "");
   if (base64.length === 0) {
     throw new InvalidXdrError("input is empty");
@@ -30,12 +39,26 @@ export function decodeXdr(input: string): string {
   if (!result.ok) {
     throw new InvalidXdrError(result.error);
   }
-  return JSON.stringify(result.value, null, 2) ?? "null";
+
+  let specView: unknown;
+  if (spec) {
+    try {
+      specView = spec.annotate(result.value);
+    } catch {
+      specView = undefined;
+    }
+  }
+
+  const output = specView === undefined
+    ? result.value
+    : { decoded: result.value, spec: specView };
+  return JSON.stringify(output, null, 2) ?? "null";
 }
 
 export interface DecodeIo {
   stdin?: NodeJS.ReadableStream & { isTTY?: boolean };
   log?: (line: string) => void;
+  spec?: ContractSpecLookup;
 }
 
 /** `stellarlens decode [xdr]`: reads the value from the argument, or from stdin when it's omitted or `-`. */
@@ -51,5 +74,5 @@ export async function runDecode(xdrArg: string | undefined, io: DecodeIo = {}): 
     input = await readStdin(stdin);
   }
 
-  log(decodeXdr(input));
+  log(decodeXdr(input, io.spec));
 }
