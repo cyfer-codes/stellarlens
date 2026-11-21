@@ -7,6 +7,7 @@ import { StellarLensApiError } from "@stellarlens/sdk";
 import { listEvents, tailEvents } from "./commands/events.js";
 import { runExport, type ExportFormat, type ExportKind } from "./commands/export.js";
 import { listTransfers } from "./commands/transfers.js";
+import { showStats } from "./commands/stats.js";
 import { listenForWebhooks } from "./commands/webhooks.js";
 
 function parsePort(value: string): number {
@@ -176,6 +177,16 @@ transfersCommand
   .option("-c, --cursor <id>", "Only transfers after this transfer id (from a previous page)", parsePositiveInt)
   .action(async (contractId: number, options: { limit?: number; cursor?: number }) => {
     await listTransfers(createClientFromEnv(), contractId, options);
+  });
+
+program
+  .command("stats")
+  .description("Show a contract's transfer stats: count, unique senders/receivers and volume by asset")
+  .addArgument(new Argument("<contractId>", "Contract id").argParser(parseContractId))
+  .option("--from <date>", "Only transfers created at or after this ISO-8601 date/time")
+  .option("--to <date>", "Only transfers created at or before this ISO-8601 date/time")
+  .action(async (contractId: number, options: { from?: string; to?: string }) => {
+    await showStats(createClientFromEnv(), contractId, options);
   });
 
 program
