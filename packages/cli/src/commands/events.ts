@@ -51,6 +51,8 @@ export interface TailEventsOptions {
   intervalMs?: number;
   /** Aborting stops the tail cleanly (wired to ctrl+c by the CLI). */
   signal?: AbortSignal;
+  /** Print each event as a line of JSON instead of the formatted summary. */
+  json?: boolean;
 }
 
 /** The api's `cursor` must be >= 1; "before the first event" is expressed by omitting it. */
@@ -243,6 +245,6 @@ export async function tailEvents(
       );
     }
   })) {
-    console.log(formatEvent(event));
+    console.log(options.json ? JSON.stringify(event) : formatEvent(event));
   }
 }
