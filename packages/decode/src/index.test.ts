@@ -1,4 +1,4 @@
-import { nativeToScVal } from "@stellar/stellar-sdk";
+import { nativeToScVal, xdr } from "@stellar/stellar-sdk";
 import { describe, expect, it } from "vitest";
 import { decodeScVal, tryDecodeScVal } from "./index.js";
 
@@ -29,7 +29,7 @@ describe("tryDecodeScVal", () => {
   });
 });
 
-function encode(value: unknown, type?: "symbol" | "string" | "i128"): string {
+function encode(value: unknown, type?: "symbol" | "string" | "i128" | "bytes"): string {
   return nativeToScVal(value, type ? { type } : undefined).toXdr("base64");
 }
 
@@ -52,5 +52,47 @@ describe("decodeScVal value types", () => {
 
   it("decodes maps", () => {
     expect(decodeScVal(encode({ key: "value" }))).toEqual({ key: "value" });
+  });
+
+  it("decodes Bytes values to hex strings instead of index-keyed objects", () => {
+    const raw = Buffer.from([0x00, 0x01, 0x02, 0xff, 0xfe]);
+    const scBytes = xdr.ScVal.scvBytes(raw);
+    const decoded = decodeScVal(scBytes.toXdr("base64"));
+
+    expect(decoded).toBe("000102fffe");
+    expect(typeof decoded).toBe("string");
+    expect(typeof decoded).not.toBe("object");
+  });
+
+  it("decodes BytesN<32> values to 64-character hex strings", () => {
+    const raw = Buffer.alloc(32, 0xab);
+    const scBytesN = xdr.ScVal.scvBytes(raw);
+    const decoded = decodeScVal(scBytesN.toXdr("base64"));
+
+    expect(decoded).toBe("ab".repeat(32));
+    expect((decoded as string).length).toBe(64);
+  });
+
+  it("decodes Bytes nested inside vectors and maps", () => {
+    const b1 = Buffer.from([0xde, 0xad]);
+    const b2 = Buffer.from([0xbe, 0xef]);
+
+    const vecVal = xdr.ScVal.scvVec([xdr.ScVal.scvBytes(b1), xdr.ScVal.scvBytes(b2)]);
+    expect(decodeScVal(vecVal.toXdr("base64"))).toEqual(["dead", "beef"]);
+
+    const mapVal = xdr.ScVal.scvMap([
+      new xdr.ScMapEntry({
+        key: xdr.ScVal.scvSymbol("hash"),
+        val: xdr.ScVal.scvBytes(b1)
+      }),
+      new xdr.ScMapEntry({
+        key: xdr.ScVal.scvSymbol("signature"),
+        val: xdr.ScVal.scvBytes(b2)
+      })
+    ]);
+    expect(decodeScVal(mapVal.toXdr("base64"))).toEqual({
+      hash: "dead",
+      signature: "beef"
+    });
   });
 });
