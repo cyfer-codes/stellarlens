@@ -4,6 +4,9 @@ function toJsonSafe(value: unknown): unknown {
   if (typeof value === "bigint") {
     return value.toString();
   }
+  if (value instanceof Uint8Array || (typeof Buffer !== "undefined" && Buffer.isBuffer(value))) {
+    return Buffer.from(value.buffer, value.byteOffset, value.byteLength).toString("hex");
+  }
   if (Array.isArray(value)) {
     return value.map(toJsonSafe);
   }

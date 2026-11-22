@@ -13,7 +13,8 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:report-unsupported-networks": "pnpm build && node dist/scripts/report-unsupported-networks.js"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",

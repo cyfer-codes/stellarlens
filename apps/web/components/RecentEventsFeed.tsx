@@ -49,11 +49,11 @@ export function RecentEventsFeed({ initialEvents }: { initialEvents: RecentEvent
 
     return (
         <div>
-            {error && <p className="mb-2 text-sm text-red-600">Couldn&apos;t refresh events: {error}</p>}
+            {error && <p className="mb-2 text-sm text-red-600 dark:text-red-400">Couldn&apos;t refresh events: {error}</p>}
             <table className="w-full min-w-[640px] border-collapse text-left text-sm">
                 <caption className="sr-only">Recent events across registered contracts</caption>
                 <thead>
-                    <tr className="border-b border-gray-200 text-gray-500">
+                    <tr className="border-b border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400">
                         <th scope="col" className="py-2 font-medium">Contract</th>
                         <th scope="col" className="py-2 font-medium">Topic</th>
                         <th scope="col" className="py-2 font-medium">Ledger</th>
@@ -62,7 +62,7 @@ export function RecentEventsFeed({ initialEvents }: { initialEvents: RecentEvent
                 </thead>
                 <tbody>
                     {events.map((event) => (
-                        <tr key={event.id} className="border-b border-gray-100">
+                        <tr key={event.id} className="border-b border-gray-100 dark:border-gray-800">
                             <td className="py-2">
                                 <Link href={`/contracts/${event.contractId}`} className="font-medium hover:underline">
                                     {event.contractName ?? `Contract ${event.contractId}`}
@@ -70,7 +70,7 @@ export function RecentEventsFeed({ initialEvents }: { initialEvents: RecentEvent
                             </td>
                             <td className="max-w-[24rem] truncate py-2">{formatTopic(event)}</td>
                             <td className="py-2">{event.ledger}</td>
-                            <td className="whitespace-nowrap py-2 text-gray-500">{new Date(event.createdAt).toLocaleString()}</td>
+                            <td className="whitespace-nowrap py-2 text-gray-500 dark:text-gray-400">{new Date(event.createdAt).toLocaleString()}</td>
                         </tr>
                     ))}
                 </tbody>

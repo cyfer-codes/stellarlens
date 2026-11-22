@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createContract, listContracts, type ListContractsParams } from "@/lib/api";
+import { ApiProxyError, createContract, listContracts, type ListContractsParams } from "@/lib/api";
 
 export interface AddContractState {
   fieldErrors: Partial<Record<"address" | "network" | "name", string>>;
@@ -13,16 +13,25 @@ export const initialAddContractState: AddContractState = { fieldErrors: {} };
 
 function getApiValidationMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : "failed to register contract";
-  const body = message.split(": ").at(-1);
-  if (!body) {
-    return message;
+  let body: unknown = error instanceof ApiProxyError ? error.body : undefined;
+
+  if (body === undefined) {
+    const serialized = message.split(": ").at(-1);
+    if (!serialized) return message;
+    try {
+      body = JSON.parse(serialized);
+    } catch {
+      return message;
+    }
   }
-  try {
-    const parsed = JSON.parse(body) as { message?: string | string[] };
-    return Array.isArray(parsed.message) ? parsed.message.join(" ") : parsed.message ?? message;
-  } catch {
-    return message;
+
+  if (typeof body !== "object" || body === null) return message;
+  const parsed = body as { message?: string | string[]; existingId?: number; statusCode?: number };
+  if (error instanceof ApiProxyError && error.status === 409 && typeof parsed.existingId === "number") {
+    const detail = Array.isArray(parsed.message) ? parsed.message.join(" ") : parsed.message;
+    return `Contract #${parsed.existingId} is already registered. ${detail ?? "Use the existing contract to make changes."}`;
   }
+  return Array.isArray(parsed.message) ? parsed.message.join(" ") : parsed.message ?? message;
 }
 
 export async function addContract(_prevState: AddContractState, formData: FormData): Promise<AddContractState> {

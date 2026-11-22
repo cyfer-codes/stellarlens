@@ -3,7 +3,6 @@ import { BadRequestException, ConflictException, Inject, Injectable, NotFoundExc
 import { ConfigService } from "@nestjs/config";
 import { and, count, desc, eq, gte, lt, lte, ne, sql } from "drizzle-orm";
 import { webhookDeliveries, webhooks, type Database } from "@stellarlens/db";
-import { decryptSecret, encryptSecret } from "@stellarlens/db";
 import { ContractsService } from "../contracts/contracts.service";
 import { DATABASE } from "../database/database.module";
 import { CreateWebhookDto } from "./dto/create-webhook.dto";
@@ -38,11 +37,11 @@ export class WebhooksService {
     }
 
     const secret = randomBytes(32).toString("hex");
-    const encryptedSecret = encryptSecret(secret, this.secretKey);
     const eventTypes = dto.eventTypes && dto.eventTypes.length > 0 ? dto.eventTypes : null;
+    const filter = dto.filter ?? null;
     const [webhook] = await this.db
       .insert(webhooks)
-      .values({ contractId, url: dto.url, secret: encryptedSecret, eventTypes })
+      .values({ contractId, url: dto.url, secret, eventTypes, filter })
       .returning();
     // The raw secret is only ever surfaced once, at creation time.
     return { ...webhook, secret };
@@ -52,20 +51,39 @@ export class WebhooksService {
     await this.contractsService.findOne(contractId);
 
     return this.db
-      .select({ id: webhooks.id, url: webhooks.url, eventTypes: webhooks.eventTypes, createdAt: webhooks.createdAt })
+      .select({ id: webhooks.id, url: webhooks.url, eventTypes: webhooks.eventTypes, filter: webhooks.filter, createdAt: webhooks.createdAt })
       .from(webhooks)
       .where(eq(webhooks.contractId, contractId));
+  }
+
+  /** Same projection as `findAllByContract`: the secret is never returned after creation/rotation. */
+  async findOne(contractId: number, id: number) {
+    await this.contractsService.findOne(contractId);
+
+    const [webhook] = await this.db
+      .select({ id: webhooks.id, url: webhooks.url, eventTypes: webhooks.eventTypes, createdAt: webhooks.createdAt })
+      .from(webhooks)
+      .where(and(eq(webhooks.id, id), eq(webhooks.contractId, contractId)));
+
+    if (!webhook) {
+      throw new NotFoundException(`webhook ${id} not found for contract ${contractId}`);
+    }
+
+    return webhook;
   }
 
   async update(contractId: number, id: number, dto: UpdateWebhookDto) {
     await this.contractsService.findOne(contractId);
 
-    const updates: { url?: string; eventTypes?: string[] | null } = {};
+    const updates: { url?: string; eventTypes?: string[] | null; filter?: typeof webhooks.$inferInsert.filter } = {};
     if (dto.url !== undefined) {
       updates.url = dto.url;
     }
     if (dto.eventTypes !== undefined) {
       updates.eventTypes = dto.eventTypes.length > 0 ? dto.eventTypes : null;
+    }
+    if (dto.filter !== undefined) {
+      updates.filter = dto.filter;
     }
 
     if (Object.keys(updates).length === 0) {
@@ -75,6 +93,7 @@ export class WebhooksService {
           contractId: webhooks.contractId,
           url: webhooks.url,
           eventTypes: webhooks.eventTypes,
+          filter: webhooks.filter,
           createdAt: webhooks.createdAt
         })
         .from(webhooks)
@@ -104,6 +123,7 @@ export class WebhooksService {
         contractId: webhooks.contractId,
         url: webhooks.url,
         eventTypes: webhooks.eventTypes,
+        filter: webhooks.filter,
         createdAt: webhooks.createdAt
       });
 
@@ -118,10 +138,9 @@ export class WebhooksService {
     await this.contractsService.findOne(contractId);
 
     const secret = randomBytes(32).toString("hex");
-    const encryptedSecret = encryptSecret(secret, this.secretKey);
     const [webhook] = await this.db
       .update(webhooks)
-      .set({ secret: encryptedSecret })
+      .set({ secret })
       .where(and(eq(webhooks.id, id), eq(webhooks.contractId, contractId)))
       .returning();
 
@@ -180,6 +199,7 @@ export class WebhooksService {
       .select({
         id: webhookDeliveries.id,
         eventId: webhookDeliveries.eventId,
+        idempotencyKey: webhookDeliveries.idempotencyKey,
         status: webhookDeliveries.status,
         attempts: webhookDeliveries.attempts,
         lastError: webhookDeliveries.lastError,

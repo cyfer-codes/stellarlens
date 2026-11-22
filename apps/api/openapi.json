@@ -3,7 +3,7 @@
   "info": {
     "title": "stellarlens api",
     "version": "1.0.0",
-    "description": "Index and query Soroban contract events and token transfers. This file is the source of truth for the generated `@stellarlens/sdk` types \u2014 after editing it, run `pnpm --filter @stellarlens/sdk generate`."
+    "description": "Index and query Soroban contract events and token transfers. This file is the source of truth for the generated `@stellarlens/sdk` types — after editing it, run `pnpm --filter @stellarlens/sdk generate`."
   },
   "security": [
     {
@@ -162,7 +162,7 @@
         "tags": [
           "contracts"
         ],
-        "summary": "Register a contract, or update the name/network of one already registered at that address.",
+        "summary": "Register a new contract. Existing addresses return 409 without mutation; use PATCH to update a registered contract.",
         "requestBody": {
           "required": true,
           "content": {
@@ -200,6 +200,34 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A contract with this address is already registered. The response includes its existing id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "statusCode",
+                    "message",
+                    "existingId"
+                  ],
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer",
+                      "const": 409
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "existingId": {
+                      "type": "integer",
+                      "description": "ID of the already-registered contract."
+                    }
+                  }
                 }
               }
             }
@@ -328,8 +356,8 @@
               }
             }
           },
-          "429": {
-            "description": "Rate limit exceeded.",
+          "404": {
+            "description": "Not found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -338,8 +366,8 @@
               }
             }
           },
-          "404": {
-            "description": "Not found.",
+          "429": {
+            "description": "Rate limit exceeded.",
             "content": {
               "application/json": {
                 "schema": {
@@ -397,8 +425,8 @@
               }
             }
           },
-          "429": {
-            "description": "Rate limit exceeded.",
+          "404": {
+            "description": "Not found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -407,8 +435,8 @@
               }
             }
           },
-          "404": {
-            "description": "Not found.",
+          "429": {
+            "description": "Rate limit exceeded.",
             "content": {
               "application/json": {
                 "schema": {
@@ -549,8 +577,8 @@
               }
             }
           },
-          "429": {
-            "description": "Rate limit exceeded.",
+          "404": {
+            "description": "Not found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -559,8 +587,8 @@
               }
             }
           },
-          "404": {
-            "description": "Not found.",
+          "429": {
+            "description": "Rate limit exceeded.",
             "content": {
               "application/json": {
                 "schema": {
@@ -693,8 +721,8 @@
               }
             }
           },
-          "429": {
-            "description": "Rate limit exceeded.",
+          "404": {
+            "description": "Not found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -703,8 +731,8 @@
               }
             }
           },
-          "404": {
-            "description": "Not found.",
+          "429": {
+            "description": "Rate limit exceeded.",
             "content": {
               "application/json": {
                 "schema": {
@@ -788,8 +816,8 @@
               }
             }
           },
-          "429": {
-            "description": "Rate limit exceeded.",
+          "404": {
+            "description": "Not found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -798,8 +826,8 @@
               }
             }
           },
-          "404": {
-            "description": "Not found.",
+          "429": {
+            "description": "Rate limit exceeded.",
             "content": {
               "application/json": {
                 "schema": {
@@ -864,8 +892,8 @@
               }
             }
           },
-          "429": {
-            "description": "Rate limit exceeded.",
+          "404": {
+            "description": "Not found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -874,8 +902,8 @@
               }
             }
           },
-          "404": {
-            "description": "Not found.",
+          "429": {
+            "description": "Rate limit exceeded.",
             "content": {
               "application/json": {
                 "schema": {
@@ -933,16 +961,6 @@
               }
             }
           },
-          "429": {
-            "description": "Rate limit exceeded.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
           "404": {
             "description": "Not found.",
             "content": {
@@ -955,6 +973,16 @@
           },
           "409": {
             "description": "A webhook is already registered for that url on this contract.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1036,16 +1064,6 @@
               }
             }
           },
-          "429": {
-            "description": "Rate limit exceeded.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
           "404": {
             "description": "Not found.",
             "content": {
@@ -1058,6 +1076,16 @@
           },
           "409": {
             "description": "Another webhook is already registered for that url on this contract.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1098,8 +1126,8 @@
               }
             }
           },
-          "429": {
-            "description": "Rate limit exceeded.",
+          "404": {
+            "description": "Not found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1108,8 +1136,8 @@
               }
             }
           },
-          "404": {
-            "description": "Not found.",
+          "429": {
+            "description": "Rate limit exceeded.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1205,8 +1233,8 @@
               }
             }
           },
-          "429": {
-            "description": "Rate limit exceeded.",
+          "404": {
+            "description": "Not found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1215,8 +1243,8 @@
               }
             }
           },
-          "404": {
-            "description": "Not found.",
+          "429": {
+            "description": "Rate limit exceeded.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1288,8 +1316,8 @@
               }
             }
           },
-          "429": {
-            "description": "Rate limit exceeded.",
+          "404": {
+            "description": "Not found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1298,8 +1326,8 @@
               }
             }
           },
-          "404": {
-            "description": "Not found.",
+          "429": {
+            "description": "Rate limit exceeded.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1411,8 +1439,8 @@
               }
             }
           },
-          "429": {
-            "description": "Rate limit exceeded.",
+          "403": {
+            "description": "The calling key lacks `full` scope.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1421,8 +1449,8 @@
               }
             }
           },
-          "403": {
-            "description": "The calling key lacks `full` scope.",
+          "429": {
+            "description": "Rate limit exceeded.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1477,8 +1505,8 @@
               }
             }
           },
-          "429": {
-            "description": "Rate limit exceeded.",
+          "403": {
+            "description": "The calling key lacks `full` scope.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1497,8 +1525,8 @@
               }
             }
           },
-          "403": {
-            "description": "The calling key lacks `full` scope.",
+          "429": {
+            "description": "Rate limit exceeded.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1880,7 +1908,7 @@
           "amount": {
             "type": "string",
             "pattern": "^-?\\d+$",
-            "description": "Amount in the token's base units, as a decimal string (i128 \u2014 don't convert with Number)."
+            "description": "Amount in the token's base units, as a decimal string (i128 — don't convert with Number)."
           },
           "asset": {
             "type": "string"

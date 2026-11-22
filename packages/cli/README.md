@@ -14,9 +14,15 @@ export STELLARLENS_API_KEY=<a valid api key>
 ```bash
 stellarlens contracts add <address> --network testnet [--name "My contract"]
 stellarlens contracts list                   # every contract, across all pages
+stellarlens contracts get <id>               # one contract's details; exits non-zero if it doesn't exist
 stellarlens events list <contractId> [--limit 20] [--cursor <id>] [--topic t] [--from d] [--to d]
 stellarlens events tail <contractId>   # follows new events every 5s, ctrl+c to stop
+stellarlens transfers list <contractId> [--limit 20] [--cursor <id>]   # ledger, from, to, amount, asset, tx hash
+stellarlens stats <contractId> [--from d] [--to d]   # transfer count, unique senders/receivers, volume by asset
 ```
+
+Add the global `--json` flag to `contracts list`, `contracts add` or `events tail` to get machine-readable
+output for scripting, e.g. `stellarlens contracts list --json` prints a JSON array instead of a table.
 
 ### Decoding XDR
 
@@ -43,6 +49,17 @@ half-written page first), and resuming a finished export appends only records in
 the same escaping as the dashboard export, including formula-injection protection. Events use fixed columns
 with the decoded `topic`/`value` as JSON. Transfers are filtered by `--from`/`--to` client-side, because the
 transfers endpoint's `from`/`to` filter on addresses.
+
+### Managing webhooks
+
+```bash
+stellarlens webhooks add <contractId> <url> [--event-types transfer,mint]
+stellarlens webhooks list <contractId>
+stellarlens webhooks remove <contractId> <id>
+```
+
+`webhooks add` prints the webhook's signing secret once — copy it then, it won't be shown again (pass it to
+`webhooks listen --secret` or your consumer's verifier).
 
 ### Developing a webhook consumer locally
 

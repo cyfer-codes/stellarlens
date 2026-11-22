@@ -11,6 +11,7 @@ type Schemas = components["schemas"];
 type QueryOf<Op extends keyof operations> = NonNullable<operations[Op]["parameters"]["query"]>;
 
 export type ApiError = Schemas["ApiError"];
+export type HealthStatus = Schemas["HealthStatus"];
 
 export type Contract = Schemas["Contract"];
 export type RegisterContractInput = Schemas["RegisterContractInput"];
@@ -42,6 +43,20 @@ export type CreateWebhookInput = Schemas["CreateWebhookInput"];
 export type UpdateWebhookInput = Schemas["UpdateWebhookInput"];
 export type WebhookDelivery = Schemas["WebhookDelivery"];
 
+/** Per-call options accepted by every request-making `StellarLensClient` method. */
+export interface RequestOptions {
+  /**
+   * Cancels the request. If it's already aborted, nothing is sent; if it aborts mid-flight, `fetch` is aborted.
+   * Either way the call rejects with `signal.reason` (an `AbortError` `DOMException` unless you gave one).
+   */
+  signal?: AbortSignal;
+  /**
+   * Overrides the client's `timeoutMs` for this call. `0` disables the timeout. When it elapses the request is
+   * aborted and the call rejects with a `StellarLensTimeoutError`.
+   */
+  timeoutMs?: number;
+}
+
 /** A cursor-paginated response. Pass `nextCursor` back as `cursor` until it comes back `null`. */
 export interface Page<T> {
   data: T[];
@@ -56,36 +71,7 @@ export type _GeneratedPagesMatch = [
   AssertPage<Schemas["TransferPage"]>,
   AssertPage<Schemas["WebhookDeliveryPage"]>
 ];
-export interface Contract {
-  id: number;
-  address: string;
-  name: string | null;
-  network: string;
-}
 
-export interface ListContractsParams {
-  /** Return contracts with an id greater than this (pass the previous page's `nextCursor`). */
-  cursor?: number;
-  /** Page size, 1–100 (api default 20). */
-  limit?: number;
-  /** Case-insensitive substring match on the contract name. */
-  name?: string;
-  /** Exact match on network, e.g. "testnet". */
-  network?: string;
-}
-
-export interface RegisterContractInput {
-  address: string;
-  network: string;
-  name?: string;
-}
-
-export interface ListContractsParams {
-  cursor?: number;
-  limit?: number;
-  /** Case-insensitive substring match on the contract name. */
-  name?: string;
-  network?: string;
 export interface BulkRegisterContractItem {
   address: string;
   network: string;
@@ -103,44 +89,6 @@ export interface BulkContractResult {
   status: BulkContractStatus;
   id?: number;
   error?: string;
-}
-
-export interface BulkRegisterContractsResponse {
-  results: BulkContractResult[];
-}
-
-export interface DecodedEventData {
-  id: string;
-  type: string;
-  ledgerClosedAt: string;
-  inSuccessfulContractCall: boolean;
-  raw: {
-    topic: string[];
-    value: string;
-  };
-  decoded: {
-    topic: unknown[];
-    value: unknown;
-  };
-}
-
-export interface EventRecord {
-  id: number;
-  contractId: number;
-  ledger: number;
-  txHash: string;
-  topic: string;
-  decodedData: DecodedEventData | null;
-  createdAt: string;
-}
-
-export interface ListEventsParams {
-  cursor?: number;
-  limit?: number;
-  topic?: string;
-  from?: string;
-  to?: string;
-  order?: 'asc' | 'desc';
 }
 
 export interface WatchEventsOptions {
@@ -167,42 +115,7 @@ export interface WatchEventsOptions {
   onError?: (error: unknown, info: { attempt: number; retryInMs: number }) => void;
 }
 
-export interface TransferRecord {
-  id: number;
-  contractId: number;
-  from: string;
-  to: string;
-  amount: string;
-  asset: string;
-  txHash: string;
-  ledger: number;
-  createdAt: string;
-}
-
-export interface ListTransfersParams {
-  cursor?: number;
-  limit?: number;
-  order?: 'asc' | 'desc';
-}
-
-export interface GetStatsParams {
-  from?: string;
-  to?: string;
-}
-
-export interface ContractStats {
-  transferCount: number;
-  uniqueSenders: number;
-  uniqueReceivers: number;
-  volumeByAsset: { asset: string; volume: string }[];
-}
-
 export interface TransactionLookup {
   events: EventRecord[];
   transfers: TransferRecord[];
-}
-
-export interface Page<T> {
-  data: T[];
-  nextCursor: number | null;
 }

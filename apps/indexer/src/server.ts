@@ -1,11 +1,30 @@
+import { timingSafeEqual } from "node:crypto";
 import http from "node:http";
 import type { Database } from "@stellarlens/db";
-import { REGISTRY_PORT } from "./config.js";
-import { registerContract } from "./registry.js";
+import { REGISTRY_PORT, REGISTRY_SECRET } from "./config.js";
+import { ContractAlreadyRegisteredError, registerContract } from "./registry.js";
+
+/** Hard cap on registration request bodies so one oversized POST cannot exhaust memory. */
+export const MAX_REGISTRATION_BODY_BYTES = 64 * 1024;
+
+const REGISTRY_SECRET_HEADER = "x-registry-secret";
+
+function hasValidRegistrySecret(req: http.IncomingMessage): boolean {
+  const provided = req.headers[REGISTRY_SECRET_HEADER];
+  if (typeof provided !== "string") {
+    return false;
+  }
+
+  const expected = Buffer.from(REGISTRY_SECRET, "utf8");
+  const actual = Buffer.from(provided, "utf8");
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
 
 /**
  * Minimal stub for registering contracts to index. Not a full API — just
  * enough to unblock the registration flow without pulling in a web framework.
+ * Registration requires the X-Registry-Secret header to match REGISTRY_SECRET;
+ * GET /health stays unauthenticated so orchestrators can probe it.
  */
 export function startRegistryServer(db: Database, port: number = REGISTRY_PORT): http.Server {
   const server = http.createServer((req, res) => {
@@ -17,12 +36,33 @@ export function startRegistryServer(db: Database, port: number = REGISTRY_PORT):
     }
 
     if (req.method === "POST" && req.url === "/contracts") {
+      if (!hasValidRegistrySecret(req)) {
+        // Drain the body so a client with keep-alive enabled doesn't stall waiting to send it.
+        req.resume();
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "unauthorized" }));
+        return;
+      }
+
       let body = "";
-      req.on("data", (chunk) => {
+      let bodyBytes = 0;
+      let tooLarge = false;
+
+      req.on("data", (chunk: Buffer) => {
+        if (tooLarge) return;
+
+        bodyBytes += chunk.length;
+        if (bodyBytes > MAX_REGISTRATION_BODY_BYTES) {
+          tooLarge = true;
+          body = "";
+          res.writeHead(413, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "request body too large" }));
+          return;
+        }
         body += chunk;
       });
       req.on("end", () => {
-        void handleRegister(db, body, res);
+        if (!tooLarge) void handleRegister(db, body, res);
       });
       return;
     }
@@ -57,7 +97,11 @@ async function handleRegister(db: Database, body: string, res: http.ServerRespon
     res.writeHead(201, { "Content-Type": "application/json" });
     res.end(JSON.stringify(contract));
   } catch (err) {
-    res.writeHead(400, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: err instanceof Error ? err.message : "invalid request" }));
+    const status = err instanceof ContractAlreadyRegisteredError ? 409 : 400;
+    res.writeHead(status, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      error: err instanceof Error ? err.message : "invalid request",
+      ...(err instanceof ContractAlreadyRegisteredError ? { existingId: err.existingId } : {})
+    }));
   }
 }

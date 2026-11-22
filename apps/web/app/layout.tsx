@@ -9,6 +9,11 @@ const SITE_URL = process.env.SITE_URL ?? "http://localhost:3000";
 // The favicon comes from app/icon.svg and the preview image from
 // app/opengraph-image.tsx; Next adds both to every route's <head>.
 export const metadata: Metadata = {
+  title: {
+    default: "stellarlens",
+    template: "%s · stellarlens"
+  },
+  description: "stellarlens web app"
   metadataBase: new URL(SITE_URL),
   title: SITE_NAME,
   description: SITE_DESCRIPTION,

@@ -24,16 +24,6 @@ describe("StellarLensClient", () => {
     const contracts = await makeClient(fetchMock).getContract(1);
 
     expect(contracts).toEqual({ id: 1, address: "C123", name: null, network: "testnet" });
-      return jsonResponse({ data: [{ id: 1, address: "C123", name: null, network: "testnet" }], nextCursor: null });
-    }) as unknown as typeof fetch;
-
-    const page = await makeClient(fetchMock).listContracts();
-
-    expect(contracts).toEqual({
-      data: [{ id: 1, address: "C123", name: null, network: "testnet" }],
-      nextCursor: null
-    });
-    expect(page).toEqual({ data: [{ id: 1, address: "C123", name: null, network: "testnet" }], nextCursor: null });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -87,6 +77,40 @@ describe("StellarLensClient", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  describe("limit validation", () => {
+    it("passes an in-range limit through unchanged", async () => {
+      const eventFetch = vi.fn(async (url: string | URL) => {
+        expect(String(url)).toBe("https://api.example.com/contracts/1/events?limit=100");
+        return jsonResponse({ data: [], nextCursor: null });
+      }) as unknown as typeof fetch;
+      const transferFetch = vi.fn(async (url: string | URL) => {
+        expect(String(url)).toBe("https://api.example.com/contracts/1/transfers?limit=1");
+        return jsonResponse({ data: [], nextCursor: null });
+      }) as unknown as typeof fetch;
+
+      await makeClient(eventFetch).listEvents(1, { limit: 100 });
+      await makeClient(transferFetch).listTransfers(1, { limit: 1 });
+
+      expect(eventFetch).toHaveBeenCalledTimes(1);
+      expect(transferFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("rejects limits outside 1-100 before making a request", async () => {
+      const fetchMock = vi.fn() as unknown as typeof fetch;
+      const client = makeClient(fetchMock);
+
+      await expect(client.listEvents(1, { limit: 0 })).rejects.toThrow(RangeError);
+      await expect(client.listEvents(1, { limit: 101 })).rejects.toThrow(
+        /limit must be an integer between 1 and 100/
+      );
+      await expect(client.listTransfers(1, { limit: 0 })).rejects.toThrow(RangeError);
+      await expect(client.listTransfers(1, { limit: 101 })).rejects.toThrow(
+        /limit must be an integer between 1 and 100/
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
   it("strips a trailing slash from baseUrl", async () => {
     const fetchMock = vi.fn(async (url: string | URL) => {
       expect(String(url)).toBe("https://api.example.com/contracts");
@@ -94,6 +118,23 @@ describe("StellarLensClient", () => {
     }) as unknown as typeof fetch;
 
     await makeClient(fetchMock, "https://api.example.com/").listContracts();
+  });
+
+  it("accepts a well-formed baseUrl with or without a trailing slash", () => {
+    const fetchMock = vi.fn() as unknown as typeof fetch;
+
+    expect(() => makeClient(fetchMock, "https://api.example.com")).not.toThrow();
+    expect(() => makeClient(fetchMock, "https://api.example.com/")).not.toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("throws immediately when baseUrl is malformed", () => {
+    const fetchMock = vi.fn() as unknown as typeof fetch;
+
+    expect(() => makeClient(fetchMock, "not a url")).toThrow(TypeError);
+    expect(() => makeClient(fetchMock, "not a url")).toThrow(/Invalid baseUrl/);
+    expect(() => makeClient(fetchMock, "ftp://api.example.com")).toThrow(/http\(s\)/);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("passes contract list pagination and filters as query params", async () => {
@@ -117,6 +158,24 @@ describe("StellarLensClient", () => {
     expect(contract.id).toBe(1);
   });
 
+  it("surfaces duplicate registration conflicts with the existing contract id", async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        statusCode: 409,
+        message: "A contract with this address is already registered.",
+        existingId: 42
+      }, 409)
+    ) as unknown as typeof fetch;
+
+    await expect(
+      makeClient(fetchMock).registerContract({ address: "C1", network: "testnet" })
+    ).rejects.toMatchObject({
+      status: 409,
+      existingId: 42,
+      body: { existingId: 42 }
+    });
+  });
+
   it("posts an items envelope to /contracts/bulk", async () => {
     const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
       expect(String(url)).toBe("https://api.example.com/contracts/bulk");
@@ -136,6 +195,90 @@ describe("StellarLensClient", () => {
       { address: "C1", network: "testnet" }
     ]);
     expect(response.results[0]).toMatchObject({ status: "created", id: 1 });
+  });
+
+  it("ping calls GET /health and resolves with its status", async () => {
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      expect(String(url)).toBe("https://api.example.com/health");
+      expect(init?.method).toBe("GET");
+      return jsonResponse({ status: "ok" });
+    }) as unknown as typeof fetch;
+
+    await expect(makeClient(fetchMock).ping()).resolves.toEqual({ status: "ok" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("ping rejects with StellarLensApiError when the api is unhealthy", async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ status: "error" }), { status: 503 })
+    ) as unknown as typeof fetch;
+
+    await expect(makeClient(fetchMock).ping()).rejects.toBeInstanceOf(StellarLensApiError);
+  });
+
+  describe("webhooks", () => {
+    const webhook = {
+      id: 7,
+      contractId: 1,
+      url: "https://example.com/hook",
+      secret: "whsec_test",
+      eventTypes: ["transfer"],
+      active: true,
+      createdAt: "2026-01-01T00:00:00.000Z"
+    };
+
+    it("registerWebhook posts the url and event types and returns the webhook with its secret", async () => {
+      const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+        expect(String(url)).toBe("https://api.example.com/contracts/1/webhooks");
+        expect(init?.method).toBe("POST");
+        expect(init?.body).toBe(JSON.stringify({ url: "https://example.com/hook", eventTypes: ["transfer"] }));
+        return jsonResponse(webhook, 201);
+      }) as unknown as typeof fetch;
+
+      const created = await makeClient(fetchMock).registerWebhook(1, {
+        url: "https://example.com/hook",
+        eventTypes: ["transfer"]
+      });
+
+      expect(created).toEqual(webhook);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("listWebhooks gets the contract's webhooks", async () => {
+      const summaries = [
+        { id: 7, url: "https://example.com/hook", eventTypes: null, createdAt: "2026-01-01T00:00:00.000Z" }
+      ];
+      const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+        expect(String(url)).toBe("https://api.example.com/contracts/1/webhooks");
+        expect(init?.method).toBe("GET");
+        return jsonResponse(summaries);
+      }) as unknown as typeof fetch;
+
+      await expect(makeClient(fetchMock).listWebhooks(1)).resolves.toEqual(summaries);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("removeWebhook deletes the webhook and resolves on 204", async () => {
+      const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+        expect(String(url)).toBe("https://api.example.com/contracts/1/webhooks/7");
+        expect(init?.method).toBe("DELETE");
+        return new Response(null, { status: 204 });
+      }) as unknown as typeof fetch;
+
+      await expect(makeClient(fetchMock).removeWebhook(1, 7)).resolves.toBeUndefined();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("removeWebhook rejects with StellarLensApiError when the webhook doesn't exist", async () => {
+      const fetchMock = vi.fn(
+        async () => new Response(JSON.stringify({ message: "webhook 99 not found" }), { status: 404 })
+      ) as unknown as typeof fetch;
+
+      await expect(makeClient(fetchMock).removeWebhook(1, 99)).rejects.toMatchObject({
+        status: 404,
+        body: { message: "webhook 99 not found" }
+      });
+    });
   });
 
   it("throws StellarLensApiError with the parsed json body on failure", async () => {
@@ -180,6 +323,32 @@ describe("StellarLensClient", () => {
       expect(page.data).toHaveLength(1);
     });
 
+    it("pages through contracts across multiple pages by feeding nextCursor back as cursor", async () => {
+      const pages: Record<string, unknown> = {
+        "": { data: [contract(1), contract(2)], nextCursor: 2 },
+        "2": { data: [contract(3), contract(4)], nextCursor: 4 },
+        "4": { data: [contract(5)], nextCursor: null }
+      };
+      const urls: string[] = [];
+      const fetchMock = vi.fn(async (url: string | URL) => {
+        const parsed = new URL(String(url));
+        urls.push(parsed.search);
+        return jsonResponse(pages[parsed.searchParams.get("cursor") ?? ""]);
+      }) as unknown as typeof fetch;
+      const client = makeClient(fetchMock);
+
+      const ids: number[] = [];
+      let cursor: number | undefined;
+      do {
+        const page = await client.listContracts({ limit: 2, cursor });
+        ids.push(...page.data.map((c) => c.id));
+        cursor = page.nextCursor ?? undefined;
+      } while (cursor !== undefined);
+
+      expect(ids).toEqual([1, 2, 3, 4, 5]);
+      expect(urls).toEqual(["?limit=2", "?limit=2&cursor=2", "?limit=2&cursor=4"]);
+    });
+
     it("listAllContracts follows nextCursor until it is null, keeping the filters", async () => {
       const urls: string[] = [];
       const pages: Record<string, unknown> = {
@@ -213,6 +382,146 @@ describe("StellarLensClient", () => {
 
       for await (const c of makeClient(fetchMock).listAllContracts()) {
         expect(c.id).toBe(1);
+        break;
+      }
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("deleteContract", () => {
+    it("sends DELETE /contracts/:id and resolves on 204", async () => {
+      const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+        expect(String(url)).toBe("https://api.example.com/contracts/7");
+        expect(init?.method).toBe("DELETE");
+        expect((init?.headers as Record<string, string>)["x-api-key"]).toBe("test-key");
+        return new Response(null, { status: 204 });
+      }) as unknown as typeof fetch;
+
+      await expect(makeClient(fetchMock).deleteContract(7)).resolves.toBeUndefined();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("throws StellarLensApiError with the body on 404", async () => {
+      const body = { statusCode: 404, message: "contract 999 not found" };
+      const fetchMock = vi.fn(async () => jsonResponse(body, 404)) as unknown as typeof fetch;
+
+      const error = await makeClient(fetchMock)
+        .deleteContract(999)
+        .catch((err: unknown) => err);
+
+      expect(error).toBeInstanceOf(StellarLensApiError);
+      expect((error as StellarLensApiError).status).toBe(404);
+      expect((error as StellarLensApiError).body).toEqual(body);
+    });
+  });
+
+  describe("listAllEvents / listAllTransfers", () => {
+    const event = (id: number) => ({
+      id,
+      contractId: 1,
+      ledger: 1000 + id,
+      txHash: "a".repeat(64),
+      topic: "[]",
+      decodedData: null,
+      createdAt: "2026-01-01T00:00:00Z"
+    });
+    const transfer = (id: number) => ({ id, contractId: 1, from: "GA", to: "GB", amount: String(id), asset: "native" });
+
+    /** Serves `pages` keyed by the request's `cursor` query param ("" for the first page), recording each query. */
+    function pagedFetch(pages: Record<string, unknown>) {
+      const queries: string[] = [];
+      const fetchMock = vi.fn(async (url: string | URL) => {
+        const parsed = new URL(String(url));
+        queries.push(`${parsed.pathname}${parsed.search}`);
+        const page = pages[parsed.searchParams.get("cursor") ?? ""];
+        if (!page) {
+          throw new Error(`unexpected request ${parsed.pathname}${parsed.search}`);
+        }
+        return jsonResponse(page);
+      }) as unknown as typeof fetch;
+      return { fetchMock, queries };
+    }
+
+    it("listAllEvents yields every event in order across pages and stops when nextCursor is null", async () => {
+      const { fetchMock, queries } = pagedFetch({
+        "": { data: [event(1), event(2)], nextCursor: 2 },
+        "2": { data: [event(3), event(4)], nextCursor: 4 },
+        "4": { data: [event(5)], nextCursor: null }
+      });
+
+      const ids: number[] = [];
+      for await (const e of makeClient(fetchMock).listAllEvents(1, { limit: 2, topic: "transfer" })) {
+        ids.push(e.id);
+      }
+
+      expect(ids).toEqual([1, 2, 3, 4, 5]);
+      expect(queries).toEqual([
+        "/contracts/1/events?limit=2&topic=transfer",
+        "/contracts/1/events?limit=2&topic=transfer&cursor=2",
+        "/contracts/1/events?limit=2&topic=transfer&cursor=4"
+      ]);
+    });
+
+    it("listAllTransfers yields every transfer in order across pages and stops when nextCursor is absent", async () => {
+      const { fetchMock, queries } = pagedFetch({
+        "": { data: [transfer(1), transfer(2)], nextCursor: 2 },
+        "2": { data: [transfer(3)] }
+      });
+
+      const ids: number[] = [];
+      for await (const t of makeClient(fetchMock).listAllTransfers(1, { asset: "native" })) {
+        ids.push(t.id);
+      }
+
+      expect(ids).toEqual([1, 2, 3]);
+      expect(queries).toEqual(["/contracts/1/transfers?asset=native", "/contracts/1/transfers?asset=native&cursor=2"]);
+    });
+
+    it("resumes from a given cursor", async () => {
+      const { fetchMock, queries } = pagedFetch({ "10": { data: [event(11)], nextCursor: null } });
+
+      const ids: number[] = [];
+      for await (const e of makeClient(fetchMock).listAllEvents(1, { cursor: 10 })) {
+        ids.push(e.id);
+      }
+
+      expect(ids).toEqual([11]);
+      expect(queries).toEqual(["/contracts/1/events?cursor=10"]);
+    });
+
+    it("yields nothing for an empty first page", async () => {
+      const { fetchMock } = pagedFetch({ "": { data: [], nextCursor: null } });
+
+      const ids: number[] = [];
+      for await (const t of makeClient(fetchMock).listAllTransfers(1)) {
+        ids.push(t.id);
+      }
+
+      expect(ids).toEqual([]);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("stops instead of looping when the api returns the cursor it was given", async () => {
+      const { fetchMock } = pagedFetch({
+        "": { data: [event(1)], nextCursor: 1 },
+        "1": { data: [event(2)], nextCursor: 1 }
+      });
+
+      const ids: number[] = [];
+      for await (const e of makeClient(fetchMock).listAllEvents(1)) {
+        ids.push(e.id);
+      }
+
+      expect(ids).toEqual([1, 2]);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("fetches pages lazily", async () => {
+      const { fetchMock } = pagedFetch({ "": { data: [event(1), event(2)], nextCursor: 2 } });
+
+      for await (const e of makeClient(fetchMock).listAllEvents(1)) {
+        expect(e.id).toBe(1);
         break;
       }
 

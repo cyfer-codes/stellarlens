@@ -76,9 +76,16 @@ env vars each app needs), log in with the seeded admin account, and generate you
 | `packages/cli` | `pnpm --filter @stellarlens/cli dev` | Needs `STELLARLENS_API_URL` / `STELLARLENS_API_KEY` to actually run the built binary — see `packages/cli/README.md` |
 | `packages/db` | n/a (library) | `db:generate` / `db:migrate` / `db:studio` wrap `drizzle-kit`; needs `DATABASE_URL` and Postgres running |
 
+To audit a database for contract rows that use unsupported Stellar networks, run
+`pnpm --filter @stellarlens/db db:report-unsupported-networks` with `DATABASE_URL` configured.
+The command lists each offending contract and exits non-zero when any are found; it does not
+modify or delete existing records.
+
 The indexer runs as a daemon by default. Set `POLL_ONCE=true` to process one poll cycle and exit; in
 this mode the registry server is not started. `WEBHOOK_CONCURRENCY` optionally sets the maximum
-number of simultaneous webhook deliveries per event (default: `10`); see
+number of simultaneous webhook deliveries per event (default: `10`). `WEBHOOK_MAX_RETRIES`,
+`WEBHOOK_RETRY_BASE_DELAY_MS`, `WEBHOOK_RETRY_MAX_DELAY_MS` and `WEBHOOK_TIMEOUT_MS` tune delivery
+retries and the per-attempt timeout (defaults: `3`, `500`, `5000`, `5000`); see
 [docs/webhooks.md](docs/webhooks.md#configuration) for everything else that affects delivery.
 
 Full pipeline check before opening a PR:
@@ -122,7 +129,8 @@ can use the same stack:
 The defaults are for local use only. Override them from the shell or a root `.env` file:
 `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `STELLARLENS_API_KEY` (the key the dashboard sends, seeded
 into `api_keys`), `SESSION_SECRET`, `SOROBAN_RPC_URL`, `STELLAR_NETWORK`, `POLL_INTERVAL_MS`,
-`WEBHOOK_CONCURRENCY`, `CORS_ORIGINS`, `PUBLIC_DEMO`, `SITE_URL`, and the host ports above.
+`WEBHOOK_CONCURRENCY`, `REGISTRY_SECRET` (required by the indexer; send it as `X-Registry-Secret`
+when calling `POST /contracts`), `CORS_ORIGINS`, `PUBLIC_DEMO`, `SITE_URL`, and the host ports above.
 `docker compose --profile full down -v` removes everything, including the database volume.
 
 Each app has a multi-stage Dockerfile (`apps/api/Dockerfile`, `apps/indexer/Dockerfile`,
@@ -181,7 +189,7 @@ one thing that can't depend on an api key existing yet: creating the first one (
 
 ```
 apps/
-  api/       NestJS API — contracts, events, transfers, stats, api keys
+  api/       NestJS API — contracts, events, transfers, stats, api keys  (see apps/api/README.md)
   web/       Next.js dashboard — login, contracts/events/transfers views, settings
   indexer/   Polls Soroban RPC, writes events/transfers, delivers webhooks
 packages/
@@ -198,6 +206,7 @@ Workspaces are `apps/*` and `packages/*` (see `pnpm-workspace.yaml`), scoped as 
 
 ## Docs
 
+- [apps/api/README.md](apps/api/README.md) — API env vars, all routes, and local dev instructions
 - [docs/webhooks.md](docs/webhooks.md) — webhook delivery semantics, retries, signature verification,
   blocked destinations, pausing, the delivery history api, and related env vars
 - [docs/screenshots.md](docs/screenshots.md) — capture checklist for the README's screenshots

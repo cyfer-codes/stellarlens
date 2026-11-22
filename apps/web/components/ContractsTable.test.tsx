@@ -29,6 +29,18 @@ describe("ContractsTable", () => {
     loadContracts.mockReset();
   });
 
+  it("copies a contract's full address", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const contract = makeContract(1);
+
+    render(<ContractsTable initialContracts={[contract]} initialNextCursor={null} />);
+    await userEvent.click(screen.getByRole("button", { name: `Copy address ${contract.address}` }));
+
+    expect(writeText).toHaveBeenCalledWith(contract.address);
+    expect(await screen.findByText("Copied!")).toBeInTheDocument();
+  });
+
   it("loads more than 20 contracts when the user clicks Load more", async () => {
     loadContracts.mockResolvedValueOnce({ data: page2, nextCursor: null });
 

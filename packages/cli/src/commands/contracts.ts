@@ -21,6 +21,8 @@ export interface AddContractsOptions {
   network?: string;
   /** Display name; only allowed when registering a single address. */
   name?: string;
+  /** Print the results as a JSON array instead of one formatted line per address. */
+  json?: boolean;
 }
 
 export type AddContractStatus =
@@ -323,6 +325,10 @@ export async function runAddContracts(
   }
 
   const results = await addContracts(client, entries, options);
+  if (options.json) {
+    console.log(JSON.stringify(results));
+    return !results.some(isFailure);
+  }
   for (const result of results) {
     (isFailure(result) ? console.error : console.log)(formatResult(result));
   }
@@ -353,17 +359,21 @@ export interface ListContractsOptions {
   network?: string;
   /** Page size used while paginating through the api (1–100). */
   pageSize?: number;
+  /** Print the contracts as a JSON array instead of a table. */
+  json?: boolean;
 }
 
 /** Prints every registered contract matching the filters, following the api's cursor pagination to the end. */
 export async function listContracts(client: StellarLensClient, options: ListContractsOptions = {}): Promise<void> {
   const rows: Record<string, string | number>[] = [];
+  const contracts: Contract[] = [];
 
   for await (const contract of client.listAllContracts({
     name: options.name,
     network: options.network,
     limit: options.pageSize
   })) {
+    contracts.push(contract);
     rows.push({
       id: contract.id,
       address: contract.address,
@@ -372,10 +382,36 @@ export async function listContracts(client: StellarLensClient, options: ListCont
     });
   }
 
+  if (options.json) {
+    console.log(JSON.stringify(contracts));
+    return;
+  }
+
   if (rows.length === 0) {
     console.log("No contracts registered.");
     return;
   }
 
   console.table(rows);
+}
+
+/**
+ * Prints a single contract's details. A nonexistent id is reported as a clear error (the caller exits
+ * non-zero) rather than the raw 404.
+ */
+export async function getContract(client: StellarLensClient, id: number): Promise<void> {
+  let contract: Contract;
+  try {
+    contract = await client.getContract(id);
+  } catch (error) {
+    if (error instanceof StellarLensApiError && error.status === 404) {
+      throw new Error(`contract ${id} not found`);
+    }
+    throw error;
+  }
+
+  console.log(`id:      ${contract.id}`);
+  console.log(`address: ${contract.address}`);
+  console.log(`name:    ${contract.name ?? "—"}`);
+  console.log(`network: ${contract.network}`);
 }

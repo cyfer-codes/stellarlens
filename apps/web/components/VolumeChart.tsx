@@ -28,14 +28,23 @@ export function VolumeChart({ transfers }: { transfers: TransferRow[] }) {
   }
 
   return (
-    <div className="h-64 w-full">
+    // Bars, ticks and grid use `currentColor` so the chart follows the light/dark text color.
+    <div className="h-64 w-full text-gray-900 dark:text-gray-100">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-          <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-          <YAxis tick={{ fontSize: 12 }} />
-          <Tooltip />
-          <Bar dataKey="volume" fill="#111827" />
+          <CartesianGrid strokeDasharray="3 3" stroke="currentColor" strokeOpacity={0.15} />
+          <XAxis dataKey="date" tick={{ fontSize: 12, fill: "currentColor" }} stroke="currentColor" />
+          <YAxis tick={{ fontSize: 12, fill: "currentColor" }} stroke="currentColor" />
+          <Tooltip
+            cursor={{ fill: "currentColor", fillOpacity: 0.08 }}
+            contentStyle={{
+              backgroundColor: "var(--chart-tooltip-bg)",
+              borderColor: "var(--chart-tooltip-border)",
+              color: "var(--chart-tooltip-text)"
+            }}
+            itemStyle={{ color: "var(--chart-tooltip-text)" }}
+          />
+          <Bar dataKey="volume" fill="currentColor" />
         </BarChart>
       </ResponsiveContainer>
     </div>
