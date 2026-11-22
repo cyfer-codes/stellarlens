@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { WEBHOOK_SIGNATURE_HEADER, verifyWebhookSignature } from "@stellarlens/sdk/webhooks";
+import type { StellarLensClient } from "@stellarlens/sdk";
 
 /** Real deliveries are a few hundred bytes; anything far beyond that is not a stellarlens webhook. */
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -150,6 +151,58 @@ export async function startWebhookListener(
   });
 
   return { server, port: (server.address() as AddressInfo).port };
+}
+
+export interface AddWebhookOptions {
+  /** Only deliver these event topics; omit for every topic. */
+  eventTypes?: string[];
+}
+
+/**
+ * Registers a webhook for a contract and prints its signing secret. The api only returns the secret on
+ * creation, so it's shown once with a warning, the same way the dashboard reveals new api keys.
+ */
+export async function addWebhook(
+  client: StellarLensClient,
+  contractId: number,
+  url: string,
+  options: AddWebhookOptions = {}
+): Promise<void> {
+  const webhook = await client.registerWebhook(contractId, {
+    url,
+    ...(options.eventTypes && options.eventTypes.length > 0 ? { eventTypes: options.eventTypes } : {})
+  });
+
+  console.log(`Registered webhook ${webhook.id} for contract ${contractId}: ${webhook.url}`);
+  console.log(`Event types: ${webhook.eventTypes?.length ? webhook.eventTypes.join(", ") : "all"}`);
+  console.log("");
+  console.log("Signing secret — copy it now, it won't be shown again:");
+  console.log(`  ${webhook.secret}`);
+}
+
+/** Prints every webhook registered for a contract. */
+export async function listWebhooks(client: StellarLensClient, contractId: number): Promise<void> {
+  const webhooks = await client.listWebhooks(contractId);
+
+  if (webhooks.length === 0) {
+    console.log(`No webhooks registered for contract ${contractId}.`);
+    return;
+  }
+
+  console.table(
+    webhooks.map((webhook) => ({
+      id: webhook.id,
+      url: webhook.url,
+      eventTypes: webhook.eventTypes?.length ? webhook.eventTypes.join(", ") : "all",
+      createdAt: webhook.createdAt
+    }))
+  );
+}
+
+/** Deletes a webhook from a contract. */
+export async function removeWebhook(client: StellarLensClient, contractId: number, id: number): Promise<void> {
+  await client.removeWebhook(contractId, id);
+  console.log(`Removed webhook ${id} from contract ${contractId}.`);
 }
 
 export async function listenForWebhooks(options: ListenOptions): Promise<void> {

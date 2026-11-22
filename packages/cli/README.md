@@ -44,6 +44,17 @@ the same escaping as the dashboard export, including formula-injection protectio
 with the decoded `topic`/`value` as JSON. Transfers are filtered by `--from`/`--to` client-side, because the
 transfers endpoint's `from`/`to` filter on addresses.
 
+### Managing webhooks
+
+```bash
+stellarlens webhooks add <contractId> <url> [--event-types transfer,mint]
+stellarlens webhooks list <contractId>
+stellarlens webhooks remove <contractId> <id>
+```
+
+`webhooks add` prints the webhook's signing secret once — copy it then, it won't be shown again (pass it to
+`webhooks listen --secret` or your consumer's verifier).
+
 ### Developing a webhook consumer locally
 
 ```bash

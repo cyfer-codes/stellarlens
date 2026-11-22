@@ -6,7 +6,7 @@ import { runDecode } from "./commands/decode.js";
 import { StellarLensApiError } from "@stellarlens/sdk";
 import { listEvents, tailEvents } from "./commands/events.js";
 import { runExport, type ExportFormat, type ExportKind } from "./commands/export.js";
-import { listenForWebhooks } from "./commands/webhooks.js";
+import { addWebhook, listenForWebhooks, listWebhooks, removeWebhook } from "./commands/webhooks.js";
 
 function parsePort(value: string): number {
   const port = Number(value);
@@ -176,7 +176,40 @@ program
     await runDecode(xdr);
   });
 
-const webhooksCommand = program.command("webhooks").description("Develop webhook consumers locally");
+const webhooksCommand = program
+  .command("webhooks")
+  .description("Manage a contract's webhooks and develop webhook consumers locally");
+
+webhooksCommand
+  .command("add")
+  .description("Register a webhook for a contract and print its one-time signing secret")
+  .addArgument(new Argument("<contractId>", "Contract id").argParser(parseContractId))
+  .argument("<url>", "Url the indexer POSTs deliveries to")
+  .option(
+    "-e, --event-types <topics>",
+    "Comma-separated event topics to deliver (default: all)",
+    (value: string) => value.split(",").map((topic) => topic.trim()).filter((topic) => topic.length > 0)
+  )
+  .action(async (contractId: number, url: string, options: { eventTypes?: string[] }) => {
+    await addWebhook(createClientFromEnv(), contractId, url, options);
+  });
+
+webhooksCommand
+  .command("list")
+  .description("List the webhooks registered for a contract")
+  .addArgument(new Argument("<contractId>", "Contract id").argParser(parseContractId))
+  .action(async (contractId: number) => {
+    await listWebhooks(createClientFromEnv(), contractId);
+  });
+
+webhooksCommand
+  .command("remove")
+  .description("Delete a webhook from a contract")
+  .addArgument(new Argument("<contractId>", "Contract id").argParser(parseContractId))
+  .addArgument(new Argument("<id>", "Webhook id").argParser(parsePositiveInt))
+  .action(async (contractId: number, id: number) => {
+    await removeWebhook(createClientFromEnv(), contractId, id);
+  });
 
 webhooksCommand
   .command("listen")
