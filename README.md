@@ -19,6 +19,13 @@ smart contracts on Stellar. Register a contract address, and stellarlens:
 - fires signed webhooks to your own endpoints as new events land ([docs/webhooks.md](docs/webhooks.md)),
 - and surfaces all of it in a login-gated web dashboard, a REST api, a typed SDK, and a CLI.
 
+## Documentation
+
+- [docs/api.md](docs/api.md) — REST API reference: auth, rate limits, errors, and every route.
+- [docs/webhooks.md](docs/webhooks.md) — webhook payloads, signatures, retries, and delivery history.
+- [apps/indexer/README.md](apps/indexer/README.md) — how the indexer loop works, its environment
+  variables, and the hardcoded constants.
+
 ## Screenshots
 
 <table>

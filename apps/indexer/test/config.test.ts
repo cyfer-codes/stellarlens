@@ -58,4 +58,64 @@ describe("indexer configuration", () => {
       'POLL_INTERVAL_MS must be a positive integer; received "0"'
     );
   });
+
+  it("defaults EVENTS_BATCH_LIMIT to 100 when unset", async () => {
+    vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+    vi.stubEnv("STELLAR_NETWORK", "testnet");
+    vi.stubEnv("EVENTS_BATCH_LIMIT", undefined);
+    vi.resetModules();
+
+    const config = await import("../src/config.js");
+
+    expect(config.EVENTS_BATCH_LIMIT).toBe(100);
+  });
+
+  it("reads EVENTS_BATCH_LIMIT from the environment", async () => {
+    vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+    vi.stubEnv("STELLAR_NETWORK", "testnet");
+    vi.stubEnv("EVENTS_BATCH_LIMIT", "250");
+    vi.resetModules();
+
+    const config = await import("../src/config.js");
+
+    expect(config.EVENTS_BATCH_LIMIT).toBe(250);
+  });
+
+  it("falls back to 100 for a non-numeric EVENTS_BATCH_LIMIT", async () => {
+    vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+    vi.stubEnv("STELLAR_NETWORK", "testnet");
+    vi.stubEnv("EVENTS_BATCH_LIMIT", "not-a-number");
+    vi.resetModules();
+
+    const config = await import("../src/config.js");
+
+    expect(config.EVENTS_BATCH_LIMIT).toBe(100);
+  });
+
+  it("falls back to 100 for an empty or whitespace-only EVENTS_BATCH_LIMIT", async () => {
+    for (const value of ["", "   "]) {
+      vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+      vi.stubEnv("STELLAR_NETWORK", "testnet");
+      vi.stubEnv("EVENTS_BATCH_LIMIT", value);
+      vi.resetModules();
+
+      const config = await import("../src/config.js");
+
+      expect(config.EVENTS_BATCH_LIMIT).toBe(100);
+    }
+  });
+
+  it("never produces NaN for an invalid EVENTS_BATCH_LIMIT", async () => {
+    for (const value of ["abc", "10.5", "0", "-5", ""]) {
+      vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+      vi.stubEnv("STELLAR_NETWORK", "testnet");
+      vi.stubEnv("EVENTS_BATCH_LIMIT", value);
+      vi.resetModules();
+
+      const config = await import("../src/config.js");
+
+      expect(Number.isNaN(config.EVENTS_BATCH_LIMIT)).toBe(false);
+      expect(config.EVENTS_BATCH_LIMIT).toBe(100);
+    }
+  });
 });
