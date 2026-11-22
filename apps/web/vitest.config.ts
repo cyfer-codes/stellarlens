@@ -16,5 +16,6 @@ export default defineConfig({
     css: true,
     // e2e/ holds Playwright specs, run separately via `pnpm test:e2e`.
     exclude: ["**/node_modules/**", "e2e/**"]
+    css: true
   }
 });

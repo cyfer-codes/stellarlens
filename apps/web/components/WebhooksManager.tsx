@@ -15,6 +15,10 @@ function parseEventTypes(input: string): string[] | undefined {
   return eventTypes.length > 0 ? eventTypes : undefined;
 }
 
+function formatEventTypes(eventTypes: string[] | null): string {
+  return eventTypes && eventTypes.length > 0 ? eventTypes.join(", ") : "";
+}
+
 interface DeliveriesState {
   expanded: boolean;
   rows: WebhookDelivery[];
@@ -48,6 +52,11 @@ export function WebhooksManager({ contractId, authenticated }: { contractId: num
   const [confirmRotate, setConfirmRotate] = useState<number | null>(null);
   const [rotating, setRotating] = useState<number | null>(null);
   const [revealedSecret, setRevealedSecret] = useState<{ id: number; secret: string } | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editUrl, setEditUrl] = useState("");
+  const [editEventTypes, setEditEventTypes] = useState("");
+  const [savingId, setSavingId] = useState<number | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
 
   function patchDeliveries(id: number, patch: Partial<DeliveriesState>) {
     setDeliveries((current) => {
@@ -118,6 +127,9 @@ export function WebhooksManager({ contractId, authenticated }: { contractId: num
         delete next[id];
         return next;
       });
+      if (editingId === id) {
+        resetEditState();
+      }
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "failed to delete webhook");
@@ -142,6 +154,71 @@ export function WebhooksManager({ contractId, authenticated }: { contractId: num
       setError(err instanceof Error ? err.message : "failed to rotate webhook secret");
     } finally {
       setRotating(null);
+    }
+  }
+
+  function resetEditState() {
+    setEditingId(null);
+    setEditUrl("");
+    setEditEventTypes("");
+    setSavingId(null);
+    setEditError(null);
+  }
+
+  function handleStartEdit(webhook: Webhook) {
+    setEditingId(webhook.id);
+    setEditUrl(webhook.url);
+    setEditEventTypes(formatEventTypes(webhook.eventTypes));
+    setEditError(null);
+  }
+
+  function handleCancelEdit() {
+    resetEditState();
+  }
+
+  async function handleSaveEdit(id: number) {
+    const trimmedUrl = editUrl.trim();
+    if (!trimmedUrl) {
+      setEditError("URL is required");
+      return;
+    }
+
+    setSavingId(id);
+    setEditError(null);
+    try {
+      const response = await fetch(`/api/contracts/${contractId}/webhooks/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: trimmedUrl,
+          eventTypes: parseEventTypes(editEventTypes)
+        })
+      });
+
+      if (response.status === 409) {
+        const body = (await response.json().catch(() => ({}))) as { error?: string };
+        setEditError(
+          body.error
+            ? `A webhook with this URL already exists on this contract (${body.error}).`
+            : "A webhook with this URL already exists on this contract."
+        );
+        return;
+      }
+      if (response.status === 400) {
+        const body = (await response.json().catch(() => ({}))) as { error?: string };
+        setEditError(body.error ?? "Invalid input.");
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(`request failed with ${response.status}`);
+      }
+
+      resetEditState();
+      await refresh();
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "failed to update webhook");
+    } finally {
+      setSavingId(null);
     }
   }
 
@@ -327,6 +404,16 @@ export function WebhooksManager({ contractId, authenticated }: { contractId: num
                     authenticated={authenticated}
                     confirming={confirmRotate === webhook.id}
                     rotating={rotating === webhook.id}
+                    editing={editingId === webhook.id}
+                    saving={savingId === webhook.id}
+                    editUrl={editUrl}
+                    editEventTypes={editEventTypes}
+                    editError={editingId === webhook.id ? editError : null}
+                    onEditUrlChange={setEditUrl}
+                    onEditEventTypesChange={setEditEventTypes}
+                    onRequestEdit={() => handleStartEdit(webhook)}
+                    onCancelEdit={handleCancelEdit}
+                    onSaveEdit={() => handleSaveEdit(webhook.id)}
                     onRequestRotate={() => setConfirmRotate(webhook.id)}
                     onCancelRotate={() => setConfirmRotate(null)}
                     onConfirmRotate={() => handleRotate(webhook.id)}
@@ -350,6 +437,16 @@ function WebhookRow({
   authenticated,
   confirming,
   rotating,
+  editing,
+  saving,
+  editUrl,
+  editEventTypes,
+  editError,
+  onEditUrlChange,
+  onEditEventTypesChange,
+  onRequestEdit,
+  onCancelEdit,
+  onSaveEdit,
   onRequestRotate,
   onCancelRotate,
   onConfirmRotate,
@@ -362,6 +459,16 @@ function WebhookRow({
   authenticated: boolean;
   confirming: boolean;
   rotating: boolean;
+  editing: boolean;
+  saving: boolean;
+  editUrl: string;
+  editEventTypes: string;
+  editError: string | null;
+  onEditUrlChange: (value: string) => void;
+  onEditEventTypesChange: (value: string) => void;
+  onRequestEdit: () => void;
+  onCancelEdit: () => void;
+  onSaveEdit: () => void;
   onRequestRotate: () => void;
   onCancelRotate: () => void;
   onConfirmRotate: () => void;
@@ -390,9 +497,19 @@ function WebhookRow({
             <div className="flex justify-end gap-3">
               <button
                 type="button"
+                onClick={onRequestEdit}
+                disabled={editing || rotating || confirming}
+                className="text-xs font-medium text-gray-700 hover:underline disabled:opacity-50"
+              >
+                Edit
+              </button>
+              <button
+                type="button"
                 onClick={onRequestRotate}
                 disabled={rotating || confirming}
                 className="text-xs font-medium text-gray-700 dark:text-gray-300 hover:underline disabled:opacity-50"
+                disabled={editing || rotating || confirming}
+                className="text-xs font-medium text-gray-700 hover:underline disabled:opacity-50"
               >
                 Rotate
               </button>
@@ -407,11 +524,64 @@ function WebhookRow({
           </td>
         )}
       </tr>
+      {editing && (
+        <tr className="border-b border-gray-100 bg-gray-50">
+          <td colSpan={authenticated ? 5 : 4} className="px-3 py-3">
+            <div className="space-y-2">
+              <div>
+                <label htmlFor={`edit-url-${webhook.id}`} className="block text-xs font-medium text-gray-700">
+                  URL
+                </label>
+                <input
+                  id={`edit-url-${webhook.id}`}
+                  type="url"
+                  value={editUrl}
+                  onChange={(event) => onEditUrlChange(event.target.value)}
+                  className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label htmlFor={`edit-events-${webhook.id}`} className="block text-xs font-medium text-gray-700">
+                  Events <span className="text-gray-400">(optional)</span>
+                </label>
+                <input
+                  id={`edit-events-${webhook.id}`}
+                  value={editEventTypes}
+                  onChange={(event) => onEditEventTypesChange(event.target.value)}
+                  placeholder="transfer, mint"
+                  className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+              {editError && <p className="text-xs text-red-600">{editError}</p>}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={onSaveEdit}
+                  disabled={saving}
+                  className="rounded bg-gray-900 px-3 py-1 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                >
+                  {saving ? "Saving…" : "Save"}
+                </button>
+                <button
+                  type="button"
+                  onClick={onCancelEdit}
+                  disabled={saving}
+                  className="rounded border border-gray-300 bg-white px-3 py-1 text-xs hover:bg-gray-100 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
       {confirming && (
         <tr className="border-b border-gray-100 dark:border-gray-800 bg-amber-50 dark:bg-amber-950/40">
           <td colSpan={authenticated ? 5 : 4} className="px-3 py-3">
             <p className="text-sm font-medium text-amber-900 dark:text-amber-200">Rotate webhook secret?</p>
                       <p className="mt-1 text-xs text-amber-800 dark:text-amber-300">
+            <p className="text-sm font-medium text-amber-900">Rotate webhook secret?</p>
+            <p className="mt-1 text-xs text-amber-800">
               The current secret will stop working immediately. Any receiver still using the old secret will
               fail signature verification until you deploy the new one. This cannot be undone.
             </p>

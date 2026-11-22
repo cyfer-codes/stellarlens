@@ -84,6 +84,9 @@ requests, so they need a `full`-scope key; a `read`-scope key gets `403`.
 POST /your/webhook/path HTTP/1.1
 Content-Type: application/json
 X-Webhook-Signature: sha256=<64 lowercase hex characters>
+X-Webhook-Id: wh_<webhookId>_evt_<eventId>
+X-Webhook-Event: transfer
+X-Webhook-Attempt: 1
 
 {"eventId":4182,"contractId":7,"ledger":512345,"txHash":"9f2c…","topic":["transfer","GABC…","GDEF…"],"value":"1000000"}
 ```
@@ -97,7 +100,13 @@ X-Webhook-Signature: sha256=<64 lowercase hex characters>
 | `topic` | array | Decoded topic values (`scValToNative`); 64/128/256-bit integers are decimal strings |
 | `value` | any | Decoded event value, same conversion rules as `topic` |
 
-There is no event-type, delivery-id or timestamp header, and the body has no envelope or version
+| Header | Meaning |
+|---|---|
+| `X-Webhook-Id` | Delivery id for this webhook/event pair; identical on every retry — **use it to deduplicate** |
+| `X-Webhook-Event` | `topic[0]` when it is a string, otherwise `unknown` |
+| `X-Webhook-Attempt` | `1` for the first attempt, incremented on each retry |
+
+There is no timestamp header, and the body has no envelope or version
 field. The raw XDR isn't included; fetch it from `GET /contracts/:contractId/events` if you need it.
 
 Respond with any `2xx` status within **5 seconds**. The response body is ignored. Any other status, a
@@ -163,8 +172,8 @@ In detail:
 
 ## Retry schedule
 
-Constants live in [`apps/indexer/src/config.ts`](../apps/indexer/src/config.ts) and aren't
-configurable through env vars.
+Defaults live in [`apps/indexer/src/config.ts`](../apps/indexer/src/config.ts) and can be tuned
+through env vars (see [Configuration](#configuration)). The table below assumes the defaults.
 
 | Attempt | Waits before attempt | Timeout | Cumulative worst case |
 |---|---|---|---|
@@ -183,6 +192,8 @@ These failures stop immediately, with no retries (`attempts` is `1`):
   `lastError: "DNS resolution failed for <url>: <message>"` and logged as unreachable.
 - **Blocked destination.** The host resolves to a non-public address (see below). Recorded as
   `lastError: "webhook URL resolves to a non-public IP address"`.
+- **Redirect.** The endpoint answers with a `3xx`. Redirects are never followed; recorded as
+  `lastError: "webhook responded with redirect status 302 to <location>; redirects are not followed"`.
 - **A 4xx this endpoint will never accept.** Every other 4xx response — bad auth, unknown path,
   unprocessable payload, … — is permanent, so it isn't retried. `408 Request Timeout` and
   `429 Too Many Requests` are the exceptions and are retried. Recorded as
@@ -224,9 +235,11 @@ IPv4-mapped addresses (`::ffff:a.b.c.d`) are checked against the IPv4 rules.
 
 Known limits, for operators assessing the protection:
 
-- The check resolves the host separately from the HTTP request, so a DNS-rebinding host could
-  answer differently between the two lookups.
-- HTTP redirects are followed (`fetch`'s default) and the redirect target is **not** re-checked.
+- The HTTP connection uses its own DNS lookup that re-checks every resolved address and connects
+  only to a validated public one, so a DNS-rebinding host can't switch to a private address after
+  the check. TLS SNI and the `Host` header still use the configured hostname.
+- HTTP redirects are not followed (`redirect: "manual"`), so a public endpoint can't bounce the
+  signed request to an internal address; any `3xx` is recorded as a failed delivery.
 - Registration doesn't check the destination, so a webhook pointing at a blocked address can be
   created; every delivery to it is then recorded as `failed`.
 
@@ -274,6 +287,7 @@ x-api-key: <key>
   "data": [
     {
       "id": 125,
+      "idempotencyKey": "wh_12_evt_4183",
       "status": "failed",
       "attempts": 4,
       "lastError": "webhook responded with status 503",
@@ -282,6 +296,7 @@ x-api-key: <key>
     },
     {
       "id": 124,
+      "idempotencyKey": "wh_12_evt_4182",
       "status": "success",
       "attempts": 1,
       "lastError": null,
@@ -312,10 +327,15 @@ Indexer env vars that affect webhooks:
 | Variable | Default | Effect |
 |---|---|---|
 | `WEBHOOK_CONCURRENCY` | `10` | Max webhooks delivered to in parallel **for one event**. Must be a positive integer; the indexer refuses to start otherwise. Events themselves are always delivered one at a time. |
+| `WEBHOOK_MAX_RETRIES` | `3` | Retries after the first delivery attempt. Must be a non-negative integer; `0` disables retries. |
+| `WEBHOOK_RETRY_BASE_DELAY_MS` | `500` | Base delay for exponential backoff between attempts. Must be a positive integer. |
+| `WEBHOOK_RETRY_MAX_DELAY_MS` | `5000` | Cap on any single backoff delay, including a receiver's `Retry-After`. Must be a positive integer ≥ `WEBHOOK_RETRY_BASE_DELAY_MS`. |
+| `WEBHOOK_TIMEOUT_MS` | `5000` | Per-attempt request timeout; the POST is aborted (and retried) once it elapses. Must be a positive integer. |
 | `POLL_INTERVAL_MS` | `5000` | Sleep between poll cycles. Together with delivery time, sets how quickly new events reach endpoints. |
 | `POLL_ONCE` | `false` | `true` runs one poll cycle (deliveries included) and exits. |
 | `DATABASE_URL` | — | Where webhooks are read from and delivery history is written. |
 | `SOROBAN_RPC_URL`, `STELLAR_NETWORK` | — | Required by the indexer; only events from that network are indexed and delivered. |
 
-Retry counts, backoff and the 5s request timeout are code constants (see [Retry schedule](#retry-schedule)).
+Invalid values for any of these make the indexer refuse to start. See [Retry schedule](#retry-schedule)
+for how the retry and timeout settings combine.
 The api has no webhook-specific settings.

@@ -18,6 +18,11 @@ export class WebhooksController {
     return this.webhooksService.findAllByContract(contractId);
   }
 
+  @Get(":id")
+  findOne(@Param("contractId", ParseIntPipe) contractId: number, @Param("id", ParseIntPipe) id: number) {
+    return this.webhooksService.findOne(contractId, id);
+  }
+
   @Patch(":id")
   update(
     @Param("contractId", ParseIntPipe) contractId: number,
