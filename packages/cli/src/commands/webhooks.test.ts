@@ -1,8 +1,15 @@
 import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { signWebhookPayload } from "@stellarlens/sdk/webhooks";
-import { afterEach, describe, expect, it } from "vitest";
-import { startWebhookListener, type ListenOptions } from "./webhooks.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { StellarLensClient } from "@stellarlens/sdk";
+import {
+  addWebhook,
+  listWebhooks,
+  removeWebhook,
+  startWebhookListener,
+  type ListenOptions
+} from "./webhooks.js";
 
 const SECRET = "whsec_local";
 const BODY = JSON.stringify({ eventId: 7, contractId: 1, ledger: 100, txHash: "ab", topic: ["transfer"], value: "5" });
@@ -133,5 +140,117 @@ describe("webhooks listen", () => {
       expect(response.status).toBe(502);
       expect(lines.some((line) => line.includes(`forward to ${deadUrl} failed`))).toBe(true);
     });
+  });
+});
+
+describe("webhooks add", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("registers the webhook and prints the one-time secret with a warning", async () => {
+    const registerWebhook = vi.fn().mockResolvedValue({
+      id: 7,
+      contractId: 1,
+      url: "https://example.com/hook",
+      secret: "whsec_new",
+      eventTypes: ["transfer", "mint"],
+      active: true,
+      createdAt: "2026-01-01T00:00:00.000Z"
+    });
+    const client = { registerWebhook } as unknown as StellarLensClient;
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await addWebhook(client, 1, "https://example.com/hook", { eventTypes: ["transfer", "mint"] });
+
+    expect(registerWebhook).toHaveBeenCalledWith(1, {
+      url: "https://example.com/hook",
+      eventTypes: ["transfer", "mint"]
+    });
+    const output = logSpy.mock.calls.map((call) => String(call[0]));
+    expect(output).toContain("Registered webhook 7 for contract 1: https://example.com/hook");
+    expect(output).toContain("Event types: transfer, mint");
+    expect(output).toContain("Signing secret — copy it now, it won't be shown again:");
+    expect(output).toContain("  whsec_new");
+  });
+
+  it("omits eventTypes when none are given, so every topic is delivered", async () => {
+    const registerWebhook = vi.fn().mockResolvedValue({
+      id: 8,
+      contractId: 1,
+      url: "https://example.com/all",
+      secret: "whsec_all",
+      eventTypes: null,
+      active: true,
+      createdAt: "2026-01-01T00:00:00.000Z"
+    });
+    const client = { registerWebhook } as unknown as StellarLensClient;
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await addWebhook(client, 1, "https://example.com/all");
+
+    expect(registerWebhook).toHaveBeenCalledWith(1, { url: "https://example.com/all" });
+    expect(logSpy).toHaveBeenCalledWith("Event types: all");
+  });
+});
+
+describe("webhooks list", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("prints a table of the contract's webhooks", async () => {
+    const listWebhooksMock = vi.fn().mockResolvedValue([
+      { id: 7, url: "https://example.com/hook", eventTypes: ["transfer"], createdAt: "2026-01-01T00:00:00.000Z" },
+      { id: 8, url: "https://example.com/all", eventTypes: null, createdAt: "2026-01-02T00:00:00.000Z" }
+    ]);
+    const client = { listWebhooks: listWebhooksMock } as unknown as StellarLensClient;
+    const tableSpy = vi.spyOn(console, "table").mockImplementation(() => {});
+
+    await listWebhooks(client, 1);
+
+    expect(listWebhooksMock).toHaveBeenCalledWith(1);
+    expect(tableSpy).toHaveBeenCalledWith([
+      { id: 7, url: "https://example.com/hook", eventTypes: "transfer", createdAt: "2026-01-01T00:00:00.000Z" },
+      { id: 8, url: "https://example.com/all", eventTypes: "all", createdAt: "2026-01-02T00:00:00.000Z" }
+    ]);
+  });
+
+  it("says so when no webhooks are registered", async () => {
+    const client = { listWebhooks: vi.fn().mockResolvedValue([]) } as unknown as StellarLensClient;
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const tableSpy = vi.spyOn(console, "table").mockImplementation(() => {});
+
+    await listWebhooks(client, 3);
+
+    expect(logSpy).toHaveBeenCalledWith("No webhooks registered for contract 3.");
+    expect(tableSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("webhooks remove", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("deletes the webhook and confirms", async () => {
+    const removeWebhookMock = vi.fn().mockResolvedValue(undefined);
+    const client = { removeWebhook: removeWebhookMock } as unknown as StellarLensClient;
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await removeWebhook(client, 1, 7);
+
+    expect(removeWebhookMock).toHaveBeenCalledWith(1, 7);
+    expect(logSpy).toHaveBeenCalledWith("Removed webhook 7 from contract 1.");
+  });
+
+  it("propagates api errors so the cli exits non-zero", async () => {
+    const client = {
+      removeWebhook: vi.fn().mockRejectedValue(new Error("webhook 99 not found"))
+    } as unknown as StellarLensClient;
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await expect(removeWebhook(client, 1, 99)).rejects.toThrow("webhook 99 not found");
+    expect(logSpy).not.toHaveBeenCalled();
   });
 });

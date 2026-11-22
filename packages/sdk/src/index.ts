@@ -30,6 +30,7 @@ export {
 } from "./tokens.js";
 export type {
   ApiError,
+  HealthStatus,
   Contract,
   ListContractsParams,
   RegisterContractInput,

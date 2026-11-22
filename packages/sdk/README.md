@@ -174,6 +174,25 @@ console.log(formatAmount(total, 7));
 ```
 
 `formatAmount` never adds grouping separators, so its output always parses back with `parseAmount`.
+### Managing webhooks
+
+```ts
+// Register — the signing secret is only returned here, so store it now.
+const webhook = await client.registerWebhook(contract.id, {
+  url: "https://example.com/stellarlens-webhook",
+  eventTypes: ["transfer"] // optional; omit for every topic
+});
+console.log(webhook.id, webhook.secret);
+
+// List (secrets are never returned again)
+for (const { id, url, eventTypes } of await client.listWebhooks(contract.id)) {
+  console.log(id, url, eventTypes ?? "all topics");
+}
+
+// Remove
+await client.removeWebhook(contract.id, webhook.id);
+```
+
 ### Verifying webhooks
 
 Every webhook delivery is signed with HMAC-SHA256 using the secret returned when the webhook was registered.
@@ -377,6 +396,9 @@ Every request-making method accepts an optional final `options?: RequestOptions`
 | `listTransfers(contractId, params?)` | Cursor-paginated token transfers for a contract (`cursor`, `limit`) |
 | `listAllTransfers(contractId, params?)` | Async iterator over every matching transfer, following `nextCursor` |
 | `getStats(contractId, params?)` | Transfer summary stats for a contract (`from`, `to`) |
+| `registerWebhook(contractId, input)` | Register a webhook (`url`, `eventTypes?`); the response carries the one-time signing `secret` |
+| `listWebhooks(contractId)` | Every webhook registered for a contract (without secrets) |
+| `removeWebhook(contractId, id)` | Delete a webhook |
 | `formatAmount(amount, decimals, { maxFractionDigits }?)` | Format a base-unit amount for display, using `bigint` |
 | `parseAmount(display, decimals)` | Parse a display amount into base units as a `bigint` |
 

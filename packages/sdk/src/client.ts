@@ -4,8 +4,10 @@ import type {
   BulkRegisterContractsResponse,
   Contract,
   ContractStats,
+  CreateWebhookInput,
   EventRecord,
   GetStatsParams,
+  HealthStatus,
   ListContractsParams,
   ListEventsParams,
   ListTransfersParams,
@@ -13,7 +15,9 @@ import type {
   RegisterContractInput,
   RequestOptions,
   TransferRecord,
-  WatchEventsOptions
+  WatchEventsOptions,
+  Webhook,
+  WebhookSummary
 } from "./types.js";
 
 /**
@@ -292,6 +296,14 @@ export class StellarLensClient {
   }
 
   /**
+   * Calls `GET /health` and resolves once the api answers — the quickest check that `baseUrl` points at a live
+   * stellarlens api. Rejects with a {@link StellarLensApiError} on a non-2xx response.
+   */
+  ping(): Promise<HealthStatus> {
+    return this.request<HealthStatus>("/health");
+  }
+
+  /** Registers a new contract, or updates the name/network of one already registered at that address. */
    * Walks a cursor-paginated endpoint, yielding each record in order and fetching the next page only once the
    * current one is consumed. Stops when `nextCursor` is `null`/absent, or when the api hands back the cursor it was
    * just given (which would otherwise refetch the same page forever).
@@ -518,5 +530,26 @@ export class StellarLensClient {
   /** Transfer summary stats for a contract, optionally scoped to a time window. */
   getStats(contractId: number, params?: GetStatsParams, options?: RequestOptions): Promise<ContractStats> {
     return this.request<ContractStats>(`/contracts/${contractId}/stats${buildQuery(params)}`, undefined, options);
+  }
+
+  /**
+   * Registers a webhook for a contract. The response includes the signing `secret`, which is only returned
+   * here (and on secret rotation) — store it, it can't be fetched again.
+   */
+  registerWebhook(contractId: number, input: CreateWebhookInput): Promise<Webhook> {
+    return this.request<Webhook>(`/contracts/${contractId}/webhooks`, {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
+  }
+
+  /** Every webhook registered for a contract (without their secrets). */
+  listWebhooks(contractId: number): Promise<WebhookSummary[]> {
+    return this.request<WebhookSummary[]>(`/contracts/${contractId}/webhooks`);
+  }
+
+  /** Deletes a webhook from a contract. Resolves once the api confirms (`204 No Content`). */
+  removeWebhook(contractId: number, id: number): Promise<void> {
+    return this.request<void>(`/contracts/${contractId}/webhooks/${id}`, { method: "DELETE" });
   }
 }
