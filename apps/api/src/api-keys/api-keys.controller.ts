@@ -25,6 +25,15 @@ export class ApiKeysController {
     return this.apiKeysService.update(id, dto);
   }
 
+  @Post(":id/rotate")
+  @RequireScope("full")
+  rotate(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body?: { gracePeriodMs?: number },
+  ) {
+    return this.apiKeysService.rotate(id, body?.gracePeriodMs);
+  }
+
   @Delete(":id")
   @HttpCode(HttpStatus.NO_CONTENT)
   @RequireScope("full")

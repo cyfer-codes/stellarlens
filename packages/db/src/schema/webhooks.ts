@@ -1,6 +1,10 @@
-import { bigint, boolean, index, integer, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { bigint, boolean, index, integer, jsonb, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 import { contracts } from "./contracts.js";
 import { events } from "./events.js";
+
+export interface WebhookFilter {
+  topics?: Array<string | null>;
+}
 
 export const webhooks = pgTable(
   "webhooks",
@@ -14,6 +18,7 @@ export const webhooks = pgTable(
     // Stored as a versioned payload: "v1:<iv>:<tag>:<ciphertext>" (base64 segments).
     secret: text("secret").notNull(),
     eventTypes: text("event_types").array(),
+    filter: jsonb("filter").$type<WebhookFilter>(),
     active: boolean("active").default(true).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
   },

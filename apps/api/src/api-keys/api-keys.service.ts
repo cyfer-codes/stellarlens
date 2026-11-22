@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException
@@ -11,6 +12,8 @@ import { apiKeys, type Database } from "@stellarlens/db";
 import { DATABASE } from "../database/database.module";
 import { CreateApiKeyDto } from "./dto/create-api-key.dto";
 import { UpdateApiKeyDto } from "./dto/update-api-key.dto";
+
+const DEFAULT_ROTATION_GRACE_PERIOD_MS = 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class ApiKeysService {
@@ -109,12 +112,11 @@ export class ApiKeysService {
       .set({
         ...(dto.name !== undefined ? { name: dto.name } : {}),
         ...(dto.scope !== undefined ? { scope: dto.scope } : {}),
-        ...(expiresAt !== undefined ? { expiresAt } : {})
+        ...(expiresAt !== undefined ? { expiresAt } : {}),
+        ...(dto.rateLimitPerMinute !== undefined
+          ? { rateLimitPerMinute: dto.rateLimitPerMinute ?? null }
+          : {})
       })
-
-    const [updated] = await this.db
-      .update(apiKeys)
-      .set({ rateLimitPerMinute: dto.rateLimitPerMinute ?? null })
       .where(eq(apiKeys.id, id))
       .returning({
         id: apiKeys.id,
@@ -122,12 +124,73 @@ export class ApiKeysService {
         scope: apiKeys.scope,
         createdAt: apiKeys.createdAt,
         expiresAt: apiKeys.expiresAt,
-        revokedAt: apiKeys.revokedAt
         revokedAt: apiKeys.revokedAt,
         rateLimitPerMinute: apiKeys.rateLimitPerMinute
       });
 
     return updated;
+  }
+
+  async rotate(id: number, gracePeriodMs?: number) {
+    if (
+      gracePeriodMs !== undefined &&
+      (typeof gracePeriodMs !== "number" ||
+        !Number.isFinite(gracePeriodMs) ||
+        gracePeriodMs <= 0)
+    ) {
+      throw new BadRequestException("gracePeriodMs must be a positive finite number");
+    }
+
+    const [existing] = await this.db
+      .select({
+        id: apiKeys.id,
+        name: apiKeys.name,
+        scope: apiKeys.scope,
+        revokedAt: apiKeys.revokedAt,
+        expiresAt: apiKeys.expiresAt,
+        rateLimitPerMinute: apiKeys.rateLimitPerMinute
+      })
+      .from(apiKeys)
+      .where(eq(apiKeys.id, id));
+
+    if (!existing) {
+      throw new NotFoundException(`api key ${id} not found`);
+    }
+    if (existing.revokedAt) {
+      throw new ConflictException(`api key ${id} has been revoked`);
+    }
+    if (existing.scope !== "full") {
+      throw new ForbiddenException("only full-scope api keys can be rotated");
+    }
+
+    const rawKey = randomBytes(24).toString("hex");
+    const keyHash = createHash("sha256").update(rawKey).digest("hex");
+
+    const [newKey] = await this.db
+      .insert(apiKeys)
+      .values({
+        keyHash,
+        name: existing.name,
+        scope: existing.scope,
+        expiresAt: null,
+        rateLimitPerMinute: existing.rateLimitPerMinute
+      })
+      .returning({
+        id: apiKeys.id,
+        name: apiKeys.name,
+        scope: apiKeys.scope,
+        createdAt: apiKeys.createdAt,
+        expiresAt: apiKeys.expiresAt,
+        rateLimitPerMinute: apiKeys.rateLimitPerMinute
+      });
+
+    const grace = gracePeriodMs ?? DEFAULT_ROTATION_GRACE_PERIOD_MS;
+    await this.db
+      .update(apiKeys)
+      .set({ expiresAt: new Date(Date.now() + grace) })
+      .where(eq(apiKeys.id, id));
+
+    return { ...newKey, key: rawKey };
   }
 
   async revoke(id: number): Promise<void> {

@@ -1,7 +1,5 @@
-import { Inject, Injectable } from "@nestjs/common";
-import { and, asc, eq, gt, gte, lte, or, sql } from "drizzle-orm";
 import { BadRequestException, Inject, Injectable } from "@nestjs/common";
-import { and, asc, eq, gt, gte, lte, sql } from "drizzle-orm";
+import { and, asc, eq, gt, gte, lte, or, sql } from "drizzle-orm";
 import { tokenTransfers, type Database } from "@stellarlens/db";
 import { ContractsService } from "../contracts/contracts.service";
 import { DATABASE } from "../database/database.module";
@@ -21,15 +19,23 @@ export class TransfersService {
   async findByContract(contractId: number, query: FindTransfersQueryDto) {
     await this.contractsService.findOne(contractId);
 
+    if (
+      query.minAmount !== undefined &&
+      query.maxAmount !== undefined &&
+      BigInt(query.minAmount) > BigInt(query.maxAmount)
+    ) {
+      throw new BadRequestException("minAmount must be less than or equal to maxAmount");
+    }
+
     const conditions = [eq(tokenTransfers.contractId, contractId)];
     if (query.cursor !== undefined) {
       conditions.push(gt(tokenTransfers.id, query.cursor));
     }
     if (query.minAmount !== undefined) {
-      conditions.push(gte(tokenTransfers.amount, String(query.minAmount)));
+      conditions.push(gte(tokenTransfers.amount, query.minAmount));
     }
     if (query.maxAmount !== undefined) {
-      conditions.push(lte(tokenTransfers.amount, String(query.maxAmount)));
+      conditions.push(lte(tokenTransfers.amount, query.maxAmount));
     }
     if (query.from !== undefined) {
       conditions.push(eq(tokenTransfers.from, query.from));
@@ -80,10 +86,10 @@ export class TransfersService {
 
     const conditions = [eq(tokenTransfers.contractId, contractId)];
     if (query.from) {
-      conditions.push(gte(tokenTransfers.createdAt, new Date(query.from)));
+      conditions.push(gte(tokenTransfers.ledgerClosedAt, new Date(query.from)));
     }
     if (query.to) {
-      conditions.push(lte(tokenTransfers.createdAt, new Date(query.to)));
+      conditions.push(lte(tokenTransfers.ledgerClosedAt, new Date(query.to)));
     }
     const where = and(...conditions);
 
@@ -116,9 +122,9 @@ export class TransfersService {
   /**
    * Bucketed volume time-series for charts.
    *
-   * Buckets are produced with `date_trunc(interval, created_at)`. Empty buckets
-   * are omitted (not zero-filled): only buckets that contain at least one
-   * transfer are returned. Callers that need a continuous series should
+   * Buckets are produced with `date_trunc(interval, ledger_closed_at)`. Empty
+   * buckets are omitted (not zero-filled): only buckets that contain at least
+   * one transfer are returned. Callers that need a continuous series should
    * zero-fill client-side using the requested `from`/`to` range.
    */
   async getVolumeTimeSeries(contractId: number, query: VolumeQueryDto) {
@@ -126,16 +132,16 @@ export class TransfersService {
 
     const conditions = [eq(tokenTransfers.contractId, contractId)];
     if (query.from) {
-      conditions.push(gte(tokenTransfers.createdAt, new Date(query.from)));
+      conditions.push(gte(tokenTransfers.ledgerClosedAt, new Date(query.from)));
     }
     if (query.to) {
-      conditions.push(lte(tokenTransfers.createdAt, new Date(query.to)));
+      conditions.push(lte(tokenTransfers.ledgerClosedAt, new Date(query.to)));
     }
     if (query.asset !== undefined) {
       conditions.push(eq(tokenTransfers.asset, query.asset));
     }
 
-    const bucket = sql`date_trunc(${query.interval}, ${tokenTransfers.createdAt})`;
+    const bucket = sql`date_trunc(${query.interval}, ${tokenTransfers.ledgerClosedAt})`;
 
     const rows = await this.db
       .select({
@@ -160,10 +166,10 @@ export class TransfersService {
 
     const conditions = [eq(tokenTransfers.contractId, contractId)];
     if (query.from) {
-      conditions.push(gte(tokenTransfers.createdAt, new Date(query.from)));
+      conditions.push(gte(tokenTransfers.ledgerClosedAt, new Date(query.from)));
     }
     if (query.to) {
-      conditions.push(lte(tokenTransfers.createdAt, new Date(query.to)));
+      conditions.push(lte(tokenTransfers.ledgerClosedAt, new Date(query.to)));
     }
 
     const accountColumn =

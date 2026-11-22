@@ -110,6 +110,7 @@ services:
       STELLAR_NETWORK: ${STELLAR_NETWORK:-testnet}
       POLL_INTERVAL_MS: ${POLL_INTERVAL_MS:-5000}
       WEBHOOK_CONCURRENCY: ${WEBHOOK_CONCURRENCY:-10}
+      REGISTRY_SECRET: ${REGISTRY_SECRET:-local-dev-registry-secret-change-me}
       REGISTRY_PORT: "3002"
     ports:
       - "${INDEXER_REGISTRY_PORT:-3002}:3002"

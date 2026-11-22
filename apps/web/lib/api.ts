@@ -1,5 +1,17 @@
 const API_URL = process.env.API_URL ?? "http://localhost:3000";
 const API_KEY = process.env.API_KEY ?? "";
+// Falls back to the full-scope key when unset, so this stays optional.
+const API_READ_KEY = process.env.API_READ_KEY || API_KEY;
+
+/**
+ * Every GET we proxy — including all unauthenticated PUBLIC_DEMO traffic,
+ * which the middleware only ever lets through for GETs — uses the
+ * read-scoped key. Mutating requests (POST/PATCH/DELETE) always require a
+ * session and use the full key.
+ */
+function apiKeyFor(method: string): string {
+  return method === "GET" ? API_READ_KEY : API_KEY;
+}
 
 export interface Contract {
   id: number;
@@ -115,15 +127,31 @@ export interface CreateWebhookInput {
   eventTypes?: string[];
 }
 
+/** Thrown for any non-2xx response from the api. `status` is the upstream status code. */
+export class ApiProxyError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+export class ApiNotFoundError extends ApiProxyError {
+  constructor(path: string) {
+    super(404, `not found: ${path}`);
+  }
+}
 export class ApiNotFoundError extends Error { }
 export class ApiConflictError extends Error {}
 export class ApiBadRequestError extends Error {}
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method ?? "GET").toUpperCase();
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
-      "x-api-key": API_KEY,
+      "x-api-key": apiKeyFor(method),
       "Content-Type": "application/json",
       ...init?.headers
     },
@@ -131,7 +159,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (response.status === 404) {
-    throw new ApiNotFoundError(`not found: ${path}`);
+    throw new ApiNotFoundError(path);
   }
 
     if (response.status === 409) {
@@ -146,7 +174,11 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`api request to ${path} failed with ${response.status}: ${body}`);
+    // Full internal detail (path, upstream status and body) is logged here,
+    // server-side only. Callers get ApiProxyError.status to map to a
+    // sanitized, user-facing message — never this message itself.
+    console.error(`api request to ${path} failed with ${response.status}: ${body}`);
+    throw new ApiProxyError(response.status, `api request to ${path} failed with ${response.status}`);
   }
 
   if (response.status === 204) {

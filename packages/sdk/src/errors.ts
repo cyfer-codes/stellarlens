@@ -10,6 +10,24 @@ export class StellarLensApiError extends Error {
   }
 }
 
+/**
+ * Thrown when a request takes longer than its timeout (`timeoutMs` on the client or on the call). The request is
+ * aborted before this is thrown. A caller's own `AbortSignal` rejects with that signal's `reason` instead.
+ */
+export class StellarLensTimeoutError extends Error {
+  readonly method: string;
+  readonly url: string;
+  readonly timeoutMs: number;
+
+  constructor(method: string, url: string, timeoutMs: number) {
+    super(`stellarlens request ${method} ${url} timed out after ${timeoutMs}ms`);
+    this.name = "StellarLensTimeoutError";
+    this.method = method;
+    this.url = url;
+    this.timeoutMs = timeoutMs;
+  }
+}
+
 export type StellarLensHook = "onRequest" | "onResponse";
 
 /**

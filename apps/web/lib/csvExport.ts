@@ -6,7 +6,11 @@ export { escapeCsvCell, toCsv, toCsvRows };
 
 type CsvRecord = Record<string, string>;
 
-const BASE_EVENT_COLUMNS = ["id", "contract_id", "ledger", "tx_hash", "created_at", "event_type"];
+// "indexed_at" (not "ledger_timestamp"/ledger close time): this is when the
+// indexer ingested the row, which can lag the real ledger close time after a
+// backfill or catch-up. Rename to a ledger-close-time column once the api
+// returns one.
+const BASE_EVENT_COLUMNS = ["id", "contract_id", "ledger", "tx_hash", "indexed_at", "event_type"];
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -58,7 +62,7 @@ export function flattenEvent(event: EventRow): CsvRecord {
     contract_id: String(event.contractId),
     ledger: String(event.ledger),
     tx_hash: event.txHash,
-    created_at: event.createdAt,
+    indexed_at: event.createdAt,
     event_type: event.topic
   };
 
@@ -102,13 +106,36 @@ export function eventsToCsv(events: EventRow[]): string {
   );
 }
 
+export function escapeCsvCell(raw: string): string {
+  let value = raw;
+  if (FORMULA_PREFIX.test(value) && Number.isNaN(Number(value))) {
+    value = `'${value}`;
+  }
+  if (/[",\r\n]/.test(value)) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+export function toCsvRows(rows: string[][]): string {
+  return rows.map((row) => row.map(escapeCsvCell).join(",")).join("\r\n");
+}
+
+export function toCsv(headers: string[], rows: string[][]): string {
+  return toCsvRows([headers, ...rows]);
+}
+
+// Matches the columns shown on the contract transfers table. "Indexed At"
+// (not "Ledger Timestamp"): transfer.createdAt is ingestion time, which can
+// lag the real ledger close time after a backfill or catch-up. Rename to
+// "Ledger Closed At" and read ledgerClosedAt once the api returns it.
 // Matches the columns shown on the contract transfers table.
 export const TRANSFER_CSV_HEADERS = [
   "Sender",
   "Receiver",
   "Amount",
   "Asset",
-  "Ledger Timestamp",
+  "Indexed At",
   "Tx Hash"
 ];
 

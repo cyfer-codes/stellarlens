@@ -12,7 +12,8 @@
     "create-user": "tsx scripts/create-user.ts",
     "seed-admin": "tsx scripts/seed-admin.ts",
     "seed-demo": "tsx scripts/seed-demo.ts",
-    "seed-api-key": "tsx scripts/seed-api-key.ts"
+    "seed-api-key": "tsx scripts/seed-api-key.ts",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^17.0.1",
@@ -30,6 +31,8 @@
     "vitest": "^2.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.49.1",
+    "@stellar/stellar-sdk": "^17.0.1",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@testing-library/user-event": "^14.5.2",
