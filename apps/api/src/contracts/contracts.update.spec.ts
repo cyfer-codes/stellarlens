@@ -35,4 +35,40 @@ describe("ContractsService.update", () => {
       NotFoundException
     );
   });
+
+  it("stores an empty name as null", async () => {
+    const returning = vi.fn().mockResolvedValue([{ id: 42, name: null }]);
+    const where = vi.fn(() => ({ returning }));
+    const set = vi.fn(() => ({ where }));
+    const update = vi.fn(() => ({ set }));
+    const service = new ContractsService({ update } as never);
+
+    await service.update(42, { name: "" });
+
+    expect(set).toHaveBeenCalledWith({ name: null });
+  });
+
+  it("stores a whitespace-only name as null", async () => {
+    const returning = vi.fn().mockResolvedValue([{ id: 42, name: null }]);
+    const where = vi.fn(() => ({ returning }));
+    const set = vi.fn(() => ({ where }));
+    const update = vi.fn(() => ({ set }));
+    const service = new ContractsService({ update } as never);
+
+    await service.update(42, { name: "   " });
+
+    expect(set).toHaveBeenCalledWith({ name: null });
+  });
+
+  it("keeps an explicit null name as null", async () => {
+    const returning = vi.fn().mockResolvedValue([{ id: 42, name: null }]);
+    const where = vi.fn(() => ({ returning }));
+    const set = vi.fn(() => ({ where }));
+    const update = vi.fn(() => ({ set }));
+    const service = new ContractsService({ update } as never);
+
+    await service.update(42, { name: null });
+
+    expect(set).toHaveBeenCalledWith({ name: null });
+  });
 });

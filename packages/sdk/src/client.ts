@@ -144,8 +144,14 @@ function buildQuery(params?: object): string {
     if (value === undefined) {
       continue;
     }
-    // Array filters (e.g. `topics`) are sent comma-separated, which the api splits back apart.
-    search.set(key, Array.isArray(value) ? value.join(",") : String(value));
+    // Array filters (e.g. `topics`) are sent as repeated params (`topics=a&topics=b`).
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        search.append(key, String(item));
+      }
+      continue;
+    }
+    search.set(key, String(value));
   }
   const qs = search.toString();
   return qs ? `?${qs}` : "";

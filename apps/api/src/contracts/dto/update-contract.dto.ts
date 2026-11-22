@@ -1,5 +1,6 @@
 import { STELLAR_NETWORKS } from "@stellarlens/db";
 import { ApiPropertyOptional } from "@nestjs/swagger";
+import { Transform } from "class-transformer";
 import { IsIn, IsNotEmpty, IsOptional, IsString, ValidateIf } from "class-validator";
 
 export class UpdateContractDto {
@@ -10,6 +11,13 @@ export class UpdateContractDto {
     type: String,
   })
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value !== "string") {
+      return value;
+    }
+    const trimmed = value.trim();
+    return trimmed === "" ? null : trimmed;
+  })
   @IsString()
   name?: string | null;
 
