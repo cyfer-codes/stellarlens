@@ -1,6 +1,6 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, asc, eq, gt, ilike, inArray, max } from "drizzle-orm";
-import { contracts, events, indexerCheckpoints, type Database } from "@stellarlens/db";
+import { contracts, events, indexerCheckpoints, isStellarNetwork, STELLAR_NETWORKS, type Database } from "@stellarlens/db";
 import { DATABASE } from "../database/database.module";
 import {
   BulkCreateContractsDto,
@@ -95,16 +95,16 @@ export class ContractsService {
         };
       }
 
-      if (network.length === 0) {
+      if (!isStellarNetwork(network)) {
         return {
           kind: "error",
           result: {
             index,
             address,
-            network: null,
+            network: network || null,
             name,
             status: "error",
-            error: "network must not be empty"
+            error: `network must be one of: ${STELLAR_NETWORKS.join(", ")}`
           }
         };
       }

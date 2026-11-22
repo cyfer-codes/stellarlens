@@ -366,6 +366,46 @@ describe("contracts (e2e)", () => {
     });
   });
 
+  describe("network validation", () => {
+    it.each(["tesnet", "custom", ""])("rejects unsupported network %j when registering a contract", async (network) => {
+      const response = await request(getApp().getHttpServer())
+        .post("/contracts")
+        .set("x-api-key", apiKey)
+        .send({ address: contractAddress(`INVALID_NETWORK_${network || "EMPTY"}`), network });
+
+      expect(response.status).toBe(400);
+      expect(JSON.stringify(response.body)).toMatch(/network/i);
+    });
+
+    it.each(["tesnet", "custom", ""])("rejects unsupported network %j when updating a contract", async (network) => {
+      const created = await request(getApp().getHttpServer())
+        .post("/contracts")
+        .set("x-api-key", apiKey)
+        .send({ address: contractAddress(`UPDATE_NETWORK_${network || "EMPTY"}`), network: "testnet" });
+
+      const response = await request(getApp().getHttpServer())
+        .patch(`/contracts/${created.body.id}`)
+        .set("x-api-key", apiKey)
+        .send({ network });
+
+      expect(response.status).toBe(400);
+      expect(JSON.stringify(response.body)).toMatch(/network/i);
+    });
+
+    it.each(["testnet", "futurenet", "mainnet", "standalone"])(
+      "accepts supported network %s",
+      async (network) => {
+        const response = await request(getApp().getHttpServer())
+          .post("/contracts")
+          .set("x-api-key", apiKey)
+          .send({ address: contractAddress(`SUPPORTED_NETWORK_${network}`), network });
+
+        expect(response.status).toBe(201);
+        expect(response.body.network).toBe(network);
+      }
+    );
+  });
+
   describe("address validation", () => {
     it("rejects a malformed address with 400", async () => {
       const response = await request(getApp().getHttpServer())
