@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 import { Argument, Command, InvalidArgumentError, Option } from "commander";
 import { createClientFromEnv } from "./client.js";
-import { addContract, listContracts } from "./commands/contracts.js";
+import { addContract, getContract, listContracts } from "./commands/contracts.js";
 import { runDecode } from "./commands/decode.js";
 import { StellarLensApiError } from "@stellarlens/sdk";
 import { listEvents, tailEvents } from "./commands/events.js";
 import { runExport, type ExportFormat, type ExportKind } from "./commands/export.js";
+import { listTransfers } from "./commands/transfers.js";
+import { showStats } from "./commands/stats.js";
 import { listenForWebhooks } from "./commands/webhooks.js";
 
 function parsePort(value: string): number {
@@ -59,7 +61,13 @@ program
   .description(
     "CLI for the stellarlens Soroban indexing platform. Commands that call the api require STELLARLENS_API_URL and STELLARLENS_API_KEY."
   )
-  .version("0.1.0");
+  .version("0.1.0")
+  .option("--json", "Print machine-readable JSON instead of formatted output");
+
+/** Whether the global `--json` flag was passed. */
+function jsonOutput(): boolean {
+  return program.opts<{ json?: boolean }>().json === true;
+}
 
 const contractsCommand = program.command("contracts").description("Manage registered contracts");
 
@@ -83,7 +91,8 @@ contractsCommand
       }
       const ok = await runAddContracts(createClientFromEnv(), entries, {
         network: options.network,
-        name: options.name
+        name: options.name,
+        json: jsonOutput()
       });
       if (!ok) {
         process.exitCode = 1;
@@ -98,7 +107,15 @@ contractsCommand
   .option("-n, --network <network>", "Only contracts on this network")
   .option("--page-size <size>", "Contracts fetched per api request (1-100)", parsePageSize, 100)
   .action(async (options: { name?: string; network?: string; pageSize: number }) => {
-    await listContracts(createClientFromEnv(), options);
+    await listContracts(createClientFromEnv(), { ...options, json: jsonOutput() });
+  });
+
+contractsCommand
+  .command("get")
+  .description("Show a single registered contract by id")
+  .addArgument(new Argument("<id>", "Contract id").argParser(parseContractId))
+  .action(async (id: number) => {
+    await getContract(createClientFromEnv(), id);
   });
 
 const eventsCommand = program.command("events").description("Work with indexed contract events");
@@ -145,8 +162,31 @@ eventsCommand
     await tailEvents(createClientFromEnv(), Number(contractId), {
       latest: options.latest,
       intervalMs: options.interval,
-      signal: controller.signal
+      signal: controller.signal,
+      json: jsonOutput()
     });
+  });
+
+const transfersCommand = program.command("transfers").description("Work with indexed token transfers");
+
+transfersCommand
+  .command("list")
+  .description("List a page of a contract's transfers, oldest first")
+  .addArgument(new Argument("<contractId>", "Contract id").argParser(parseContractId))
+  .option("-l, --limit <n>", "Transfers per page (1-100)", parsePositiveInt)
+  .option("-c, --cursor <id>", "Only transfers after this transfer id (from a previous page)", parsePositiveInt)
+  .action(async (contractId: number, options: { limit?: number; cursor?: number }) => {
+    await listTransfers(createClientFromEnv(), contractId, options);
+  });
+
+program
+  .command("stats")
+  .description("Show a contract's transfer stats: count, unique senders/receivers and volume by asset")
+  .addArgument(new Argument("<contractId>", "Contract id").argParser(parseContractId))
+  .option("--from <date>", "Only transfers created at or after this ISO-8601 date/time")
+  .option("--to <date>", "Only transfers created at or before this ISO-8601 date/time")
+  .action(async (contractId: number, options: { from?: string; to?: string }) => {
+    await showStats(createClientFromEnv(), contractId, options);
   });
 
 program

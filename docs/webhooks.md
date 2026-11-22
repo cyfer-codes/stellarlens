@@ -46,7 +46,7 @@ sequenceDiagram
                 note over IDX: stop immediately, no retry
             else all addresses public
                 IDX->>EP: POST body + X-Webhook-Signature (5s timeout)
-                EP-->>IDX: 2xx = success, anything else = retry
+                EP-->>IDX: 2xx = success, 4xx (except 408/429) = stop, else retry
             end
         end
         IDX->>DB: insert webhook_deliveries row (success | failed)
@@ -183,9 +183,18 @@ These failures stop immediately, with no retries (`attempts` is `1`):
   `lastError: "DNS resolution failed for <url>: <message>"` and logged as unreachable.
 - **Blocked destination.** The host resolves to a non-public address (see below). Recorded as
   `lastError: "webhook URL resolves to a non-public IP address"`.
+- **A 4xx this endpoint will never accept.** Every other 4xx response — bad auth, unknown path,
+  unprocessable payload, … — is permanent, so it isn't retried. `408 Request Timeout` and
+  `429 Too Many Requests` are the exceptions and are retried. Recorded as
+  `lastError: "webhook responded with status <code>"`.
 
-Everything else is retried: non-`2xx` (`"webhook responded with status 503"`), timeouts, connection
-refused/reset, TLS errors.
+A `410 Gone` is final too, and additionally **pauses the webhook** (sets `active = false`) so later
+events skip it until an operator resumes it — see [Pausing a webhook](#pausing-a-webhook).
+
+Everything else is retried: `5xx`, `408`, `429`, timeouts, connection refused/reset, TLS errors.
+When the endpoint includes a `Retry-After` header — either a number of seconds or an HTTP date —
+that delay is honoured in place of the exponential backoff, capped at `WEBHOOK_RETRY_MAX_DELAY_MS`
+(5s).
 
 ## Blocked destinations
 
@@ -230,6 +239,9 @@ Each webhook has an `active` flag (default `true`). The indexer only loads webho
 `active = true`, so while a webhook is paused, events are **skipped, not queued**: unpausing
 doesn't backfill what was missed, and no delivery rows are written for skipped events. The change
 takes effect from the next event the indexer processes, with no restart needed.
+
+The indexer pauses a webhook on its own when its endpoint answers `410 Gone`, logging the reason;
+resume it with an operator `UPDATE` (below) once the receiver accepts deliveries again.
 
 The api doesn't expose `active` yet. `PATCH` accepts only `url` and `eventTypes`, and unknown fields
 are stripped, so sending `"active": false` is silently ignored. Until it does, operators toggle it in
