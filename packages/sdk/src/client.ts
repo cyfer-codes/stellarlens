@@ -36,9 +36,13 @@ export interface StellarLensResponseInfo {
   response: Response;
   /** Milliseconds from just before `fetch` was called until the response headers arrived. */
   durationMs: number;
+}
+
 const DEFAULT_WATCH_INTERVAL_MS = 5000;
 const DEFAULT_WATCH_MAX_BACKOFF_MS = 60_000;
 const DEFAULT_WATCH_PAGE_SIZE = 100;
+const MIN_PAGE_LIMIT = 1;
+const MAX_PAGE_LIMIT = 100;
 
 /** Resolves after `ms`, or immediately once `signal` aborts. Never rejects. */
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -98,6 +102,18 @@ function buildQuery(params?: object): string {
   return qs ? `?${qs}` : "";
 }
 
+/** Rejects page sizes the api would reject, before a request is sent. */
+function assertValidLimit(limit: number | undefined): void {
+  if (limit === undefined) {
+    return;
+  }
+  if (!Number.isInteger(limit) || limit < MIN_PAGE_LIMIT || limit > MAX_PAGE_LIMIT) {
+    throw new RangeError(
+      `limit must be an integer between ${MIN_PAGE_LIMIT} and ${MAX_PAGE_LIMIT} (got ${String(limit)})`
+    );
+  }
+}
+
 export class StellarLensClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
@@ -106,7 +122,18 @@ export class StellarLensClient {
   private readonly onResponse: StellarLensClientOptions["onResponse"];
 
   constructor(options: StellarLensClientOptions) {
-    this.baseUrl = options.baseUrl.replace(/\/+$/, "");
+    const rawBaseUrl = options.baseUrl;
+    let parsedBaseUrl: URL;
+    try {
+      parsedBaseUrl = new URL(rawBaseUrl);
+    } catch {
+      throw new TypeError(`Invalid baseUrl: ${JSON.stringify(rawBaseUrl)}. Expected a valid absolute URL.`);
+    }
+    // A relative URL or a non-http scheme can be parsed but cannot be used as an API base URL.
+    if (!["http:", "https:"].includes(parsedBaseUrl.protocol) || !parsedBaseUrl.hostname) {
+      throw new TypeError(`Invalid baseUrl: ${JSON.stringify(rawBaseUrl)}. Expected an http(s) URL.`);
+    }
+    this.baseUrl = rawBaseUrl.replace(/\/+$/, "");
     this.apiKey = options.apiKey;
     this.fetchImpl = options.fetch ?? globalThis.fetch;
     this.onRequest = options.onRequest;
@@ -172,9 +199,12 @@ export class StellarLensClient {
     });
   }
 
-  /** Cursor-paginated registered contracts, oldest first. */
-  listContracts(params?: ListContractsParams): Promise<Page<Contract>> {
+  /** Cursor-paginated registered contracts, ordered by id. Filter with `name` (substring) and `network`. */
+  async listContracts(params?: ListContractsParams): Promise<Page<Contract>> {
+    assertValidLimit(params?.limit);
     return this.request<Page<Contract>>(`/contracts${buildQuery(params)}`);
+  }
+
   /**
    * Registers up to 100 contracts in one request (`POST /contracts/bulk`), reporting a result per
    * item. Unlike `registerContract`, already-registered addresses are left untouched (`existing`).
@@ -184,16 +214,6 @@ export class StellarLensClient {
       method: "POST",
       body: JSON.stringify({ items })
     });
-  }
-
-  listContracts(): Promise<Contract[]> {
-    return this.request<Contract[]>("/contracts");
-  /** Cursor-paginated registered contracts, ordered by id. Filter with `name` (substring) and `network`. */
-  listContracts(params?: ListContractsParams): Promise<Page<Contract>> {
-    return this.request<Page<Contract>>(`/contracts${buildQuery(params)}`);
-  /** One cursor-paginated page of registered contracts, ordered by id. */
-  listContracts(params?: ListContractsParams): Promise<Page<Contract>> {
-    return this.request<Page<Contract>>(`/contracts${buildQuery(params)}`);
   }
 
   /**
@@ -217,7 +237,8 @@ export class StellarLensClient {
    * Cursor-paginated events for a contract, oldest first. Pass `order: "desc"` to page newest-first instead
    * (`{ order: "desc", limit: 1 }` returns the latest event).
    */
-  listEvents(contractId: number, params?: ListEventsParams): Promise<Page<EventRecord>> {
+  async listEvents(contractId: number, params?: ListEventsParams): Promise<Page<EventRecord>> {
+    assertValidLimit(params?.limit);
     return this.request<Page<EventRecord>>(`/contracts/${contractId}/events${buildQuery(params)}`);
   }
 
@@ -242,6 +263,7 @@ export class StellarLensClient {
       topic,
       onError
     } = options;
+    assertValidLimit(limit);
     const path = (cursor: number | undefined) =>
       `/contracts/${contractId}/events${buildQuery({ cursor, limit, topic })}`;
 
@@ -298,7 +320,8 @@ export class StellarLensClient {
   }
 
   /** Cursor-paginated token transfers for a contract, oldest first. */
-  listTransfers(contractId: number, params?: ListTransfersParams): Promise<Page<TransferRecord>> {
+  async listTransfers(contractId: number, params?: ListTransfersParams): Promise<Page<TransferRecord>> {
+    assertValidLimit(params?.limit);
     return this.request<Page<TransferRecord>>(`/contracts/${contractId}/transfers${buildQuery(params)}`);
   }
 

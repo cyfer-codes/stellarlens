@@ -24,16 +24,6 @@ describe("StellarLensClient", () => {
     const contracts = await makeClient(fetchMock).getContract(1);
 
     expect(contracts).toEqual({ id: 1, address: "C123", name: null, network: "testnet" });
-      return jsonResponse({ data: [{ id: 1, address: "C123", name: null, network: "testnet" }], nextCursor: null });
-    }) as unknown as typeof fetch;
-
-    const page = await makeClient(fetchMock).listContracts();
-
-    expect(contracts).toEqual({
-      data: [{ id: 1, address: "C123", name: null, network: "testnet" }],
-      nextCursor: null
-    });
-    expect(page).toEqual({ data: [{ id: 1, address: "C123", name: null, network: "testnet" }], nextCursor: null });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -87,6 +77,40 @@ describe("StellarLensClient", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  describe("limit validation", () => {
+    it("passes an in-range limit through unchanged", async () => {
+      const eventFetch = vi.fn(async (url: string | URL) => {
+        expect(String(url)).toBe("https://api.example.com/contracts/1/events?limit=100");
+        return jsonResponse({ data: [], nextCursor: null });
+      }) as unknown as typeof fetch;
+      const transferFetch = vi.fn(async (url: string | URL) => {
+        expect(String(url)).toBe("https://api.example.com/contracts/1/transfers?limit=1");
+        return jsonResponse({ data: [], nextCursor: null });
+      }) as unknown as typeof fetch;
+
+      await makeClient(eventFetch).listEvents(1, { limit: 100 });
+      await makeClient(transferFetch).listTransfers(1, { limit: 1 });
+
+      expect(eventFetch).toHaveBeenCalledTimes(1);
+      expect(transferFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("rejects limits outside 1-100 before making a request", async () => {
+      const fetchMock = vi.fn() as unknown as typeof fetch;
+      const client = makeClient(fetchMock);
+
+      await expect(client.listEvents(1, { limit: 0 })).rejects.toThrow(RangeError);
+      await expect(client.listEvents(1, { limit: 101 })).rejects.toThrow(
+        /limit must be an integer between 1 and 100/
+      );
+      await expect(client.listTransfers(1, { limit: 0 })).rejects.toThrow(RangeError);
+      await expect(client.listTransfers(1, { limit: 101 })).rejects.toThrow(
+        /limit must be an integer between 1 and 100/
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
   it("strips a trailing slash from baseUrl", async () => {
     const fetchMock = vi.fn(async (url: string | URL) => {
       expect(String(url)).toBe("https://api.example.com/contracts");
@@ -94,6 +118,23 @@ describe("StellarLensClient", () => {
     }) as unknown as typeof fetch;
 
     await makeClient(fetchMock, "https://api.example.com/").listContracts();
+  });
+
+  it("accepts a well-formed baseUrl with or without a trailing slash", () => {
+    const fetchMock = vi.fn() as unknown as typeof fetch;
+
+    expect(() => makeClient(fetchMock, "https://api.example.com")).not.toThrow();
+    expect(() => makeClient(fetchMock, "https://api.example.com/")).not.toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("throws immediately when baseUrl is malformed", () => {
+    const fetchMock = vi.fn() as unknown as typeof fetch;
+
+    expect(() => makeClient(fetchMock, "not a url")).toThrow(TypeError);
+    expect(() => makeClient(fetchMock, "not a url")).toThrow(/Invalid baseUrl/);
+    expect(() => makeClient(fetchMock, "ftp://api.example.com")).toThrow(/http\(s\)/);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("passes contract list pagination and filters as query params", async () => {
@@ -178,6 +219,32 @@ describe("StellarLensClient", () => {
 
       expect(page.nextCursor).toBe(11);
       expect(page.data).toHaveLength(1);
+    });
+
+    it("pages through contracts across multiple pages by feeding nextCursor back as cursor", async () => {
+      const pages: Record<string, unknown> = {
+        "": { data: [contract(1), contract(2)], nextCursor: 2 },
+        "2": { data: [contract(3), contract(4)], nextCursor: 4 },
+        "4": { data: [contract(5)], nextCursor: null }
+      };
+      const urls: string[] = [];
+      const fetchMock = vi.fn(async (url: string | URL) => {
+        const parsed = new URL(String(url));
+        urls.push(parsed.search);
+        return jsonResponse(pages[parsed.searchParams.get("cursor") ?? ""]);
+      }) as unknown as typeof fetch;
+      const client = makeClient(fetchMock);
+
+      const ids: number[] = [];
+      let cursor: number | undefined;
+      do {
+        const page = await client.listContracts({ limit: 2, cursor });
+        ids.push(...page.data.map((c) => c.id));
+        cursor = page.nextCursor ?? undefined;
+      } while (cursor !== undefined);
+
+      expect(ids).toEqual([1, 2, 3, 4, 5]);
+      expect(urls).toEqual(["?limit=2", "?limit=2&cursor=2", "?limit=2&cursor=4"]);
     });
 
     it("listAllContracts follows nextCursor until it is null, keeping the filters", async () => {

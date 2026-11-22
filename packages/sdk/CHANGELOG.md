@@ -31,3 +31,10 @@ All notable changes to `@stellarlens/sdk` are documented here.
 - `watchEvents(contractId, { intervalMs, signal, startAt, topic, limit, maxBackoffMs, onError })` async iterator that
   tails a contract's events with correct cursor handling, backlog draining and exponential error backoff
   (new `WatchEventsOptions` type).
+
+### Fixed
+
+- `StellarLensClient` now validates `baseUrl` in its constructor and throws immediately for malformed or
+  non-http(s) values, instead of failing confusingly on the first request.
+- Paginated list methods now reject `limit` values outside the api's supported 1–100 range before sending a
+  request, with a clear `RangeError` instead of waiting for the api to reject the call.

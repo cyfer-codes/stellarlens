@@ -31,11 +31,8 @@ const contract = await client.registerContract({
   name: "My token"
 });
 
-// List registered contracts, one page at a time
-const { data: contracts, nextCursor } = await client.listContracts({ limit: 100 });
-// List registered contracts (cursor-paginated, optionally filtered by `name` substring and `network`)
-const { data: contracts, nextCursor } = await client.listContracts({ network: "testnet", limit: 50 });
-// One page of registered contracts (filter by name substring and/or network)
+// One cursor-paginated page of registered contracts (filter by `name` substring and/or `network`).
+// Omit `limit` to use the api's default page size.
 const page = await client.listContracts({ network: "testnet", limit: 50 });
 console.log(page.data, page.nextCursor);
 
@@ -55,9 +52,8 @@ const same = await client.getContract(contract.id);
 
 ### Paginated events and transfers
 
-`listContracts`, `listEvents` and `listTransfers` use cursor-based pagination, oldest first. Keep passing the previous
-`listContracts`, `listEvents` and `listTransfers` all use cursor-based pagination, oldest first. Keep passing the previous
-page's `nextCursor` until it comes back `null`:
+`listContracts`, `listEvents` and `listTransfers` all use cursor-based pagination, oldest first. Keep passing the
+previous page's `nextCursor` until it comes back `null`:
 
 ```ts
 let cursor: number | undefined;

@@ -115,7 +115,8 @@ can use the same stack:
 The defaults are for local use only. Override them from the shell or a root `.env` file:
 `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `STELLARLENS_API_KEY` (the key the dashboard sends, seeded
 into `api_keys`), `SESSION_SECRET`, `SOROBAN_RPC_URL`, `STELLAR_NETWORK`, `POLL_INTERVAL_MS`,
-`WEBHOOK_CONCURRENCY`, `CORS_ORIGINS`, `PUBLIC_DEMO`, `SITE_URL`, and the host ports above.
+`WEBHOOK_CONCURRENCY`, `REGISTRY_SECRET` (required by the indexer; send it as `X-Registry-Secret`
+when calling `POST /contracts`), `CORS_ORIGINS`, `PUBLIC_DEMO`, `SITE_URL`, and the host ports above.
 `docker compose --profile full down -v` removes everything, including the database volume.
 
 Each app has a multi-stage Dockerfile (`apps/api/Dockerfile`, `apps/indexer/Dockerfile`,

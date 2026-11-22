@@ -17,7 +17,7 @@ import {
 } from "../src/config.js";
 import { processEventsBatch } from "../src/events.js";
 import { registerContract } from "../src/registry.js";
-import { assertPublicWebhookUrl, deliverWebhooksForEvent } from "../src/webhooks.js";
+import { assertPublicWebhookUrl, deliverWebhooksForEvent, parseRetryAfterMs } from "../src/webhooks.js";
 import { contractAddress } from "./addresses.js";
 import { mockJsonRpc, TEST_RPC_URL } from "./rpc-mocks.js";
 import { getTestDb, mswServer } from "./setup.js";
@@ -132,13 +132,27 @@ describe("webhook delivery", () => {
     expect(receivedSignature).toBe(`sha256=${expectedSignature}`);
 
     const payload = JSON.parse(receivedBody) as {
+      version: number;
       contractId: number;
+      contractAddress: string;
+      rpcEventId: string;
       ledger: number;
+      ledgerClosedAt: string | null;
       txHash: string;
+      inSuccessfulContractCall: boolean;
     };
-    expect(payload.contractId).toBe(contract.id);
-    expect(payload.ledger).toBe(5005);
-    expect(payload.txHash).toBe("d".repeat(64));
+    expect(payload).toEqual({
+      version: 1,
+      contractId: contract.id,
+      contractAddress: contractAddress("CONTRACT_HOOK"),
+      rpcEventId: "0000000000000000000-0000000000",
+      ledger: 5005,
+      ledgerClosedAt: expect.anything(),
+      txHash: "d".repeat(64),
+      topic: ["fee"],
+      value: "-100",
+      inSuccessfulContractCall: expect.any(Boolean)
+    });
   });
 
   it("caps concurrent deliveries at the configured limit", async () => {
@@ -174,9 +188,12 @@ describe("webhook delivery", () => {
       contractId: contract.id,
       contractAddress: contractAddress("CONTRACT_HOOK_CONCURRENCY"),
       ledger: 1,
+      ledgerClosedAt: new Date(0),
+      rpcEventId: "evt-concurrency",
       txHash: "3".repeat(64),
       topic: ["fee"],
-      value: "-1"
+      value: "-1",
+      inSuccessfulContractCall: true
     });
 
     expect(maxConcurrentDeliveries).toBeLessThanOrEqual(WEBHOOK_CONCURRENCY);
