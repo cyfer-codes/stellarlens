@@ -4,7 +4,8 @@ import { and, eq } from "drizzle-orm";
 import {
   webhookDeliveries as webhookDeliveriesTable,
   webhooks as webhooksTable,
-  type Database
+  type Database,
+  type WebhookFilter
 } from "@stellarlens/db";
 import {
   WEBHOOK_CONCURRENCY,
@@ -174,16 +175,58 @@ async function postWebhook(url: string, body: string, signature: string): Promis
   }
 }
 
-/** A webhook with no eventTypes fires on everything; otherwise the event's topic[0] must be in the list. */
-function matchesEventTypes(
-  webhook: { eventTypes: string[] | null },
+export interface WebhookFilterMatchTarget {
+  eventTypes?: string[] | null;
+  filter?: WebhookFilter | null;
+}
+
+/**
+ * Evaluates whether an event payload matches the webhook subscription's criteria.
+ *
+ * 1. If `eventTypes` is configured, `payload.topic[0]` must match one of the allowed types.
+ * 2. If `filter.topics` is configured, positional topic matching is enforced:
+ *    - Each element must equal the corresponding event topic at the same index,
+ *      or be `null` to act as a wildcard matching any value.
+ *    - The event must have at least as many topics as the filter specifies.
+ * 3. If neither filter is configured, the webhook matches all events for its contract.
+ */
+export function matchesFilter(
+  webhook: WebhookFilterMatchTarget,
   payload: WebhookEventPayload
 ): boolean {
-  if (!webhook.eventTypes || webhook.eventTypes.length === 0) {
-    return true;
+  if (webhook.eventTypes && webhook.eventTypes.length > 0) {
+    const eventType = payload.topic[0];
+    if (typeof eventType !== "string" || !webhook.eventTypes.includes(eventType)) {
+      return false;
+    }
   }
-  const eventType = payload.topic[0];
-  return typeof eventType === "string" && webhook.eventTypes.includes(eventType);
+
+  if (webhook.filter?.topics && webhook.filter.topics.length > 0) {
+    const { topics } = webhook.filter;
+    if (!Array.isArray(payload.topic) || payload.topic.length < topics.length) {
+      return false;
+    }
+    for (let i = 0; i < topics.length; i++) {
+      const expected = topics[i];
+      if (expected === null) {
+        continue;
+      }
+      const actual = payload.topic[i];
+      if (actual !== expected && String(actual) !== expected) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+/** Backwards-compatible alias for matchesFilter. */
+export function matchesEventTypes(
+  webhook: WebhookFilterMatchTarget,
+  payload: WebhookEventPayload
+): boolean {
+  return matchesFilter(webhook, payload);
 }
 
 function errorMessage(err: unknown): string {

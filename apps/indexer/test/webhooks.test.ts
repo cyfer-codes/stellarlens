@@ -51,12 +51,20 @@ async function registerWebhook(
   contractId: number,
   secret: string,
   eventTypes?: string[],
-  active = true
+  active = true,
+  filter?: { topics?: Array<string | null> }
 ) {
   const db = getTestDb();
   await db
     .insert(webhooksTable)
-    .values({ contractId, url: WEBHOOK_URL, secret, eventTypes: eventTypes ?? null, active });
+    .values({
+      contractId,
+      url: WEBHOOK_URL,
+      secret,
+      eventTypes: eventTypes ?? null,
+      filter: filter ?? null,
+      active
+    });
 }
 
 describe("webhook URL IP validation", () => {
@@ -190,5 +198,449 @@ describe("webhook delivery", () => {
 
     expect(maxConcurrentDeliveries).toBeLessThanOrEqual(WEBHOOK_CONCURRENCY);
     expect(maxConcurrentDeliveries).toBe(WEBHOOK_CONCURRENCY);
+  });
+
+  it("persists a successful delivery with its attempt count and deliveredAt", async () => {
+    const db = getTestDb();
+    const contract = await registerContract(db, {
+      address: contractAddress("CONTRACT_HOOK_DELIVERY_SUCCESS"),
+      network: NETWORK
+    });
+    await registerWebhook(contract.id, "success-secret");
+
+    mswServer.use(
+      mockJsonRpc({
+        getLatestLedger: () => buildLatestLedger(5100),
+        getEvents: () => ({
+          events: [
+            {
+              id: "0000000000000000000-0000000000",
+              ledger: 5105,
+              txHash: "c".repeat(64),
+              contractId: contractAddress("CONTRACT_HOOK_DELIVERY_SUCCESS"),
+              topic: [symbolXdr("fee")],
+              value: i128Xdr(-10n)
+            }
+          ],
+          cursor: "CURSOR_HOOK_DELIVERY_SUCCESS",
+          latestLedger: 5105
+        })
+      }),
+      http.post(WEBHOOK_URL, () => HttpResponse.json({ ok: true }))
+    );
+
+    const { indexedCount } = await processEventsBatch(db, makeServer());
+    expect(indexedCount).toBe(1);
+
+    const [event] = await db.select().from(eventsTable);
+    const [delivery] = await db.select().from(webhookDeliveries);
+
+    expect(delivery).toBeDefined();
+    expect(delivery.webhookId).toBeTypeOf("number");
+    expect(delivery.eventId).toBe(event.id);
+    expect(delivery.status).toBe("success");
+    expect(delivery.attempts).toBe(1);
+    expect(delivery.lastError).toBeNull();
+    expect(delivery.deliveredAt).toBeInstanceOf(Date);
+  });
+
+  it("persists a failed delivery after retries are exhausted", { timeout: 15000 }, async () => {
+    const db = getTestDb();
+    const contract = await registerContract(db, {
+      address: contractAddress("CONTRACT_HOOK_DELIVERY_FAILED"),
+      network: NETWORK
+    });
+    await registerWebhook(contract.id, "failed-secret");
+
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const webhookSpy = vi.fn(() => new HttpResponse(null, { status: 500 }));
+
+    mswServer.use(
+      mockJsonRpc({
+        getLatestLedger: () => buildLatestLedger(5200),
+        getEvents: () => ({
+          events: [
+            {
+              id: "0000000000000000000-0000000000",
+              ledger: 5205,
+              txHash: "1".repeat(64),
+              contractId: contractAddress("CONTRACT_HOOK_DELIVERY_FAILED"),
+              topic: [symbolXdr("fee")],
+              value: i128Xdr(-2n)
+            }
+          ],
+          cursor: "CURSOR_HOOK_DELIVERY_FAILED",
+          latestLedger: 5205
+        })
+      }),
+      http.post(WEBHOOK_URL, webhookSpy)
+    );
+
+    const { indexedCount } = await processEventsBatch(db, makeServer());
+
+    expect(indexedCount).toBe(1);
+    expect(webhookSpy).toHaveBeenCalledTimes(WEBHOOK_MAX_RETRIES + 1);
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining(contractAddress("CONTRACT_HOOK_DELIVERY_FAILED")),
+      expect.any(Error)
+    );
+    consoleError.mockRestore();
+
+    const [event] = await db.select().from(eventsTable);
+    const [delivery] = await db.select().from(webhookDeliveries);
+
+    expect(delivery).toBeDefined();
+    expect(delivery.eventId).toBe(event.id);
+    expect(delivery.status).toBe("failed");
+    expect(delivery.attempts).toBe(WEBHOOK_MAX_RETRIES + 1);
+    expect(delivery.lastError).toContain("status 500");
+    expect(delivery.deliveredAt).toBeNull();
+  });
+
+  it("records a private destination as failed without retrying or posting to it", async () => {
+    const db = getTestDb();
+    const contract = await registerContract(db, {
+      address: contractAddress("CONTRACT_HOOK_PRIVATE"),
+      network: NETWORK
+    });
+    const privateUrl = "http://10.0.0.5/webhook";
+    await db
+      .insert(webhooksTable)
+      .values({ contractId: contract.id, url: privateUrl, secret: "private-secret", eventTypes: null });
+
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const webhookSpy = vi.fn(() => HttpResponse.json({ ok: true }));
+    mswServer.use(http.post(privateUrl, webhookSpy));
+    const [event] = await db
+      .insert(eventsTable)
+      .values({ contractId: contract.id, ledger: 1, txHash: "4".repeat(64), topic: "[]" })
+      .returning({ id: eventsTable.id });
+
+    await deliverWebhooksForEvent(db, {
+      eventId: event.id,
+      contractId: contract.id,
+      contractAddress: contractAddress("CONTRACT_HOOK_PRIVATE"),
+      ledger: 1,
+      txHash: "4".repeat(64),
+      topic: ["fee"],
+      value: "-1"
+    });
+    consoleError.mockRestore();
+
+    expect(webhookSpy).not.toHaveBeenCalled();
+    const [delivery] = await db.select().from(webhookDeliveries);
+    expect(delivery.status).toBe("failed");
+    expect(delivery.attempts).toBe(1);
+    expect(delivery.lastError).toContain("non-public IP address");
+  });
+
+  it("does not throw when persisting a delivery outcome fails", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const failingDb = {
+      select: () => ({
+        from: () => ({
+          where: async () => [
+            {
+              id: 1,
+              contractId: 1,
+              url: WEBHOOK_URL,
+              secret: "secret",
+              eventTypes: null,
+              createdAt: new Date()
+            }
+          ]
+        })
+      }),
+      insert: () => ({
+        values: async () => {
+          throw new Error("database unavailable");
+        }
+      })
+    } as unknown as Database;
+
+    mswServer.use(http.post(WEBHOOK_URL, () => HttpResponse.json({ ok: true })));
+
+    await expect(
+      deliverWebhooksForEvent(failingDb, {
+        eventId: 42,
+        contractId: 1,
+        contractAddress: "CONTRACT_DELIVERY_LOG",
+        ledger: 1,
+        txHash: "2".repeat(64),
+        topic: ["fee"],
+        value: "-1"
+      })
+    ).resolves.toBeUndefined();
+
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining("delivery outcome could not be persisted"),
+      expect.any(Error)
+    );
+    consoleError.mockRestore();
+  });
+
+  it("retries a failing webhook before giving up, without failing the indexing batch", async () => {
+    const db = getTestDb();
+    const contract = await registerContract(db, {
+      address: contractAddress("CONTRACT_HOOK_RETRY"),
+      network: NETWORK
+    });
+    await registerWebhook(contract.id, "retry-secret");
+
+    let callCount = 0;
+    const webhookSpy = vi.fn(() => {
+      callCount += 1;
+      if (callCount < 2) {
+        return new HttpResponse(null, { status: 500 });
+      }
+      return HttpResponse.json({ ok: true });
+    });
+
+    mswServer.use(
+      mockJsonRpc({
+        getLatestLedger: () => buildLatestLedger(6000),
+        getEvents: () => ({
+          events: [
+            {
+              id: "0000000000000000000-0000000000",
+              ledger: 6005,
+              txHash: "e".repeat(64),
+              contractId: contractAddress("CONTRACT_HOOK_RETRY"),
+              topic: [symbolXdr("fee")],
+              value: i128Xdr(-1n)
+            }
+          ],
+          cursor: "CURSOR_HOOK_RETRY",
+          latestLedger: 6005
+        })
+      }),
+      http.post(WEBHOOK_URL, webhookSpy)
+    );
+
+    const { indexedCount } = await processEventsBatch(db, makeServer());
+
+    expect(indexedCount).toBe(1);
+    expect(webhookSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("skips a webhook whose eventTypes doesn't include the event's topic", async () => {
+    const db = getTestDb();
+    const contract = await registerContract(db, {
+      address: contractAddress("CONTRACT_HOOK_FILTERED"),
+      network: NETWORK
+    });
+    await registerWebhook(contract.id, "filtered-secret", ["mint"]);
+
+    const webhookSpy = vi.fn(() => HttpResponse.json({ ok: true }));
+
+    mswServer.use(
+      mockJsonRpc({
+        getLatestLedger: () => buildLatestLedger(8000),
+        getEvents: () => ({
+          events: [
+            {
+              id: "0000000000000000000-0000000000",
+              ledger: 8005,
+              txHash: "a".repeat(64),
+              contractId: contractAddress("CONTRACT_HOOK_FILTERED"),
+              topic: [symbolXdr("fee")],
+              value: i128Xdr(-1n)
+            }
+          ],
+          cursor: "CURSOR_HOOK_FILTERED",
+          latestLedger: 8005
+        })
+      }),
+      http.post(WEBHOOK_URL, webhookSpy)
+    );
+
+    await processEventsBatch(db, makeServer());
+
+    expect(webhookSpy).not.toHaveBeenCalled();
+  });
+
+  it("skips an inactive webhook", async () => {
+    const db = getTestDb();
+    const contract = await registerContract(db, {
+      address: contractAddress("CONTRACT_HOOK_INACTIVE"),
+      network: NETWORK
+    });
+    await registerWebhook(contract.id, "inactive-secret", undefined, false);
+
+    const webhookSpy = vi.fn(() => HttpResponse.json({ ok: true }));
+
+    mswServer.use(
+      mockJsonRpc({
+        getLatestLedger: () => buildLatestLedger(8200),
+        getEvents: () => ({
+          events: [
+            {
+              id: "0000000000000000000-0000000000",
+              ledger: 8205,
+              txHash: "c".repeat(64),
+              contractId: contractAddress("CONTRACT_HOOK_INACTIVE"),
+              topic: [symbolXdr("fee")],
+              value: i128Xdr(-1n)
+            }
+          ],
+          cursor: "CURSOR_HOOK_INACTIVE",
+          latestLedger: 8205
+        })
+      }),
+      http.post(WEBHOOK_URL, webhookSpy)
+    );
+
+    await processEventsBatch(db, makeServer());
+
+    expect(webhookSpy).not.toHaveBeenCalled();
+    const deliveryRows = await db.select().from(webhookDeliveries);
+    expect(deliveryRows).toHaveLength(0);
+  });
+
+  it("fires a webhook whose eventTypes includes the event's topic", async () => {
+    const db = getTestDb();
+    const contract = await registerContract(db, {
+      address: contractAddress("CONTRACT_HOOK_MATCHED"),
+      network: NETWORK
+    });
+    await registerWebhook(contract.id, "matched-secret", ["fee", "mint"]);
+
+    const webhookSpy = vi.fn(() => HttpResponse.json({ ok: true }));
+
+    mswServer.use(
+      mockJsonRpc({
+        getLatestLedger: () => buildLatestLedger(8500),
+        getEvents: () => ({
+          events: [
+            {
+              id: "0000000000000000000-0000000000",
+              ledger: 8505,
+              txHash: "b".repeat(64),
+              contractId: contractAddress("CONTRACT_HOOK_MATCHED"),
+              topic: [symbolXdr("fee")],
+              value: i128Xdr(-1n)
+            }
+          ],
+          cursor: "CURSOR_HOOK_MATCHED",
+          latestLedger: 8505
+        })
+      }),
+      http.post(WEBHOOK_URL, webhookSpy)
+    );
+
+    await processEventsBatch(db, makeServer());
+
+    expect(webhookSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("fires a webhook whose structured filter matches positional topics with wildcard", async () => {
+    const db = getTestDb();
+    const contract = await registerContract(db, {
+      address: contractAddress("CONTRACT_HOOK_FILTER_MATCH"),
+      network: NETWORK
+    });
+    // Subscribe to events where topic[0] == "transfer" and topic[2] == "RECIPIENT_XYZ"
+    await registerWebhook(contract.id, "filter-secret", undefined, true, {
+      topics: ["transfer", null, "RECIPIENT_XYZ"]
+    });
+
+    const webhookSpy = vi.fn(() => HttpResponse.json({ ok: true }));
+
+    mswServer.use(
+      mockJsonRpc({
+        getLatestLedger: () => buildLatestLedger(8600),
+        getEvents: () => ({
+          events: [
+            {
+              id: "0000000000000000000-0000000000",
+              ledger: 8605,
+              txHash: "e".repeat(64),
+              contractId: contractAddress("CONTRACT_HOOK_FILTER_MATCH"),
+              topic: [symbolXdr("transfer"), symbolXdr("SENDER_123"), symbolXdr("RECIPIENT_XYZ")],
+              value: i128Xdr(500n)
+            }
+          ],
+          cursor: "CURSOR_HOOK_FILTER_MATCH",
+          latestLedger: 8605
+        })
+      }),
+      http.post(WEBHOOK_URL, webhookSpy)
+    );
+
+    await processEventsBatch(db, makeServer());
+
+    expect(webhookSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips a webhook whose structured filter does not match positional topic", async () => {
+    const db = getTestDb();
+    const contract = await registerContract(db, {
+      address: contractAddress("CONTRACT_HOOK_FILTER_MISMATCH"),
+      network: NETWORK
+    });
+    await registerWebhook(contract.id, "filter-secret-mismatch", undefined, true, {
+      topics: ["transfer", null, "EXPECTED_RECIPIENT"]
+    });
+
+    const webhookSpy = vi.fn(() => HttpResponse.json({ ok: true }));
+
+    mswServer.use(
+      mockJsonRpc({
+        getLatestLedger: () => buildLatestLedger(8700),
+        getEvents: () => ({
+          events: [
+            {
+              id: "0000000000000000000-0000000000",
+              ledger: 8705,
+              txHash: "f".repeat(64),
+              contractId: contractAddress("CONTRACT_HOOK_FILTER_MISMATCH"),
+              topic: [symbolXdr("transfer"), symbolXdr("SENDER_123"), symbolXdr("DIFFERENT_RECIPIENT")],
+              value: i128Xdr(500n)
+            }
+          ],
+          cursor: "CURSOR_HOOK_FILTER_MISMATCH",
+          latestLedger: 8705
+        })
+      }),
+      http.post(WEBHOOK_URL, webhookSpy)
+    );
+
+    await processEventsBatch(db, makeServer());
+
+    expect(webhookSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not throw when a webhook contract has no registered endpoints", async () => {
+    const db = getTestDb();
+    await registerContract(db, { address: contractAddress("CONTRACT_NO_HOOK"), network: NETWORK });
+
+    mswServer.use(
+      mockJsonRpc({
+        getLatestLedger: () => buildLatestLedger(7000),
+        getEvents: () => ({
+          events: [
+            {
+              id: "0000000000000000000-0000000000",
+              ledger: 7005,
+              txHash: "f".repeat(64),
+              contractId: contractAddress("CONTRACT_NO_HOOK"),
+              topic: [symbolXdr("fee")],
+              value: i128Xdr(-1n)
+            }
+          ],
+          cursor: "CURSOR_NO_HOOK",
+          latestLedger: 7005
+        })
+      })
+    );
+
+    const { indexedCount } = await processEventsBatch(db, makeServer());
+    expect(indexedCount).toBe(1);
+
+    const [row] = await db
+      .select()
+      .from(contracts)
+      .where(eq(contracts.address, contractAddress("CONTRACT_NO_HOOK")));
+    expect(row).toBeDefined();
   });
 });
