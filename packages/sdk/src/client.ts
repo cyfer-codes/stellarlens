@@ -1,4 +1,4 @@
-import { StellarLensApiError, StellarLensHookError } from "./errors.js";
+import { StellarLensApiError, StellarLensHookError, StellarLensTimeoutError } from "./errors.js";
 import type {
   BulkRegisterContractItem,
   BulkRegisterContractsResponse,
@@ -11,6 +11,7 @@ import type {
   ListTransfersParams,
   Page,
   RegisterContractInput,
+  RequestOptions,
   TransferRecord,
   WatchEventsOptions
 } from "./types.js";
@@ -43,6 +44,44 @@ const DEFAULT_WATCH_MAX_BACKOFF_MS = 60_000;
 const DEFAULT_WATCH_PAGE_SIZE = 100;
 const MIN_PAGE_LIMIT = 1;
 const MAX_PAGE_LIMIT = 100;
+/** Default per-request timeout; see {@link StellarLensClientOptions.timeoutMs}. */
+export const DEFAULT_TIMEOUT_MS = 10_000;
+
+/** `0` (disabled), a positive finite number, or `Infinity` (also disabled). */
+function assertValidTimeout(timeoutMs: number): void {
+  if (typeof timeoutMs !== "number" || Number.isNaN(timeoutMs) || timeoutMs < 0) {
+    throw new RangeError(`timeoutMs must be a non-negative number, or 0 to disable (got ${String(timeoutMs)})`);
+  }
+}
+
+/**
+ * Settles with `promise`, or rejects with `signal.reason` as soon as `signal` aborts — so an abort or timeout
+ * takes effect even with a custom `fetch` that ignores its signal.
+ */
+function abortable<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) {
+    return promise;
+  }
+  if (signal.aborted) {
+    // The underlying promise may still settle later; make sure that can't surface as an unhandled rejection.
+    promise.catch(() => {});
+    return Promise.reject(signal.reason);
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      }
+    );
+  });
+}
 
 /** Resolves after `ms`, or immediately once `signal` aborts. Never rejects. */
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -70,6 +109,12 @@ export interface StellarLensClientOptions {
   apiKey: string;
   /** Override the fetch implementation (defaults to the global `fetch`). */
   fetch?: typeof fetch;
+  /**
+   * Milliseconds a request may take, from sending it to reading the full response body, before it's aborted and
+   * the call rejects with a {@link StellarLensTimeoutError}. Defaults to {@link DEFAULT_TIMEOUT_MS} (10000). Pass
+   * `0` (or `Infinity`) to disable. Individual calls can override it with `RequestOptions.timeoutMs`.
+   */
+  timeoutMs?: number;
   /**
    * Called before every request — use it to add tracing headers or log outgoing calls. Mutate `init` (e.g.
    * `init.headers["traceparent"] = ...`) or return a replacement; may be async. If it throws, the request is
@@ -120,6 +165,7 @@ export class StellarLensClient {
   private readonly fetchImpl: typeof fetch;
   private readonly onRequest: StellarLensClientOptions["onRequest"];
   private readonly onResponse: StellarLensClientOptions["onResponse"];
+  private readonly timeoutMs: number;
 
   constructor(options: StellarLensClientOptions) {
     const rawBaseUrl = options.baseUrl;
@@ -138,9 +184,21 @@ export class StellarLensClient {
     this.fetchImpl = options.fetch ?? globalThis.fetch;
     this.onRequest = options.onRequest;
     this.onResponse = options.onResponse;
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    assertValidTimeout(this.timeoutMs);
   }
 
-  private async request<T>(path: string, init?: RequestInit): Promise<T> {
+  /**
+   * Sends one request. `options.signal` (or a `signal` on `init`, or one an `onRequest` hook sets) cancels it, and
+   * the effective `timeoutMs` bounds it; both share a single internal `AbortController` that `fetch` receives.
+   */
+  private async request<T>(path: string, init?: RequestInit, options?: RequestOptions): Promise<T> {
+    if (options?.timeoutMs !== undefined) {
+      assertValidTimeout(options.timeoutMs);
+    }
+    // A pre-aborted signal sends nothing and runs no hooks.
+    options?.signal?.throwIfAborted();
+
     let requestInit: StellarLensRequestInit = {
       ...init,
       url: `${this.baseUrl}${path}`,
@@ -160,21 +218,63 @@ export class StellarLensClient {
       }
     }
 
-    const { url, ...fetchInit } = requestInit;
+    const { url, signal: initSignal, ...fetchInit } = requestInit;
+    const method = requestInit.method;
+    const callerSignal = options?.signal ?? initSignal ?? undefined;
+    const timeoutMs = options?.timeoutMs ?? this.timeoutMs;
+    const hasTimeout = timeoutMs > 0 && Number.isFinite(timeoutMs);
+
+    // An async onRequest hook gives the caller's signal time to abort; don't send in that case either.
+    callerSignal?.throwIfAborted();
+
+    // No signal and no timeout: call fetch exactly as before, without an AbortController.
+    if (!callerSignal && !hasTimeout) {
+      return this.send<T>(url, method, fetchInit, undefined);
+    }
+
+    const controller = new AbortController();
+    const onCallerAbort = () => controller.abort(callerSignal?.reason);
+    callerSignal?.addEventListener("abort", onCallerAbort, { once: true });
+    const timer = hasTimeout
+      ? setTimeout(() => controller.abort(new StellarLensTimeoutError(method, url, timeoutMs)), timeoutMs)
+      : undefined;
+
+    try {
+      return await this.send<T>(url, method, { ...fetchInit, signal: controller.signal }, controller.signal);
+    } catch (err) {
+      // However a custom fetch reports the abort, a timeout always surfaces as StellarLensTimeoutError.
+      const reason: unknown = controller.signal.reason;
+      if (controller.signal.aborted && reason instanceof StellarLensTimeoutError) {
+        throw reason;
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+      callerSignal?.removeEventListener("abort", onCallerAbort);
+    }
+  }
+
+  /** Performs the fetch, runs `onResponse`, and reads the body — all of it cut short if `signal` aborts. */
+  private async send<T>(
+    url: string,
+    method: string,
+    fetchInit: RequestInit,
+    signal: AbortSignal | undefined
+  ): Promise<T> {
     const startedAt = performance.now();
-    const response = await this.fetchImpl(url, fetchInit);
+    const response = await abortable(this.fetchImpl(url, fetchInit), signal);
     const durationMs = performance.now() - startedAt;
 
     if (this.onResponse) {
       try {
-        await this.onResponse({ url, method: requestInit.method, response, durationMs });
+        await this.onResponse({ url, method, response, durationMs });
       } catch (err) {
-        throw new StellarLensHookError("onResponse", requestInit.method, url, err);
+        throw new StellarLensHookError("onResponse", method, url, err);
       }
     }
 
     if (!response.ok) {
-      const text = await response.text().catch(() => "");
+      const text = await abortable(response.text(), signal).catch(() => "");
       let body: unknown = text;
       try {
         body = text ? JSON.parse(text) : undefined;
@@ -188,58 +288,126 @@ export class StellarLensClient {
       return undefined as T;
     }
 
-    return (await response.json()) as T;
+    return (await abortable(response.json(), signal)) as T;
   }
 
-  /** Registers a new contract, or updates the name/network of one already registered at that address. */
+  /**
+   * Walks a cursor-paginated endpoint, yielding each record in order and fetching the next page only once the
+   * current one is consumed. Stops when `nextCursor` is `null`/absent, or when the api hands back the cursor it was
+   * just given (which would otherwise refetch the same page forever).
+   */
+  private async *paginate<T>(
+    startCursor: number | undefined,
+    fetchPage: (cursor: number | undefined) => Promise<Page<T>>
+  ): AsyncGenerator<T, void, undefined> {
+    let cursor = startCursor;
+    while (true) {
+      const page = await fetchPage(cursor);
+      yield* page.data;
+      const next = page.nextCursor ?? undefined;
+      if (next === undefined || next === cursor) {
+        return;
+      }
+      cursor = next;
+    }
+  }
+
+  /** Registers a new contract. Throws StellarLensApiError (409) with existingId when the address is already registered; use PATCH to update it. */
   registerContract(input: RegisterContractInput): Promise<Contract> {
     return this.request<Contract>("/contracts", {
       method: "POST",
       body: JSON.stringify(input)
     });
+  /** Registers a new contract, or updates the name/network of one already registered at that address. */
+  registerContract(input: RegisterContractInput, options?: RequestOptions): Promise<Contract> {
+    return this.request<Contract>(
+      "/contracts",
+      {
+        method: "POST",
+        body: JSON.stringify(input)
+      },
+      options
+    );
   }
 
   /** Cursor-paginated registered contracts, ordered by id. Filter with `name` (substring) and `network`. */
-  async listContracts(params?: ListContractsParams): Promise<Page<Contract>> {
+  async listContracts(params?: ListContractsParams, options?: RequestOptions): Promise<Page<Contract>> {
     assertValidLimit(params?.limit);
-    return this.request<Page<Contract>>(`/contracts${buildQuery(params)}`);
+    return this.request<Page<Contract>>(`/contracts${buildQuery(params)}`, undefined, options);
   }
 
   /**
    * Registers up to 100 contracts in one request (`POST /contracts/bulk`), reporting a result per
    * item. Unlike `registerContract`, already-registered addresses are left untouched (`existing`).
    */
-  registerContractsBulk(items: BulkRegisterContractItem[]): Promise<BulkRegisterContractsResponse> {
-    return this.request<BulkRegisterContractsResponse>("/contracts/bulk", {
-      method: "POST",
-      body: JSON.stringify({ items })
-    });
+  registerContractsBulk(
+    items: BulkRegisterContractItem[],
+    options?: RequestOptions
+  ): Promise<BulkRegisterContractsResponse> {
+    return this.request<BulkRegisterContractsResponse>(
+      "/contracts/bulk",
+      {
+        method: "POST",
+        body: JSON.stringify({ items })
+      },
+      options
+    );
   }
 
   /**
    * Iterates every registered contract matching the filters, fetching pages lazily and following
-   * `nextCursor` until it comes back `null`. Pass `cursor` to resume part-way through.
+   * `nextCursor` until it comes back `null`. Pass `cursor` to resume part-way through. `options` (signal,
+   * timeout) apply to each page request.
    */
-  async *listAllContracts(params?: ListContractsParams): AsyncGenerator<Contract, void, undefined> {
-    let cursor = params?.cursor;
-    do {
-      const page = await this.listContracts({ ...params, cursor });
-      yield* page.data;
-      cursor = page.nextCursor ?? undefined;
-    } while (cursor !== undefined);
+  listAllContracts(params?: ListContractsParams, options?: RequestOptions): AsyncGenerator<Contract, void, undefined> {
+    return this.paginate(params?.cursor, (cursor) => this.listContracts({ ...params, cursor }, options));
   }
 
-  getContract(id: number): Promise<Contract> {
-    return this.request<Contract>(`/contracts/${id}`);
+  getContract(id: number, options?: RequestOptions): Promise<Contract> {
+    return this.request<Contract>(`/contracts/${id}`, undefined, options);
+  }
+
+  /**
+   * Deletes a registered contract (`DELETE /contracts/:id`). Resolves once the api answers `204 No Content`;
+   * any error status — e.g. `404` for an unknown id — rejects with a {@link StellarLensApiError}.
+   */
+  async deleteContract(id: number, options?: RequestOptions): Promise<void> {
+    await this.request<void>(`/contracts/${id}`, { method: "DELETE" }, options);
   }
 
   /**
    * Cursor-paginated events for a contract, oldest first. Pass `order: "desc"` to page newest-first instead
    * (`{ order: "desc", limit: 1 }` returns the latest event).
    */
-  async listEvents(contractId: number, params?: ListEventsParams): Promise<Page<EventRecord>> {
+  async listEvents(
+    contractId: number,
+    params?: ListEventsParams,
+    options?: RequestOptions
+  ): Promise<Page<EventRecord>> {
     assertValidLimit(params?.limit);
-    return this.request<Page<EventRecord>>(`/contracts/${contractId}/events${buildQuery(params)}`);
+    return this.request<Page<EventRecord>>(
+      `/contracts/${contractId}/events${buildQuery(params)}`,
+      undefined,
+      options
+    );
+  }
+
+  /**
+   * Iterates every event for a contract matching the filters (in `params.order`, oldest first by default),
+   * fetching pages lazily and following `nextCursor` until it comes back `null`. Pass `cursor` to resume.
+   *
+   * ```ts
+   * for await (const event of client.listAllEvents(contractId, { topic: "transfer" })) {
+   *   console.log(event.id);
+   * }
+   * ```
+   */
+  listAllEvents(
+    contractId: number,
+    params?: ListEventsParams,
+    options?: RequestOptions
+  ): AsyncGenerator<EventRecord, void, undefined> {
+    return this.paginate(params?.cursor, (cursor) => this.listEvents(contractId, { ...params, cursor }, options));
   }
 
   /**
@@ -278,7 +446,7 @@ export class StellarLensClient {
           // The api is oldest-first only, so "latest" means walking to the last page once and starting after it.
           let next: number | undefined = cursor;
           do {
-            const skipped: Page<EventRecord> = await this.request<Page<EventRecord>>(path(next), { signal });
+            const skipped: Page<EventRecord> = await this.request<Page<EventRecord>>(path(next), undefined, { signal });
             if (skipped.data.length > 0) {
               cursor = skipped.data[skipped.data.length - 1].id;
             }
@@ -289,7 +457,7 @@ export class StellarLensClient {
           await sleep(intervalMs, signal);
           continue;
         }
-        page = await this.request<Page<EventRecord>>(path(cursor), { signal });
+        page = await this.request<Page<EventRecord>>(path(cursor), undefined, { signal });
         failures = 0;
       } catch (error) {
         if (signal?.aborted) {
@@ -320,13 +488,35 @@ export class StellarLensClient {
   }
 
   /** Cursor-paginated token transfers for a contract, oldest first. */
-  async listTransfers(contractId: number, params?: ListTransfersParams): Promise<Page<TransferRecord>> {
+  async listTransfers(
+    contractId: number,
+    params?: ListTransfersParams,
+    options?: RequestOptions
+  ): Promise<Page<TransferRecord>> {
     assertValidLimit(params?.limit);
-    return this.request<Page<TransferRecord>>(`/contracts/${contractId}/transfers${buildQuery(params)}`);
+    return this.request<Page<TransferRecord>>(
+      `/contracts/${contractId}/transfers${buildQuery(params)}`,
+      undefined,
+      options
+    );
+  }
+
+  /**
+   * Iterates every token transfer for a contract matching the filters, oldest first, fetching pages lazily and
+   * following `nextCursor` until it comes back `null`. Pass `cursor` to resume part-way through.
+   */
+  listAllTransfers(
+    contractId: number,
+    params?: ListTransfersParams,
+    options?: RequestOptions
+  ): AsyncGenerator<TransferRecord, void, undefined> {
+    return this.paginate(params?.cursor, (cursor) =>
+      this.listTransfers(contractId, { ...params, cursor }, options)
+    );
   }
 
   /** Transfer summary stats for a contract, optionally scoped to a time window. */
-  getStats(contractId: number, params?: GetStatsParams): Promise<ContractStats> {
-    return this.request<ContractStats>(`/contracts/${contractId}/stats${buildQuery(params)}`);
+  getStats(contractId: number, params?: GetStatsParams, options?: RequestOptions): Promise<ContractStats> {
+    return this.request<ContractStats>(`/contracts/${contractId}/stats${buildQuery(params)}`, undefined, options);
   }
 }

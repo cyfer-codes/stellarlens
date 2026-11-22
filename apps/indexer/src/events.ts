@@ -125,11 +125,15 @@ export async function processEventsBatch(
         .returning({ id: eventsTable.id });
 
       webhookPayloads.push({
+        version: 1,
         eventId: insertedEvent.id,
         contractId,
         contractAddress: event.contractId,
         ledger: event.ledger,
         txHash: event.txHash,
+        rpcEventId: event.id,
+        ledgerClosedAt: event.ledgerClosedAt,
+        inSuccessfulContractCall: event.inSuccessfulContractCall,
         topic: decodedTopic,
         value: decodedValue
       });

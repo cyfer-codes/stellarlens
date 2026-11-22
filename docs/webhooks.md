@@ -46,7 +46,7 @@ sequenceDiagram
                 note over IDX: stop immediately, no retry
             else all addresses public
                 IDX->>EP: POST body + X-Webhook-Signature (5s timeout)
-                EP-->>IDX: 2xx = success, anything else = retry
+                EP-->>IDX: 2xx = success, 4xx (except 408/429) = stop, else retry
             end
         end
         IDX->>DB: insert webhook_deliveries row (success | failed)
@@ -172,8 +172,8 @@ In detail:
 
 ## Retry schedule
 
-Constants live in [`apps/indexer/src/config.ts`](../apps/indexer/src/config.ts) and aren't
-configurable through env vars.
+Defaults live in [`apps/indexer/src/config.ts`](../apps/indexer/src/config.ts) and can be tuned
+through env vars (see [Configuration](#configuration)). The table below assumes the defaults.
 
 | Attempt | Waits before attempt | Timeout | Cumulative worst case |
 |---|---|---|---|
@@ -194,9 +194,18 @@ These failures stop immediately, with no retries (`attempts` is `1`):
   `lastError: "webhook URL resolves to a non-public IP address"`.
 - **Redirect.** The endpoint answers with a `3xx`. Redirects are never followed; recorded as
   `lastError: "webhook responded with redirect status 302 to <location>; redirects are not followed"`.
+- **A 4xx this endpoint will never accept.** Every other 4xx response — bad auth, unknown path,
+  unprocessable payload, … — is permanent, so it isn't retried. `408 Request Timeout` and
+  `429 Too Many Requests` are the exceptions and are retried. Recorded as
+  `lastError: "webhook responded with status <code>"`.
 
-Everything else is retried: non-`2xx` (`"webhook responded with status 503"`), timeouts, connection
-refused/reset, TLS errors.
+A `410 Gone` is final too, and additionally **pauses the webhook** (sets `active = false`) so later
+events skip it until an operator resumes it — see [Pausing a webhook](#pausing-a-webhook).
+
+Everything else is retried: `5xx`, `408`, `429`, timeouts, connection refused/reset, TLS errors.
+When the endpoint includes a `Retry-After` header — either a number of seconds or an HTTP date —
+that delay is honoured in place of the exponential backoff, capped at `WEBHOOK_RETRY_MAX_DELAY_MS`
+(5s).
 
 ## Blocked destinations
 
@@ -243,6 +252,9 @@ Each webhook has an `active` flag (default `true`). The indexer only loads webho
 `active = true`, so while a webhook is paused, events are **skipped, not queued**: unpausing
 doesn't backfill what was missed, and no delivery rows are written for skipped events. The change
 takes effect from the next event the indexer processes, with no restart needed.
+
+The indexer pauses a webhook on its own when its endpoint answers `410 Gone`, logging the reason;
+resume it with an operator `UPDATE` (below) once the receiver accepts deliveries again.
 
 The api doesn't expose `active` yet. `PATCH` accepts only `url` and `eventTypes`, and unknown fields
 are stripped, so sending `"active": false` is silently ignored. Until it does, operators toggle it in
@@ -315,10 +327,15 @@ Indexer env vars that affect webhooks:
 | Variable | Default | Effect |
 |---|---|---|
 | `WEBHOOK_CONCURRENCY` | `10` | Max webhooks delivered to in parallel **for one event**. Must be a positive integer; the indexer refuses to start otherwise. Events themselves are always delivered one at a time. |
+| `WEBHOOK_MAX_RETRIES` | `3` | Retries after the first delivery attempt. Must be a non-negative integer; `0` disables retries. |
+| `WEBHOOK_RETRY_BASE_DELAY_MS` | `500` | Base delay for exponential backoff between attempts. Must be a positive integer. |
+| `WEBHOOK_RETRY_MAX_DELAY_MS` | `5000` | Cap on any single backoff delay, including a receiver's `Retry-After`. Must be a positive integer ≥ `WEBHOOK_RETRY_BASE_DELAY_MS`. |
+| `WEBHOOK_TIMEOUT_MS` | `5000` | Per-attempt request timeout; the POST is aborted (and retried) once it elapses. Must be a positive integer. |
 | `POLL_INTERVAL_MS` | `5000` | Sleep between poll cycles. Together with delivery time, sets how quickly new events reach endpoints. |
 | `POLL_ONCE` | `false` | `true` runs one poll cycle (deliveries included) and exits. |
 | `DATABASE_URL` | — | Where webhooks are read from and delivery history is written. |
 | `SOROBAN_RPC_URL`, `STELLAR_NETWORK` | — | Required by the indexer; only events from that network are indexed and delivered. |
 
-Retry counts, backoff and the 5s request timeout are code constants (see [Retry schedule](#retry-schedule)).
+Invalid values for any of these make the indexer refuse to start. See [Retry schedule](#retry-schedule)
+for how the retry and timeout settings combine.
 The api has no webhook-specific settings.

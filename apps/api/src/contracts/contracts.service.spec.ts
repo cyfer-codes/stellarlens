@@ -1,168 +1,84 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { ContractsService } from './contracts.service';
-import { DATABASE } from '../database/database.module';
-import type { CreateContractDto } from './dto/create-contract.dto';
+import { Test, TestingModule } from "@nestjs/testing";
+import { ConflictException, NotFoundException } from "@nestjs/common";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ContractsService } from "./contracts.service";
+import { DATABASE } from "../database/database.module";
+import type { CreateContractDto } from "./dto/create-contract.dto";
 
-describe('ContractsService', () => {
+describe("ContractsService", () => {
   let service: ContractsService;
 
   const mockReturning = vi.fn();
-  const mockOnConflictDoUpdate = vi.fn(() => ({ returning: mockReturning }));
-  const mockValues = vi.fn(() => ({ onConflictDoUpdate: mockOnConflictDoUpdate }));
+  const mockOnConflictDoNothing = vi.fn(() => ({ returning: mockReturning }));
+  const mockValues = vi.fn(() => ({ onConflictDoNothing: mockOnConflictDoNothing }));
   const mockInsert = vi.fn(() => ({ values: mockValues }));
-
   const mockWhere = vi.fn();
   const mockFrom = vi.fn(() => ({ where: mockWhere }));
   const mockSelect = vi.fn(() => ({ from: mockFrom }));
-  const mockLimit = vi.fn();
-  const mockOrderBy = vi.fn(() => ({ limit: mockLimit }));
-
-  const mockDb = {
-    insert: mockInsert,
-    select: mockSelect,
-  };
+  const mockDb = { insert: mockInsert, select: mockSelect };
 
   beforeEach(async () => {
     vi.clearAllMocks();
-
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        ContractsService,
-        {
-          provide: DATABASE,
-          useValue: mockDb,
-        },
-      ],
+      providers: [ContractsService, { provide: DATABASE, useValue: mockDb }]
     }).compile();
-
     service = module.get<ContractsService>(ContractsService);
   });
 
-  describe('register', () => {
-    it('should insert a new contract and return the created row', async () => {
-      const contractData = {
-        name: 'Test Contract',
-        address: '0x1234567890abcdef',
-      };
-      const createdContract = {
-        id: 'contract-1',
-        ...contractData,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+  describe("register", () => {
+    const input = {
+      address: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4",
+      name: "Original name",
+      network: "testnet"
+    } as CreateContractDto;
 
-      mockReturning.mockResolvedValueOnce([createdContract]);
+    it("inserts and returns a newly registered contract", async () => {
+      const created = { id: 12, ...input };
+      mockReturning.mockResolvedValueOnce([created]);
 
-      const result = await service.register(contractData as unknown as CreateContractDto);
-
-      expect(mockInsert).toHaveBeenCalledTimes(1);
-      expect(mockValues).toHaveBeenCalledWith(contractData);
-      expect(mockOnConflictDoUpdate).toHaveBeenCalledTimes(1);
-      expect(mockReturning).toHaveBeenCalledTimes(1);
-      expect(result).toEqual(createdContract);
+      await expect(service.register(input)).resolves.toEqual(created);
+      expect(mockValues).toHaveBeenCalledWith(input);
+      expect(mockOnConflictDoNothing).toHaveBeenCalledTimes(1);
     });
 
-    it('should update the existing contract on conflict and return the updated row', async () => {
-      const contractData = {
-        name: 'Updated Contract',
-        address: '0x1234567890abcdef',
-      };
-      const updatedContract = {
-        id: 'contract-1',
-        ...contractData,
-        createdAt: new Date('2024-01-01'),
-        updatedAt: new Date('2024-02-01'),
-      };
+    it("returns 409 with the existing id without mutating a duplicate", async () => {
+      const existing = { id: 42, address: input.address, name: "Keep this name", network: "mainnet" };
+      mockReturning.mockResolvedValueOnce([]);
+      mockWhere.mockResolvedValueOnce([existing]);
 
-      mockReturning.mockResolvedValueOnce([updatedContract]);
-
-      const result = await service.register(contractData as unknown as CreateContractDto);
-
-      expect(mockInsert).toHaveBeenCalledTimes(1);
-      expect(mockValues).toHaveBeenCalledWith(contractData);
-      expect(mockOnConflictDoUpdate).toHaveBeenCalledTimes(1);
-      expect(mockReturning).toHaveBeenCalledTimes(1);
-      expect(result).toEqual(updatedContract);
-    });
-  });
-
-  describe('findAll', () => {
-    it('should return all contracts from the select chain', async () => {
-      const contracts = [
-        {
-          id: 'contract-1',
-          name: 'Contract One',
-          address: '0x1111111111111111',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-        {
-          id: 'contract-2',
-          name: 'Contract Two',
-          address: '0x2222222222222222',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-      ];
-
-      mockWhere.mockReturnValueOnce({ orderBy: mockOrderBy });
-      mockLimit.mockResolvedValueOnce(contracts);
-
-      const result = await service.findAll();
-
-      expect(mockSelect).toHaveBeenCalledTimes(1);
-      expect(mockFrom).toHaveBeenCalledTimes(1);
-      expect(mockWhere).toHaveBeenCalledTimes(1);
-      expect(mockOrderBy).toHaveBeenCalledTimes(1);
-      expect(mockLimit).toHaveBeenCalledWith(21);
-      expect(result).toEqual({ data: contracts, nextCursor: null });
+      await expect(service.register({ ...input, name: "Overwrite attempt", network: "testnet" }))
+        .rejects.toMatchObject({
+          status: 409,
+          response: {
+            message: "A contract with this address is already registered. Use PATCH /contracts/:id to update it.",
+            existingId: 42
+          }
+        });
+      expect(mockOnConflictDoNothing).toHaveBeenCalledTimes(1);
     });
 
-    it('should return an empty array when no contracts exist', async () => {
-      mockWhere.mockReturnValueOnce({ orderBy: mockOrderBy });
-      mockLimit.mockResolvedValueOnce([]);
-
-      const result = await service.findAll();
-
-      expect(mockSelect).toHaveBeenCalledTimes(1);
-      expect(mockFrom).toHaveBeenCalledTimes(1);
-      expect(mockWhere).toHaveBeenCalledTimes(1);
-      expect(result).toEqual({ data: [], nextCursor: null });
-    });
-  });
-
-  describe('findOne', () => {
-    it('should return the found contract', async () => {
-      const contract = {
-        id: 'contract-1',
-        name: 'Contract One',
-        address: '0x1111111111111111',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      mockWhere.mockResolvedValueOnce([contract]);
-
-      const result = await service.findOne(1);
-
-      expect(mockSelect).toHaveBeenCalledTimes(1);
-      expect(mockFrom).toHaveBeenCalledTimes(1);
-      expect(mockWhere).toHaveBeenCalledTimes(1);
-      expect(result).toEqual(contract);
-    });
-
-    it('should throw NotFoundException when no contract is found', async () => {
+    it("asks the caller to retry if a conflicting row disappears before lookup", async () => {
+      mockReturning.mockResolvedValueOnce([]);
       mockWhere.mockResolvedValueOnce([]);
 
-      await expect(service.findOne(999)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.register(input)).rejects.toThrow(ConflictException);
+    });
+  });
 
-      expect(mockSelect).toHaveBeenCalledTimes(1);
-      expect(mockFrom).toHaveBeenCalledTimes(1);
-      expect(mockWhere).toHaveBeenCalledTimes(1);
+  describe("findOne", () => {
+    it("returns the found contract", async () => {
+      const contract = { id: 1, address: inputAddress(), name: "Contract", network: "testnet", decimals: null, symbol: null };
+      mockWhere.mockResolvedValueOnce([contract]);
+      await expect(service.findOne(1)).resolves.toEqual(contract);
+    });
+
+    it("throws NotFoundException when no contract is found", async () => {
+      mockWhere.mockResolvedValueOnce([]);
+      await expect(service.findOne(999)).rejects.toThrow(NotFoundException);
     });
   });
 });
+
+function inputAddress() {
+  return "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4";
+}

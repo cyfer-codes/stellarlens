@@ -1,5 +1,6 @@
+import { STELLAR_NETWORKS } from "@stellarlens/db";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsNotEmpty, IsOptional, IsString } from "class-validator";
+import { IsIn, IsNotEmpty, IsOptional, IsString } from "class-validator";
 import { IsValidStellarAddress } from "./is-stellar-address.decorator";
 
 export class CreateContractDto {
@@ -24,10 +25,11 @@ export class CreateContractDto {
   @ApiProperty({
     description: "The Stellar network the contract belongs to.",
     example: "testnet",
-    enum: ["mainnet", "testnet", "futurenet", "custom"],
+    enum: [...STELLAR_NETWORKS],
     required: true,
   })
   @IsString()
   @IsNotEmpty()
+  @IsIn(STELLAR_NETWORKS)
   network!: string;
 }

@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform, Type } from "class-transformer";
-import { IsIn, IsInt, IsISO8601, IsOptional, IsString, Max, Min } from "class-validator";
+import { IsIn, IsInt, IsISO8601, IsOptional, IsString, Max, Min, Validate } from "class-validator";
+import { DateRangeOrderConstraint } from "../../common/validators/date-range.validator";
 
 export const EVENT_ORDERS = ["asc", "desc"] as const;
 export type EventOrder = (typeof EVENT_ORDERS)[number];
@@ -39,6 +40,7 @@ export class FindEventsQueryDto {
   @IsIn(EVENT_ORDERS)
   order: EventOrder = "asc";
 
+  /**
    * Matches the topic value at any position (containment semantics).
    * Use `topic0`..`topic3` to target a specific decoded topic index.
    */
@@ -114,9 +116,6 @@ export class FindEventsQueryDto {
   })
   @IsOptional()
   @IsISO8601()
+  @Validate(DateRangeOrderConstraint)
   to?: string;
-
-  @IsOptional()
-  @IsIn(["asc", "desc"])
-  order: "asc" | "desc" = "asc";
 }

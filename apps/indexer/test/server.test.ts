@@ -4,6 +4,7 @@ import { http as mswHttp, passthrough } from "msw";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { REGISTRY_SECRET } from "../src/config.js";
 import { MAX_REGISTRATION_BODY_BYTES, startRegistryServer } from "../src/server.js";
+import { ContractAlreadyRegisteredError, registerContract } from "../src/registry.js";
 import { getTestDb, mswServer } from "./setup.js";
 
 // The server tests cover authentication and the body guard, not database persistence.
@@ -58,6 +59,13 @@ describe("registry server", () => {
     expect(response.status).toBe(404);
   });
 
+  it("returns 404 for non-GET requests to /health", async () => {
+    const response = await fetch(`${await listen()}/health`, { method: "POST" });
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "not found" });
+  });
+
   it("rejects a registration without the registry secret header", async () => {
     const response = await fetch(`${await listen()}/contracts`, {
       method: "POST",
@@ -89,6 +97,19 @@ describe("registry server", () => {
 
     expect(response.status).toBe(201);
     expect(await response.json()).toMatchObject({ address: VALID_ACCOUNT, network: "testnet" });
+  });
+
+  it("returns 409 and the existing id when a registration already exists", async () => {
+    vi.mocked(registerContract).mockRejectedValueOnce(new ContractAlreadyRegisteredError(23));
+
+    const response = await fetch(`${await listen()}/contracts`, {
+      method: "POST",
+      headers: AUTH_HEADERS,
+      body: JSON.stringify({ address: VALID_ACCOUNT, network: "testnet" })
+    });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ existingId: 23 });
   });
 
   it("passes normal-sized payloads through to the handler", async () => {
