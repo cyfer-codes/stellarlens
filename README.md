@@ -182,7 +182,7 @@ one thing that can't depend on an api key existing yet: creating the first one (
 
 ```
 apps/
-  api/       NestJS API — contracts, events, transfers, stats, api keys
+  api/       NestJS API — contracts, events, transfers, stats, api keys  (see apps/api/README.md)
   web/       Next.js dashboard — login, contracts/events/transfers views, settings
   indexer/   Polls Soroban RPC, writes events/transfers, delivers webhooks
 packages/
@@ -199,6 +199,7 @@ Workspaces are `apps/*` and `packages/*` (see `pnpm-workspace.yaml`), scoped as 
 
 ## Docs
 
+- [apps/api/README.md](apps/api/README.md) — API env vars, all routes, and local dev instructions
 - [docs/webhooks.md](docs/webhooks.md) — webhook delivery semantics, retries, signature verification,
   blocked destinations, pausing, the delivery history api, and related env vars
 - [docs/screenshots.md](docs/screenshots.md) — capture checklist for the README's screenshots
