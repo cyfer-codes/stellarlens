@@ -84,6 +84,9 @@ requests, so they need a `full`-scope key; a `read`-scope key gets `403`.
 POST /your/webhook/path HTTP/1.1
 Content-Type: application/json
 X-Webhook-Signature: sha256=<64 lowercase hex characters>
+X-Webhook-Id: wh_<webhookId>_evt_<eventId>
+X-Webhook-Event: transfer
+X-Webhook-Attempt: 1
 
 {"eventId":4182,"contractId":7,"ledger":512345,"txHash":"9f2c…","topic":["transfer","GABC…","GDEF…"],"value":"1000000"}
 ```
@@ -97,7 +100,13 @@ X-Webhook-Signature: sha256=<64 lowercase hex characters>
 | `topic` | array | Decoded topic values (`scValToNative`); 64/128/256-bit integers are decimal strings |
 | `value` | any | Decoded event value, same conversion rules as `topic` |
 
-There is no event-type, delivery-id or timestamp header, and the body has no envelope or version
+| Header | Meaning |
+|---|---|
+| `X-Webhook-Id` | Delivery id for this webhook/event pair; identical on every retry — **use it to deduplicate** |
+| `X-Webhook-Event` | `topic[0]` when it is a string, otherwise `unknown` |
+| `X-Webhook-Attempt` | `1` for the first attempt, incremented on each retry |
+
+There is no timestamp header, and the body has no envelope or version
 field. The raw XDR isn't included; fetch it from `GET /contracts/:contractId/events` if you need it.
 
 Respond with any `2xx` status within **5 seconds**. The response body is ignored. Any other status, a
@@ -183,6 +192,8 @@ These failures stop immediately, with no retries (`attempts` is `1`):
   `lastError: "DNS resolution failed for <url>: <message>"` and logged as unreachable.
 - **Blocked destination.** The host resolves to a non-public address (see below). Recorded as
   `lastError: "webhook URL resolves to a non-public IP address"`.
+- **Redirect.** The endpoint answers with a `3xx`. Redirects are never followed; recorded as
+  `lastError: "webhook responded with redirect status 302 to <location>; redirects are not followed"`.
 - **A 4xx this endpoint will never accept.** Every other 4xx response — bad auth, unknown path,
   unprocessable payload, … — is permanent, so it isn't retried. `408 Request Timeout` and
   `429 Too Many Requests` are the exceptions and are retried. Recorded as
@@ -224,9 +235,11 @@ IPv4-mapped addresses (`::ffff:a.b.c.d`) are checked against the IPv4 rules.
 
 Known limits, for operators assessing the protection:
 
-- The check resolves the host separately from the HTTP request, so a DNS-rebinding host could
-  answer differently between the two lookups.
-- HTTP redirects are followed (`fetch`'s default) and the redirect target is **not** re-checked.
+- The HTTP connection uses its own DNS lookup that re-checks every resolved address and connects
+  only to a validated public one, so a DNS-rebinding host can't switch to a private address after
+  the check. TLS SNI and the `Host` header still use the configured hostname.
+- HTTP redirects are not followed (`redirect: "manual"`), so a public endpoint can't bounce the
+  signed request to an internal address; any `3xx` is recorded as a failed delivery.
 - Registration doesn't check the destination, so a webhook pointing at a blocked address can be
   created; every delivery to it is then recorded as `failed`.
 
@@ -274,6 +287,7 @@ x-api-key: <key>
   "data": [
     {
       "id": 125,
+      "idempotencyKey": "wh_12_evt_4183",
       "status": "failed",
       "attempts": 4,
       "lastError": "webhook responded with status 503",
@@ -282,6 +296,7 @@ x-api-key: <key>
     },
     {
       "id": 124,
+      "idempotencyKey": "wh_12_evt_4182",
       "status": "success",
       "attempts": 1,
       "lastError": null,

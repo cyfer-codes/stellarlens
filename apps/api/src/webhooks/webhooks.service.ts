@@ -199,6 +199,7 @@ export class WebhooksService {
       .select({
         id: webhookDeliveries.id,
         eventId: webhookDeliveries.eventId,
+        idempotencyKey: webhookDeliveries.idempotencyKey,
         status: webhookDeliveries.status,
         attempts: webhookDeliveries.attempts,
         lastError: webhookDeliveries.lastError,

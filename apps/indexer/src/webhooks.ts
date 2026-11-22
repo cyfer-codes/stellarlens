@@ -1,5 +1,6 @@
 import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
+import { isIP, type LookupFunction } from "node:net";
+import { Agent } from "undici";
 import { and, eq } from "drizzle-orm";
 import {
   webhookDeliveries as webhookDeliveriesTable,
@@ -28,6 +29,8 @@ export interface WebhookEventPayload {
 }
 
 type DnsResolver = (hostname: string) => Promise<Array<{ address: string }>>;
+
+const defaultResolve: DnsResolver = (hostname) => lookup(hostname, { all: true, verbatim: true });
 
 function ipv4IsPublic(address: string): boolean {
   const octets = address.split(".").map(Number);
@@ -68,25 +71,35 @@ function ipv6ToBigInt(address: string): bigint {
   return groups.reduce((value, group) => (value << 16n) | BigInt(`0x${group || "0"}`), 0n);
 }
 
-function ipIsPublic(address: string): boolean {
-  const family = isIP(address);
-  if (family === 4) {
-    return ipv4IsPublic(address);
-  }
-  if (family !== 6) {
+/**
+ * True only for globally routable unicast addresses. Anything outside 2000::/3 (loopback,
+ * IPv4-compatible, NAT64 64:ff9b::/96 and 64:ff9b:1::/48, discard-only 100::/64, ULA,
+ * link-local, multicast) is rejected, as is the whole IETF protocol assignment block
+ * 2001::/23 (Teredo, benchmarking, ORCHIDv2, ...). Malformed input returns false.
+ */
+export function ipIsPublic(address: string): boolean {
+  try {
+    const family = isIP(address);
+    if (family === 4) {
+      return ipv4IsPublic(address);
+    }
+    if (family !== 6) {
+      return false;
+    }
+
+    const value = ipv6ToBigInt(address);
+    if (value >> 32n === 0xffffn) {
+      const ipv4Bytes = (value & 0xffffffffn).toString(16).padStart(8, "0").match(/.{2}/g)!;
+      return ipv4IsPublic(ipv4Bytes.map((byte) => parseInt(byte, 16)).join("."));
+    }
+
+    const globalUnicast = value >> 125n === 0b001n;
+    const documentation = value >> 96n === 0x20010db8n || value >> 108n === 0x3fff0n;
+    const specialUse = value >> 105n === 0x100080n || value >> 112n === 0x2002n;
+    return globalUnicast && !documentation && !specialUse;
+  } catch {
     return false;
   }
-
-  const value = ipv6ToBigInt(address);
-  if (value >> 32n === 0xffffn) {
-    const ipv4Bytes = (value & 0xffffffffn).toString(16).padStart(8, "0").match(/.{2}/g)!;
-    return ipv4IsPublic(ipv4Bytes.map((byte) => parseInt(byte, 16)).join("."));
-  }
-
-  const globalUnicast = value >> 125n === 0b001n;
-  const documentation = value >> 96n === 0x20010db8n;
-  const specialUse = value >> 105n === 0x100080n || value >> 112n === 0x2002n;
-  return globalUnicast && !documentation && !specialUse;
 }
 
 export class NonPublicWebhookUrlError extends Error {
@@ -98,7 +111,7 @@ export class NonPublicWebhookUrlError extends Error {
 
 export async function assertPublicWebhookUrl(
   url: string,
-  resolve: DnsResolver = (hostname) => lookup(hostname, { all: true, verbatim: true })
+  resolve: DnsResolver = defaultResolve
 ): Promise<void> {
   const hostname = new URL(url).hostname.replace(/^\[|\]$/g, "");
   const addresses = isIP(hostname) ? [{ address: hostname }] : await resolve(hostname);
@@ -106,6 +119,58 @@ export async function assertPublicWebhookUrl(
   if (addresses.length === 0 || addresses.some(({ address }) => !ipIsPublic(address))) {
     throw new NonPublicWebhookUrlError();
   }
+}
+
+export class WebhookRedirectError extends Error {
+  constructor(status: number, location: string | null) {
+    super(
+      `webhook responded with redirect status ${status}${location ? ` to ${location}` : ""}; redirects are not followed`
+    );
+    this.name = "WebhookRedirectError";
+  }
+}
+
+/**
+ * DNS lookup used for the delivery connection itself. It resolves the host again and only hands
+ * back addresses that pass the public-IP check, so a rebinding DNS server can't swap in a private
+ * address between `assertPublicWebhookUrl` and the request. Because only the lookup is replaced,
+ * TLS SNI and the Host header still use the original hostname.
+ */
+export function createPublicOnlyLookup(resolve: DnsResolver = defaultResolve): LookupFunction {
+  return (hostname, options, callback) => {
+    resolve(hostname).then(
+      (addresses) => {
+        if (addresses.length === 0 || addresses.some(({ address }) => !ipIsPublic(address))) {
+          callback(new NonPublicWebhookUrlError(), "", 0);
+          return;
+        }
+        const resolved = addresses.map(({ address }) => ({ address, family: isIP(address) }));
+        if ((options as { all?: boolean }).all) {
+          (callback as unknown as (err: null, addresses: typeof resolved) => void)(null, resolved);
+          return;
+        }
+        callback(null, resolved[0].address, resolved[0].family);
+      },
+      (err: NodeJS.ErrnoException) => callback(err, "", 0)
+    );
+  };
+}
+
+/** Dispatcher whose connections are pinned to addresses validated by `createPublicOnlyLookup`. */
+export function createWebhookAgent(resolve: DnsResolver = defaultResolve): Agent {
+  return new Agent({ connect: { lookup: createPublicOnlyLookup(resolve) } });
+}
+
+const webhookAgent = createWebhookAgent();
+
+/** Stable across every retry of the same webhook/event pair so receivers can deduplicate. */
+export function webhookDeliveryId(webhookId: number, eventId: number): string {
+  return `wh_${webhookId}_evt_${eventId}`;
+}
+
+function webhookEventType(payload: WebhookEventPayload): string {
+  const eventType = payload.topic[0];
+  return typeof eventType === "string" ? eventType : "unknown";
 }
 
 /**
@@ -154,6 +219,7 @@ async function postWebhook(
   url: string,
   body: string,
   signature: string,
+  deliveryHeaders: Record<string, string>
   timeoutMs: number = WEBHOOK_TIMEOUT_MS
 ): Promise<void> {
   const controller = new AbortController();
@@ -164,11 +230,20 @@ async function postWebhook(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...deliveryHeaders,
+        "X-Webhook-Signature": signature
         [WEBHOOK_SIGNATURE_HEADER]: signature
       },
       body,
-      signal: controller.signal
-    });
+      // Never follow redirects: the private-address check only covers the configured URL.
+      redirect: "manual",
+      signal: controller.signal,
+      dispatcher: webhookAgent
+    } as RequestInit);
+
+    if (response.status >= 300 && response.status < 400) {
+      throw new WebhookRedirectError(response.status, response.headers.get("location"));
+    }
 
     if (!response.ok) {
       throw new WebhookResponseError(
@@ -176,6 +251,12 @@ async function postWebhook(
         parseRetryAfterMs(response.headers.get("retry-after"))
       );
     }
+  } catch (err) {
+    // A rebinding answer rejected by the pinned lookup surfaces as fetch's `cause`.
+    if (err instanceof Error && err.cause instanceof NonPublicWebhookUrlError) {
+      throw err.cause;
+    }
+    throw err;
   } finally {
     clearTimeout(timeout);
   }
@@ -306,6 +387,7 @@ async function recordDelivery(
   outcome: {
     webhookId: number;
     eventId: number;
+    idempotencyKey: string;
     status: "success" | "failed";
     attempts: number;
     lastError: string | null;
@@ -357,6 +439,7 @@ export async function deliverWebhooksForEvent(
     Array.from({ length: workerCount }, async () => {
       while (nextRecipientIndex < recipients.length) {
         const webhook = recipients[nextRecipientIndex++];
+        const deliveryId = webhookDeliveryId(webhook.id, payload.eventId);
         let attempts = 0;
 
         try {
@@ -366,12 +449,20 @@ export async function deliverWebhooksForEvent(
             async () => {
               attempts += 1;
               await assertPublicWebhookUrl(webhook.url);
-              return postWebhook(webhook.url, body, signature);
+              return postWebhook(webhook.url, body, signature, {
+                "X-Webhook-Id": deliveryId,
+                "X-Webhook-Event": webhookEventType(payload),
+                "X-Webhook-Attempt": String(attempts)
+              });
             },
             {
               maxRetries: WEBHOOK_MAX_RETRIES,
               baseDelayMs: WEBHOOK_RETRY_BASE_DELAY_MS,
               maxDelayMs: WEBHOOK_RETRY_MAX_DELAY_MS,
+              shouldRetry: (err) =>
+                !(err instanceof NonPublicWebhookUrlError) &&
+                !(err instanceof WebhookRedirectError) &&
+                !isDnsResolutionFailure(err)
               shouldRetry: shouldRetryWebhookDelivery,
               retryDelayMs: webhookRetryDelayMs
             }
@@ -380,6 +471,7 @@ export async function deliverWebhooksForEvent(
           await recordDelivery(db, {
             webhookId: webhook.id,
             eventId: payload.eventId,
+            idempotencyKey: deliveryId,
             status: "success",
             attempts,
             lastError: null,
@@ -405,6 +497,7 @@ export async function deliverWebhooksForEvent(
           await recordDelivery(db, {
             webhookId: webhook.id,
             eventId: payload.eventId,
+            idempotencyKey: deliveryId,
             status: "failed",
             attempts,
             lastError: dnsFailure
