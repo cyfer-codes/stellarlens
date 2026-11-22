@@ -143,6 +143,8 @@ export class ApiNotFoundError extends ApiProxyError {
   }
 }
 export class ApiNotFoundError extends Error { }
+export class ApiConflictError extends Error {}
+export class ApiBadRequestError extends Error {}
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
@@ -158,6 +160,16 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (response.status === 404) {
     throw new ApiNotFoundError(path);
+  }
+
+    if (response.status === 409) {
+    const body = await response.text();
+    throw new ApiConflictError(body || "conflict");
+  }
+
+  if (response.status === 400) {
+    const body = await response.text();
+    throw new ApiBadRequestError(body || "bad request");
   }
 
   if (!response.ok) {
@@ -281,6 +293,18 @@ export function createWebhook(contractId: number, input: CreateWebhookInput): Pr
 
 export function deleteWebhook(contractId: number, id: number): Promise<void> {
   return apiFetch<void>(`/contracts/${contractId}/webhooks/${id}`, { method: "DELETE" });
+}
+
+export interface UpdateWebhookInput {
+  url?: string;
+  eventTypes?: string[];
+}
+
+export function updateWebhook(contractId: number, id: number, input: UpdateWebhookInput): Promise<Webhook> {
+  return apiFetch<Webhook>(`/contracts/${contractId}/webhooks/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input)
+  });
 }
 
 export interface RotatedWebhook {
