@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { ApiKeysManager } from "@/components/ApiKeysManager";
 import { ChangePasswordForm } from "@/components/ChangePasswordForm";
 import { UsersManager } from "@/components/UsersManager";
@@ -6,6 +7,11 @@ import { getCurrentUser } from "@/lib/auth";
 export default async function SettingsPage() {
   const currentUser = await getCurrentUser();
 
+export const metadata: Metadata = {
+  title: "Settings"
+};
+
+export default function SettingsPage() {
   return (
     <div className="space-y-10">
       <div>

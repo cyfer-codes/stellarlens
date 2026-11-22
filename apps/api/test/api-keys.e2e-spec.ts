@@ -1,5 +1,5 @@
 import request from "supertest";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApiKey } from "./helpers";
 import { getApp, getTestDb } from "./setup";
 
@@ -35,6 +35,30 @@ describe("api keys (e2e)", () => {
       expect(row.keyHash).toBeUndefined();
       expect(row.key).toBeUndefined();
     }
+  });
+
+  it("records lastUsedAt after a key successfully authenticates", async () => {
+    const createResponse = await request(getApp().getHttpServer())
+      .post("/api-keys")
+      .set("x-api-key", apiKey)
+      .send({ name: "tracked-key" });
+    const { id, key: trackedRawKey } = createResponse.body;
+
+    const findTracked = async () => {
+      const response = await request(getApp().getHttpServer())
+        .get("/api-keys")
+        .set("x-api-key", apiKey);
+      return response.body.find((row: { id: number }) => row.id === id);
+    };
+
+    expect((await findTracked()).lastUsedAt).toBeNull();
+
+    await request(getApp().getHttpServer()).get("/contracts").set("x-api-key", trackedRawKey);
+
+    // the guard writes lastUsedAt fire-and-forget, so poll briefly rather than assert immediately
+    await vi.waitFor(async () => {
+      expect((await findTracked()).lastUsedAt).not.toBeNull();
+    });
   });
 
   it("revokes a key, after which it can no longer authenticate", async () => {

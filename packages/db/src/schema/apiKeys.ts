@@ -11,6 +11,7 @@ export const apiKeys = pgTable("api_keys", {
   scope: text("scope").notNull().default("full"),
   rateLimitPerMinute: integer("rate_limit_per_minute"),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
   // Used both for explicit key expiry and for rotation grace periods
   // (during rotation, the old key's expiresAt is set to now + grace period).
   expiresAt: timestamp("expires_at", { withTimezone: true }),

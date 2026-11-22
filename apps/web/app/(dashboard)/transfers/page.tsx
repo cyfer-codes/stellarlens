@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { AccountTransferSearch } from "@/components/AccountTransferSearch";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -10,6 +11,11 @@ export default async function TransfersPage({ searchParams }: { searchParams: { 
   const cursor = searchParams.cursor ? Number(searchParams.cursor) : undefined;
   const transfers = address ? await listAccountTransfers(address, { cursor, limit: PAGE_SIZE }) : null;
 
+export const metadata: Metadata = {
+  title: "Transfers"
+};
+
+export default function TransfersPage() {
   return (
     <div className="space-y-6">
       <div>

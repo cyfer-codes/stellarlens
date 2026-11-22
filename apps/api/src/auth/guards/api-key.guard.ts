@@ -2,6 +2,9 @@ import { createHash } from "node:crypto";
 import {
   CanActivate,
   ExecutionContext,
+  Inject,
+  Injectable,
+  Logger,
   ForbiddenException,
   Inject,
   Injectable,
@@ -16,8 +19,12 @@ import { REQUIRED_SCOPE_KEY } from "./require-scope.decorator";
 
 const MUTATING_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
 
+const LAST_USED_AT_THROTTLE_MS = 60_000;
+
 @Injectable()
 export class ApiKeyGuard implements CanActivate {
+  private readonly logger = new Logger(ApiKeyGuard.name);
+
   constructor(
     private readonly reflector: Reflector,
     @Inject(DATABASE) private readonly db: Database
@@ -48,6 +55,7 @@ export class ApiKeyGuard implements CanActivate {
       throw new UnauthorizedException("invalid api key");
     }
 
+    this.touchLastUsedAt(apiKey.id, apiKey.lastUsedAt);
     // Expired keys are rejected here. Key rotation relies on this: the old key
     // gets an `expiresAt` set to the end of the overlap window, so it keeps
     // working until then and fails afterwards.
@@ -70,5 +78,24 @@ export class ApiKeyGuard implements CanActivate {
 
     request.apiKey = apiKey;
     return true;
+  }
+
+  // Fire-and-forget and throttled: the row we just read already carries lastUsedAt, so we only
+  // issue a write when it's stale, and never await it so auth latency is unaffected.
+  private touchLastUsedAt(id: number, lastUsedAt: Date | null): void {
+    const now = new Date();
+    if (lastUsedAt && now.getTime() - lastUsedAt.getTime() < LAST_USED_AT_THROTTLE_MS) {
+      return;
+    }
+
+    this.db
+      .update(apiKeys)
+      .set({ lastUsedAt: now })
+      .where(eq(apiKeys.id, id))
+      .then(
+        () => undefined,
+        (error: unknown) =>
+          this.logger.warn(`failed to update last_used_at for api key ${id}: ${String(error)}`)
+      );
   }
 }

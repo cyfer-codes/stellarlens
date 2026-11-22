@@ -49,6 +49,7 @@ export class ApiKeysService {
         scope: apiKeys.scope,
         createdAt: apiKeys.createdAt,
         revokedAt: apiKeys.revokedAt,
+        lastUsedAt: apiKeys.lastUsedAt
         rateLimitPerMinute: apiKeys.rateLimitPerMinute
       })
       .from(apiKeys)
