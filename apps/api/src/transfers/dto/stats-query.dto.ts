@@ -1,3 +1,4 @@
+import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import {
   IsEnum,
@@ -12,6 +13,7 @@ import {
   ValidatorConstraint,
   ValidatorConstraintInterface,
 } from "class-validator";
+import { DateRangeOrderConstraint } from "../../common/validators/date-range.validator";
 
 export class StatsQueryDto {
   @ApiPropertyOptional({
@@ -30,6 +32,7 @@ export class StatsQueryDto {
   })
   @IsOptional()
   @IsISO8601()
+  @Validate(DateRangeOrderConstraint)
   to?: string;
 }
 

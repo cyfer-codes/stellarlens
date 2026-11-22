@@ -49,27 +49,34 @@ describe("contracts (e2e)", () => {
     });
   });
 
-  it("upserts on re-registering the same address", async () => {
-    await request(getApp().getHttpServer())
+  it("returns 409 with the existing id and preserves data when re-registering an address", async () => {
+    const address = contractAddress("CONTRACT_REGISTER_C");
+    const created = await request(getApp().getHttpServer())
       .post("/contracts")
       .set("x-api-key", apiKey)
-      .send({
-        address: contractAddress("CONTRACT_REGISTER_C"),
-        network: "testnet",
-        name: "Original"
-      });
+      .send({ address, network: "testnet", name: "Original" });
 
-    const updateResponse = await request(getApp().getHttpServer())
+    expect(created.status).toBe(201);
+
+    const duplicate = await request(getApp().getHttpServer())
       .post("/contracts")
       .set("x-api-key", apiKey)
-      .send({
-        address: contractAddress("CONTRACT_REGISTER_C"),
-        network: "testnet",
-        name: "Renamed"
-      });
+      .send({ address, network: "mainnet", name: "Renamed" });
 
-    expect(updateResponse.status).toBe(201);
-    expect(updateResponse.body.name).toBe("Renamed");
+    expect(duplicate.status).toBe(409);
+    expect(duplicate.body.existingId).toBe(created.body.id);
+
+    const stored = await request(getApp().getHttpServer())
+      .get(`/contracts/${created.body.id}`)
+      .set("x-api-key", apiKey);
+
+    expect(stored.status).toBe(200);
+    expect(stored.body).toMatchObject({
+      id: created.body.id,
+      address,
+      network: "testnet",
+      name: "Original"
+    });
 
     const listResponse = await request(getApp().getHttpServer())
       .get("/contracts")
@@ -357,6 +364,46 @@ describe("contracts (e2e)", () => {
 
       expect(response.status).toBe(400);
     });
+  });
+
+  describe("network validation", () => {
+    it.each(["tesnet", "custom", ""])("rejects unsupported network %j when registering a contract", async (network) => {
+      const response = await request(getApp().getHttpServer())
+        .post("/contracts")
+        .set("x-api-key", apiKey)
+        .send({ address: contractAddress(`INVALID_NETWORK_${network || "EMPTY"}`), network });
+
+      expect(response.status).toBe(400);
+      expect(JSON.stringify(response.body)).toMatch(/network/i);
+    });
+
+    it.each(["tesnet", "custom", ""])("rejects unsupported network %j when updating a contract", async (network) => {
+      const created = await request(getApp().getHttpServer())
+        .post("/contracts")
+        .set("x-api-key", apiKey)
+        .send({ address: contractAddress(`UPDATE_NETWORK_${network || "EMPTY"}`), network: "testnet" });
+
+      const response = await request(getApp().getHttpServer())
+        .patch(`/contracts/${created.body.id}`)
+        .set("x-api-key", apiKey)
+        .send({ network });
+
+      expect(response.status).toBe(400);
+      expect(JSON.stringify(response.body)).toMatch(/network/i);
+    });
+
+    it.each(["testnet", "futurenet", "mainnet", "standalone"])(
+      "accepts supported network %s",
+      async (network) => {
+        const response = await request(getApp().getHttpServer())
+          .post("/contracts")
+          .set("x-api-key", apiKey)
+          .send({ address: contractAddress(`SUPPORTED_NETWORK_${network}`), network });
+
+        expect(response.status).toBe(201);
+        expect(response.body.network).toBe(network);
+      }
+    );
   });
 
   describe("address validation", () => {

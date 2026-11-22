@@ -281,4 +281,34 @@ describe("transfers (e2e)", () => {
 
     expect(response.status).toBe(400);
   });
+
+  it("rejects stats with a from date after the to date", async () => {
+    const contractId = await registerContract(apiKey);
+
+    const response = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/stats`)
+      .query({ from: "2024-02-01T00:00:00.000Z", to: "2024-01-01T00:00:00.000Z" })
+      .set("x-api-key", apiKey);
+
+    expect(response.status).toBe(400);
+    expect(JSON.stringify(response.body)).toContain("from must be before or equal to to");
+  });
+
+  it("accepts stats with valid and single-bound date ranges", async () => {
+    const contractId = await registerContract(apiKey);
+
+    for (const query of [
+      { from: "2024-01-01T00:00:00.000Z", to: "2024-02-01T00:00:00.000Z" },
+      { from: "2024-01-01T00:00:00.000Z", to: "2024-01-01T00:00:00.000Z" },
+      { from: "2024-01-01T00:00:00.000Z" },
+      { to: "2024-02-01T00:00:00.000Z" }
+    ]) {
+      const response = await request(getApp().getHttpServer())
+        .get(`/contracts/${contractId}/stats`)
+        .query(query)
+        .set("x-api-key", apiKey);
+
+      expect(response.status).toBe(200);
+    }
+  });
 });

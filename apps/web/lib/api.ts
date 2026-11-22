@@ -130,10 +130,12 @@ export interface CreateWebhookInput {
 /** Thrown for any non-2xx response from the api. `status` is the upstream status code. */
 export class ApiProxyError extends Error {
   status: number;
+  body: unknown;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, body?: unknown) {
     super(message);
     this.status = status;
+    this.body = body;
   }
 }
 
@@ -143,6 +145,8 @@ export class ApiNotFoundError extends ApiProxyError {
   }
 }
 export class ApiNotFoundError extends Error { }
+export class ApiConflictError extends Error {}
+export class ApiBadRequestError extends Error {}
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
@@ -160,13 +164,33 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiNotFoundError(path);
   }
 
+    if (response.status === 409) {
+    const body = await response.text();
+    throw new ApiConflictError(body || "conflict");
+  }
+
+  if (response.status === 400) {
+    const body = await response.text();
+    throw new ApiBadRequestError(body || "bad request");
+  }
+
   if (!response.ok) {
     const body = await response.text();
     // Full internal detail (path, upstream status and body) is logged here,
     // server-side only. Callers get ApiProxyError.status to map to a
     // sanitized, user-facing message — never this message itself.
     console.error(`api request to ${path} failed with ${response.status}: ${body}`);
-    throw new ApiProxyError(response.status, `api request to ${path} failed with ${response.status}`);
+    let parsedBody: unknown = body;
+    try {
+      parsedBody = body ? JSON.parse(body) : undefined;
+    } catch {
+      // Keep non-JSON response bodies available to callers as text.
+    }
+    throw new ApiProxyError(
+      response.status,
+      `api request to ${path} failed with ${response.status}`,
+      parsedBody
+    );
   }
 
   if (response.status === 204) {
@@ -281,6 +305,18 @@ export function createWebhook(contractId: number, input: CreateWebhookInput): Pr
 
 export function deleteWebhook(contractId: number, id: number): Promise<void> {
   return apiFetch<void>(`/contracts/${contractId}/webhooks/${id}`, { method: "DELETE" });
+}
+
+export interface UpdateWebhookInput {
+  url?: string;
+  eventTypes?: string[];
+}
+
+export function updateWebhook(contractId: number, id: number, input: UpdateWebhookInput): Promise<Webhook> {
+  return apiFetch<Webhook>(`/contracts/${contractId}/webhooks/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input)
+  });
 }
 
 export interface RotatedWebhook {

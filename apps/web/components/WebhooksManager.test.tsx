@@ -25,6 +25,13 @@ const webhook = {
   createdAt: "2026-01-01T00:00:00.000Z"
 };
 
+const secondWebhook = {
+  id: 2,
+  url: "https://example.com/other",
+  eventTypes: null,
+  createdAt: "2026-01-02T00:00:00.000Z"
+};
+
 function delivery(id: number, overrides: Record<string, unknown> = {}) {
   return {
     id,
@@ -187,5 +194,99 @@ describe("WebhooksManager", () => {
     await userEvent.click(copyButton);
 
     expect(writeText).toHaveBeenCalledWith("new-secret-value");
+  });
+
+  function editMock(
+    patchResponse: { status: number; body: unknown } = { status: 200, body: { ...webhook, url: "https://example.com/updated" } }
+  ) {
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.endsWith("/webhooks/1") && init?.method === "PATCH") {
+        return Promise.resolve(jsonResponse(patchResponse.body, patchResponse.status));
+      }
+      if (url.endsWith("/webhooks")) {
+        return Promise.resolve(
+          jsonResponse([
+            patchResponse.status === 200
+              ? { ...webhook, url: "https://example.com/updated" }
+              : webhook
+          ])
+        );
+      }
+      return Promise.resolve(jsonResponse({ error: "unexpected url" }, 500));
+    });
+  }
+
+  it("edits a webhook's url inline", async () => {
+    editMock();
+
+    render(<WebhooksManager contractId={1} authenticated={true} />);
+    await userEvent.click(await screen.findByRole("button", { name: /^edit$/i }));
+
+    const urlInput = document.getElementById("edit-url-1") as HTMLInputElement;
+    expect(urlInput).not.toBeNull();
+    await userEvent.clear(urlInput);
+    await userEvent.type(urlInput, "https://example.com/updated");
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/contracts/1/webhooks/1",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ url: "https://example.com/updated", eventTypes: ["transfer"] })
+        })
+      )
+    );
+    expect(await screen.findByText("https://example.com/updated")).toBeInTheDocument();
+  });
+
+  it("shows a 409 duplicate-url error inline", async () => {
+    editMock({ status: 409, body: { error: "webhook 2 is already registered for https://example.com/dup on contract 1" } });
+
+    render(<WebhooksManager contractId={1} authenticated={true} />);
+    await userEvent.click(await screen.findByRole("button", { name: /^edit$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    expect(await screen.findByText(/already exists on this contract/i)).toBeInTheDocument();
+    // edit form still open
+    expect(screen.getByRole("button", { name: /^save$/i })).toBeInTheDocument();
+  });
+
+  it("shows a 400 validation error inline", async () => {
+    editMock({ status: 400, body: { error: "url must be a URL address" } });
+
+    render(<WebhooksManager contractId={1} authenticated={true} />);
+    await userEvent.click(await screen.findByRole("button", { name: /^edit$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    expect(await screen.findByText("url must be a URL address")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^save$/i })).toBeInTheDocument();
+  });
+
+  it("cancel closes the edit form without patching", async () => {
+    editMock();
+
+    render(<WebhooksManager contractId={1} authenticated={true} />);
+    await userEvent.click(await screen.findByRole("button", { name: /^edit$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+
+    expect(document.getElementById("edit-url-1")).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/contracts/1/webhooks/1",
+      expect.objectContaining({ method: "PATCH" })
+    );
+  });
+
+  it("shows the client-side error when saving an empty URL", async () => {
+    editMock();
+
+    render(<WebhooksManager contractId={1} authenticated={true} />);
+    await userEvent.click(await screen.findByRole("button", { name: /^edit$/i }));
+    const urlInput = document.getElementById("edit-url-1") as HTMLInputElement;
+    await userEvent.clear(urlInput);
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    expect(await screen.findByText("URL is required")).toBeInTheDocument();
   });
 });

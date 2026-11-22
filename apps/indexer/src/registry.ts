@@ -7,6 +7,7 @@ import {
   TransactionBuilder,
   nativeToScVal,
   scValToNative,
+  xdr,
   type rpc
 } from "@stellar/stellar-sdk";
 import { contracts, type Database } from "@stellarlens/db";
@@ -32,11 +33,26 @@ export interface SimulationServer {
   simulateTransaction(tx: unknown): Promise<rpc.Api.SimulateTransactionResponse>;
 }
 
+/**
+ * Minimal subset of the Soroban RPC server used to fetch contract code for
+ * spec extraction. Structural so tests can pass a mock.
+ */
+export interface LedgerEntryServer {
+  getLedgerEntries(...keys: xdr.LedgerKey[]): Promise<rpc.Api.GetLedgerEntriesResponse>;
+}
+
 /** A throwaway, unfunded account used only as the simulation source. */
 const SIMULATION_SOURCE = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
 
 const METADATA_METHODS = ["decimals", "symbol", "name"] as const;
 type MetadataMethod = (typeof METADATA_METHODS)[number];
+
+/** A single contract spec entry (struct / enum / function / event) as raw XDR. */
+export type ContractSpecEntry = xdr.ScSpecEntry;
+
+export interface ContractSpecCache {
+  get(address: string): Promise<ContractSpecEntry[] | null>;
+}
 
 function extractReturnValue(response: rpc.Api.SimulateTransactionResponse): unknown {
   if (!("result" in response) || !response.result) {
@@ -103,6 +119,133 @@ export async function fetchTokenMetadata(
 }
 
 /**
+ * Extract the `contractspecv0` custom section entries from a WASM binary.
+ * Each custom-section payload is a concatenation of XDR-encoded ScSpecEntry
+ * values. Returns an empty array when the section is absent or malformed.
+ */
+export function parseContractSpecFromWasm(wasm: Uint8Array): ContractSpecEntry[] {
+  const entries: ContractSpecEntry[] = [];
+  try {
+    const payload = readCustomSection(wasm, "contractspecv0");
+    if (!payload) {
+      return entries;
+    }
+    const reader = new xdr.XdrReader(payload);
+    while (reader.remainingBytes?.() === undefined || (reader as any).remainingBytes > 0) {
+      entries.push(xdr.ScSpecEntry.read(reader));
+    }
+  } catch {
+    return [];
+  }
+  return entries;
+}
+
+function readVarUint(bytes: Uint8Array, offset: number): [number, number] {
+  let result = 0;
+  let shift = 0;
+  let pos = offset;
+  for (;;) {
+    const byte = bytes[pos++];
+    if (byte === undefined) {
+      throw new Error("unexpected end of WASM");
+    }
+    result += (byte & 0x7f) * 2 ** shift;
+    if ((byte & 0x80) === 0) {
+      return [result, pos];
+    }
+    shift += 7;
+  }
+}
+
+/** Locate a named custom section in a WASM binary and return its payload. */
+function readCustomSection(wasm: Uint8Array, name: string): Uint8Array | null {
+  const magic = [0x00, 0x61, 0x73, 0x6d];
+  for (let i = 0; i < magic.length; i++) {
+    if (wasm[i] !== magic[i]) {
+      return null;
+    }
+  }
+  let pos = 8;
+  while (pos < wasm.length) {
+    const sectionId = wasm[pos++];
+    const [size, afterSize] = readVarUint(wasm, pos);
+    pos = afterSize;
+    const end = pos + size;
+    if (sectionId === 0) {
+      const [nameLen, afterNameLen] = readVarUint(wasm, pos);
+      const sectionName = new TextDecoder().decode(
+        wasm.subarray(afterNameLen, afterNameLen + nameLen)
+      );
+      if (sectionName === name) {
+        return wasm.subarray(afterNameLen + nameLen, end);
+      }
+    }
+    pos = end;
+  }
+  return null;
+}
+
+/**
+ * Fetch a registered contract's WASM via RPC (`getLedgerEntries` on its
+ * instance, then its code entry) and parse the `contractspecv0` spec.
+ * Returns `null` on any failure so callers can fall back to unspec'd decoding.
+ */
+export async function fetchContractSpec(
+  server: LedgerEntryServer,
+  address: string
+): Promise<ContractSpecEntry[] | null> {
+  if (!StrKey.isValidContract(address)) {
+    return null;
+  }
+  try {
+    const instanceKey = new Contract(address).getFootprint();
+    const instanceRes = await server.getLedgerEntries(instanceKey);
+    const instanceEntry = instanceRes.entries?.[0];
+    if (!instanceEntry) {
+      return null;
+    }
+    const data = instanceEntry.val.contractData();
+    const instance = data.val().instance();
+    const executable = instance.executable();
+    if (executable.switch().name !== "contractExecutableWasm") {
+      return null;
+    }
+    const wasmHash = executable.wasmHash();
+    const codeKey = xdr.LedgerKey.contractCode(
+      new xdr.LedgerKeyContractCode({ hash: wasmHash })
+    );
+    const codeRes = await server.getLedgerEntries(codeKey);
+    const codeEntry = codeRes.entries?.[0];
+    if (!codeEntry) {
+      return null;
+    }
+    const wasm = codeEntry.val.contractCode().code();
+    const specs = parseContractSpecFromWasm(new Uint8Array(wasm));
+    return specs.length > 0 ? specs : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Caches contract specs per address so each contract's WASM is fetched once.
+ * Failed lookups are cached as `null` to avoid repeated RPC calls.
+ */
+export function createContractSpecCache(server: LedgerEntryServer): ContractSpecCache {
+  const cache = new Map<string, ContractSpecEntry[] | null>();
+  return {
+    async get(address: string) {
+      if (cache.has(address)) {
+        return cache.get(address) ?? null;
+      }
+      const spec = await fetchContractSpec(server, address);
+      cache.set(address, spec);
+      return spec;
+    }
+  };
+}
+
+/**
  * Validate that `address` is a well-formed Stellar strkey before it is stored.
  *
  * Both contract (C...) and Ed25519 account (G...) strkeys are accepted: each is
@@ -134,6 +277,15 @@ export interface RegisterContractOptions {
   networkPassphrase?: string;
 }
 
+export class ContractAlreadyRegisteredError extends Error {
+  readonly statusCode = 409;
+
+  constructor(readonly existingId: number) {
+    super(`contract is already registered (id: ${existingId})`);
+    this.name = "ContractAlreadyRegisteredError";
+  }
+}
+
 export async function registerContract(
   db: Database,
   registration: ContractRegistration,
@@ -156,18 +308,14 @@ export async function registerContract(
       symbol: metadata?.symbol ?? null,
       tokenName: metadata?.name ?? null
     })
-    .onConflictDoUpdate({
-      target: contracts.address,
-      set: {
-        name: registration.name ?? null,
-        network: registration.network,
-        decimals: metadata?.decimals ?? null,
-        symbol: metadata?.symbol ?? null,
-        tokenName: metadata?.name ?? null
-      }
-    })
+    .onConflictDoNothing({ target: contracts.address })
     .returning();
-  return row;
+
+  if (row) return row;
+
+  const [existing] = await db.select({ id: contracts.id }).from(contracts).where(eq(contracts.address, registration.address));
+  if (existing) throw new ContractAlreadyRegisteredError(existing.id);
+  throw new Error("contract registration conflicted; please retry");
 }
 
 /** Maps registered contract address -> internal id, scoped to one network. */

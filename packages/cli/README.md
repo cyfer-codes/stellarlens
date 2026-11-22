@@ -14,9 +14,15 @@ export STELLARLENS_API_KEY=<a valid api key>
 ```bash
 stellarlens contracts add <address> --network testnet [--name "My contract"]
 stellarlens contracts list                   # every contract, across all pages
+stellarlens contracts get <id>               # one contract's details; exits non-zero if it doesn't exist
 stellarlens events list <contractId> [--limit 20] [--cursor <id>] [--topic t] [--from d] [--to d]
 stellarlens events tail <contractId>   # follows new events every 5s, ctrl+c to stop
+stellarlens transfers list <contractId> [--limit 20] [--cursor <id>]   # ledger, from, to, amount, asset, tx hash
+stellarlens stats <contractId> [--from d] [--to d]   # transfer count, unique senders/receivers, volume by asset
 ```
+
+Add the global `--json` flag to `contracts list`, `contracts add` or `events tail` to get machine-readable
+output for scripting, e.g. `stellarlens contracts list --json` prints a JSON array instead of a table.
 
 ### Decoding XDR
 

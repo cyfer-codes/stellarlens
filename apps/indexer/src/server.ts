@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import http from "node:http";
 import type { Database } from "@stellarlens/db";
 import { REGISTRY_PORT, REGISTRY_SECRET } from "./config.js";
-import { registerContract } from "./registry.js";
+import { ContractAlreadyRegisteredError, registerContract } from "./registry.js";
 
 /** Hard cap on registration request bodies so one oversized POST cannot exhaust memory. */
 export const MAX_REGISTRATION_BODY_BYTES = 64 * 1024;
@@ -97,7 +97,11 @@ async function handleRegister(db: Database, body: string, res: http.ServerRespon
     res.writeHead(201, { "Content-Type": "application/json" });
     res.end(JSON.stringify(contract));
   } catch (err) {
-    res.writeHead(400, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: err instanceof Error ? err.message : "invalid request" }));
+    const status = err instanceof ContractAlreadyRegisteredError ? 409 : 400;
+    res.writeHead(status, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      error: err instanceof Error ? err.message : "invalid request",
+      ...(err instanceof ContractAlreadyRegisteredError ? { existingId: err.existingId } : {})
+    }));
   }
 }

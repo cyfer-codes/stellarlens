@@ -43,6 +43,20 @@ export type CreateWebhookInput = Schemas["CreateWebhookInput"];
 export type UpdateWebhookInput = Schemas["UpdateWebhookInput"];
 export type WebhookDelivery = Schemas["WebhookDelivery"];
 
+/** Per-call options accepted by every request-making `StellarLensClient` method. */
+export interface RequestOptions {
+  /**
+   * Cancels the request. If it's already aborted, nothing is sent; if it aborts mid-flight, `fetch` is aborted.
+   * Either way the call rejects with `signal.reason` (an `AbortError` `DOMException` unless you gave one).
+   */
+  signal?: AbortSignal;
+  /**
+   * Overrides the client's `timeoutMs` for this call. `0` disables the timeout. When it elapses the request is
+   * aborted and the call rejects with a `StellarLensTimeoutError`.
+   */
+  timeoutMs?: number;
+}
+
 /** A cursor-paginated response. Pass `nextCursor` back as `cursor` until it comes back `null`. */
 export interface Page<T> {
   data: T[];

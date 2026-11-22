@@ -34,6 +34,39 @@ describe("webhooks (e2e)", () => {
     expect(typeof response.body.secret).toBe("string");
   });
 
+  it("registers a webhook with structured filter and returns it in list (#257)", async () => {
+    const contractId = await registerContract(apiKey, "CONTRACT_WEBHOOKS_FILTER_E2E");
+    const filter = { topics: ["transfer", null, "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"] };
+
+    const response = await request(getApp().getHttpServer())
+      .post(`/contracts/${contractId}/webhooks`)
+      .set("x-api-key", apiKey)
+      .send({ url: "https://example.com/webhook-filter", filter });
+
+    expect(response.status).toBe(201);
+    expect(response.body.filter).toEqual(filter);
+
+    const listResponse = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/webhooks`)
+      .set("x-api-key", apiKey);
+
+    expect(listResponse.status).toBe(200);
+    const item = listResponse.body.find((w: { url: string }) => w.url === "https://example.com/webhook-filter");
+    expect(item).toBeDefined();
+    expect(item.filter).toEqual(filter);
+  });
+
+  it("rejects registering a webhook with an invalid filter shape (#257)", async () => {
+    const contractId = await registerContract(apiKey, "CONTRACT_WEBHOOKS_FILTER_BAD");
+
+    const response = await request(getApp().getHttpServer())
+      .post(`/contracts/${contractId}/webhooks`)
+      .set("x-api-key", apiKey)
+      .send({ url: "https://example.com/webhook-bad-filter", filter: { topics: [12345] } });
+
+    expect(response.status).toBe(400);
+  });
+
   it("returns 409 registering a url that's already registered for the contract", async () => {
     const contractId = await registerContract(apiKey, "CONTRACT_WEBHOOKS_G");
     await request(getApp().getHttpServer())
@@ -95,6 +128,53 @@ describe("webhooks (e2e)", () => {
     expect(response.body).toHaveLength(1);
     expect(response.body[0].url).toBe("https://example.com/webhook");
     expect(response.body[0].secret).toBeUndefined();
+  });
+
+  it("gets a single webhook without exposing the secret", async () => {
+    const contractId = await registerContract(apiKey, "CONTRACT_WEBHOOKS_GET_A");
+    const created = await request(getApp().getHttpServer())
+      .post(`/contracts/${contractId}/webhooks`)
+      .set("x-api-key", apiKey)
+      .send({ url: "https://example.com/webhook", eventTypes: ["transfer"] });
+
+    const response = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/webhooks/${created.body.id}`)
+      .set("x-api-key", apiKey);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      id: created.body.id,
+      url: "https://example.com/webhook",
+      eventTypes: ["transfer"],
+      createdAt: created.body.createdAt
+    });
+    expect(response.body.secret).toBeUndefined();
+  });
+
+  it("returns 404 getting a webhook that doesn't exist", async () => {
+    const contractId = await registerContract(apiKey, "CONTRACT_WEBHOOKS_GET_B");
+
+    const response = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/webhooks/999999`)
+      .set("x-api-key", apiKey);
+
+    expect(response.status).toBe(404);
+  });
+
+  it("returns 404 getting a webhook through a different contract", async () => {
+    const owner = await registerContract(apiKey, "CONTRACT_WEBHOOKS_GET_C");
+    const other = await registerContract(apiKey, "CONTRACT_WEBHOOKS_GET_D");
+    const created = await request(getApp().getHttpServer())
+      .post(`/contracts/${owner}/webhooks`)
+      .set("x-api-key", apiKey)
+      .send({ url: "https://example.com/webhook" });
+
+    const response = await request(getApp().getHttpServer())
+      .get(`/contracts/${other}/webhooks/${created.body.id}`)
+      .set("x-api-key", apiKey);
+
+    expect(response.status).toBe(404);
+    expect(response.body.secret).toBeUndefined();
   });
 
   it("deletes a webhook", async () => {

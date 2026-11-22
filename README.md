@@ -69,9 +69,16 @@ env vars each app needs), log in with the seeded admin account, and generate you
 | `packages/cli` | `pnpm --filter @stellarlens/cli dev` | Needs `STELLARLENS_API_URL` / `STELLARLENS_API_KEY` to actually run the built binary — see `packages/cli/README.md` |
 | `packages/db` | n/a (library) | `db:generate` / `db:migrate` / `db:studio` wrap `drizzle-kit`; needs `DATABASE_URL` and Postgres running |
 
+To audit a database for contract rows that use unsupported Stellar networks, run
+`pnpm --filter @stellarlens/db db:report-unsupported-networks` with `DATABASE_URL` configured.
+The command lists each offending contract and exits non-zero when any are found; it does not
+modify or delete existing records.
+
 The indexer runs as a daemon by default. Set `POLL_ONCE=true` to process one poll cycle and exit; in
 this mode the registry server is not started. `WEBHOOK_CONCURRENCY` optionally sets the maximum
-number of simultaneous webhook deliveries per event (default: `10`); see
+number of simultaneous webhook deliveries per event (default: `10`). `WEBHOOK_MAX_RETRIES`,
+`WEBHOOK_RETRY_BASE_DELAY_MS`, `WEBHOOK_RETRY_MAX_DELAY_MS` and `WEBHOOK_TIMEOUT_MS` tune delivery
+retries and the per-attempt timeout (defaults: `3`, `500`, `5000`, `5000`); see
 [docs/webhooks.md](docs/webhooks.md#configuration) for everything else that affects delivery.
 
 Full pipeline check before opening a PR:
