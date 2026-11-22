@@ -123,6 +123,15 @@ export async function assertPublicWebhookUrl(
   }
 }
 
+export class WebhookRedirectError extends Error {
+  constructor(status: number, location: string | null) {
+    super(
+      `webhook responded with redirect status ${status}${location ? ` to ${location}` : ""}; redirects are not followed`
+    );
+    this.name = "WebhookRedirectError";
+  }
+}
+
 /**
  * DNS lookup used for the delivery connection itself. It resolves the host again and only hands
  * back addresses that pass the public-IP check, so a rebinding DNS server can't swap in a private
@@ -185,9 +194,15 @@ async function postWebhook(
         [WEBHOOK_SIGNATURE_HEADER]: signature
       },
       body,
+      // Never follow redirects: the private-address check only covers the configured URL.
+      redirect: "manual",
       signal: controller.signal,
       dispatcher: webhookAgent
     } as RequestInit);
+
+    if (response.status >= 300 && response.status < 400) {
+      throw new WebhookRedirectError(response.status, response.headers.get("location"));
+    }
 
     if (!response.ok) {
       throw new Error(`webhook responded with status ${response.status}`);
@@ -318,7 +333,10 @@ export async function deliverWebhooksForEvent(
               maxRetries: WEBHOOK_MAX_RETRIES,
               baseDelayMs: WEBHOOK_RETRY_BASE_DELAY_MS,
               maxDelayMs: WEBHOOK_RETRY_MAX_DELAY_MS,
-              shouldRetry: (err) => !(err instanceof NonPublicWebhookUrlError) && !isDnsResolutionFailure(err)
+              shouldRetry: (err) =>
+                !(err instanceof NonPublicWebhookUrlError) &&
+                !(err instanceof WebhookRedirectError) &&
+                !isDnsResolutionFailure(err)
             }
           );
 

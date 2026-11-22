@@ -192,6 +192,8 @@ These failures stop immediately, with no retries (`attempts` is `1`):
   `lastError: "DNS resolution failed for <url>: <message>"` and logged as unreachable.
 - **Blocked destination.** The host resolves to a non-public address (see below). Recorded as
   `lastError: "webhook URL resolves to a non-public IP address"`.
+- **Redirect.** The endpoint answers with a `3xx`. Redirects are never followed; recorded as
+  `lastError: "webhook responded with redirect status 302 to <location>; redirects are not followed"`.
 
 Everything else is retried: non-`2xx` (`"webhook responded with status 503"`), timeouts, connection
 refused/reset, TLS errors.
@@ -227,7 +229,8 @@ Known limits, for operators assessing the protection:
 - The HTTP connection uses its own DNS lookup that re-checks every resolved address and connects
   only to a validated public one, so a DNS-rebinding host can't switch to a private address after
   the check. TLS SNI and the `Host` header still use the configured hostname.
-- HTTP redirects are followed (`fetch`'s default) and the redirect target is **not** re-checked.
+- HTTP redirects are not followed (`redirect: "manual"`), so a public endpoint can't bounce the
+  signed request to an internal address; any `3xx` is recorded as a failed delivery.
 - Registration doesn't check the destination, so a webhook pointing at a blocked address can be
   created; every delivery to it is then recorded as `failed`.
 

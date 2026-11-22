@@ -458,6 +458,46 @@ describe("webhook delivery", () => {
     expect(delivery.lastError).toContain("non-public IP address");
   });
 
+  it("records a redirect as failed without following it to an internal address", async () => {
+    const db = getTestDb();
+    const contract = await registerContract(db, {
+      address: contractAddress("CONTRACT_HOOK_REDIRECT"),
+      network: NETWORK
+    });
+    await registerWebhook(contract.id, "redirect-secret");
+    const internalUrl = "http://169.254.169.254/latest/meta-data";
+
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const webhookSpy = vi.fn(
+      () => new HttpResponse(null, { status: 302, headers: { Location: internalUrl } })
+    );
+    const internalSpy = vi.fn(() => HttpResponse.json({ ok: true }));
+    mswServer.use(http.post(WEBHOOK_URL, webhookSpy), http.all(internalUrl, internalSpy));
+    const [event] = await db
+      .insert(eventsTable)
+      .values({ contractId: contract.id, ledger: 1, txHash: "7".repeat(64), topic: "[]" })
+      .returning({ id: eventsTable.id });
+
+    await deliverWebhooksForEvent(db, {
+      eventId: event.id,
+      contractId: contract.id,
+      contractAddress: contractAddress("CONTRACT_HOOK_REDIRECT"),
+      ledger: 1,
+      txHash: "7".repeat(64),
+      topic: ["fee"],
+      value: "-1"
+    });
+    consoleError.mockRestore();
+
+    expect(webhookSpy).toHaveBeenCalledTimes(1);
+    expect(internalSpy).not.toHaveBeenCalled();
+    const [delivery] = await db.select().from(webhookDeliveries);
+    expect(delivery.status).toBe("failed");
+    expect(delivery.attempts).toBe(1);
+    expect(delivery.lastError).toContain("redirect status 302");
+    expect(delivery.lastError).toContain("redirects are not followed");
+  });
+
   it("does not throw when persisting a delivery outcome fails", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     const failingDb = {
