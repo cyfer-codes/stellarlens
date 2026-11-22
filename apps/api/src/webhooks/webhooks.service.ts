@@ -56,6 +56,22 @@ export class WebhooksService {
       .where(eq(webhooks.contractId, contractId));
   }
 
+  /** Same projection as `findAllByContract`: the secret is never returned after creation/rotation. */
+  async findOne(contractId: number, id: number) {
+    await this.contractsService.findOne(contractId);
+
+    const [webhook] = await this.db
+      .select({ id: webhooks.id, url: webhooks.url, eventTypes: webhooks.eventTypes, createdAt: webhooks.createdAt })
+      .from(webhooks)
+      .where(and(eq(webhooks.id, id), eq(webhooks.contractId, contractId)));
+
+    if (!webhook) {
+      throw new NotFoundException(`webhook ${id} not found for contract ${contractId}`);
+    }
+
+    return webhook;
+  }
+
   async update(contractId: number, id: number, dto: UpdateWebhookDto) {
     await this.contractsService.findOne(contractId);
 

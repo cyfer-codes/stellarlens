@@ -149,9 +149,15 @@ export function parseRetryAfterMs(header: string | null, now = Date.now()): numb
   return Math.max(0, timestamp - now);
 }
 
-async function postWebhook(url: string, body: string, signature: string): Promise<void> {
+/** POSTs one signed delivery, aborting it after `timeoutMs` (`WEBHOOK_TIMEOUT_MS` by default). */
+async function postWebhook(
+  url: string,
+  body: string,
+  signature: string,
+  timeoutMs: number = WEBHOOK_TIMEOUT_MS
+): Promise<void> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(url, {

@@ -59,6 +59,13 @@ describe("registry server", () => {
     expect(response.status).toBe(404);
   });
 
+  it("returns 404 for non-GET requests to /health", async () => {
+    const response = await fetch(`${await listen()}/health`, { method: "POST" });
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "not found" });
+  });
+
   it("rejects a registration without the registry secret header", async () => {
     const response = await fetch(`${await listen()}/contracts`, {
       method: "POST",
