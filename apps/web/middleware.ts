@@ -16,7 +16,11 @@ const PUBLIC_DEMO_GET_PATTERNS = [
   /^\/events$/,
   /^\/transfers$/,
   /^\/api\/contracts\/\d+\/events$/,
-  /^\/api\/contracts\/\d+\/webhooks$/
+  /^\/api\/contracts\/\d+\/stats$/,
+  /^\/api\/contracts\/\d+\/transfers$/,
+  /^\/api\/contracts\/\d+\/webhooks$/,
+  /^\/api\/events$/,
+  /^\/api\/transfers$/
 ];
 
 function isPublicDemoRequest(request: NextRequest): boolean {
@@ -46,5 +50,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"]
+  // Icons and the og image must stay public so browsers and link-preview crawlers can fetch them.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|opengraph-image).*)"]
 };

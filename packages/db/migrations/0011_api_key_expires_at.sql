@@ -1,0 +1,2 @@
+ALTER TABLE "webhooks" ALTER COLUMN "active" SET DEFAULT true;--> statement-breakpoint
+ALTER TABLE "api_keys" ADD COLUMN IF NOT EXISTS "expires_at" timestamp with time zone;

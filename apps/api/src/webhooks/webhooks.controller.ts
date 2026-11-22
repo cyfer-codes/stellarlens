@@ -1,6 +1,7 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseIntPipe, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseIntPipe, Patch, Post, Query } from "@nestjs/common";
 import { CreateWebhookDto } from "./dto/create-webhook.dto";
 import { FindDeliveriesQueryDto } from "./dto/find-deliveries-query.dto";
+import { UpdateWebhookDto } from "./dto/update-webhook.dto";
 import { WebhooksService } from "./webhooks.service";
 
 @Controller("contracts/:contractId/webhooks")
@@ -17,6 +18,20 @@ export class WebhooksController {
     return this.webhooksService.findAllByContract(contractId);
   }
 
+  @Get(":id")
+  findOne(@Param("contractId", ParseIntPipe) contractId: number, @Param("id", ParseIntPipe) id: number) {
+    return this.webhooksService.findOne(contractId, id);
+  }
+
+  @Patch(":id")
+  update(
+    @Param("contractId", ParseIntPipe) contractId: number,
+    @Param("id", ParseIntPipe) id: number,
+    @Body() dto: UpdateWebhookDto
+  ) {
+    return this.webhooksService.update(contractId, id, dto);
+  }
+
   @Get(":id/deliveries")
   findDeliveries(
     @Param("contractId", ParseIntPipe) contractId: number,
@@ -24,6 +39,20 @@ export class WebhooksController {
     @Query() query: FindDeliveriesQueryDto
   ) {
     return this.webhooksService.findDeliveries(contractId, id, query);
+  }
+
+  @Get(":id/stats")
+  getStats(
+    @Param("contractId", ParseIntPipe) contractId: number,
+    @Param("id", ParseIntPipe) id: number,
+    @Query("window") window: string = "24h"
+  ) {
+    return this.webhooksService.getStats(contractId, id, window);
+  }
+
+  @Post(":id/rotate-secret")
+  rotateSecret(@Param("contractId", ParseIntPipe) contractId: number, @Param("id", ParseIntPipe) id: number) {
+    return this.webhooksService.rotateSecret(contractId, id);
   }
 
   @Delete(":id")

@@ -1,3 +1,15 @@
+# Default (`docker compose up -d`): just Postgres and Redis, for running the apps on the host with
+# `pnpm dev`.
+#
+# Full stack (`docker compose --profile full up -d --build`): also builds and runs migrations, a
+# one-shot seed (admin user + dashboard api key), the api, the indexer and the web dashboard. See
+# "Running everything with Docker" in the README.
+#
+# Every setting below can be overridden from the shell or a root `.env` file; the defaults are for
+# local development only.
+
+x-database-url: &database-url postgres://stellarlens:stellarlens@postgres:5432/stellarlens
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -10,6 +22,11 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stellarlens -d stellarlens"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   redis:
     image: redis:7-alpine
@@ -18,6 +35,123 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Applies packages/db/migrations with drizzle-kit, then exits. Everything else waits for it.
+  migrate:
+    profiles: [full]
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: migrate
+    environment:
+      DATABASE_URL: *database-url
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # Creates the dashboard admin user and registers API_KEY so the dashboard can call the api.
+  # Both steps are idempotent, so this is safe to run on every `up`.
+  seed:
+    profiles: [full]
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: tools
+    environment:
+      DATABASE_URL: *database-url
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@stellarlens.local}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-stellarlens-local}
+      API_KEY: ${STELLARLENS_API_KEY:-local-dev-api-key-change-me}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
+  api:
+    profiles: [full]
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: runner
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: *database-url
+      PORT: "3000"
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+    ports:
+      - "${API_PORT:-3001}:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    # Also defined in the image; repeated here so `docker compose ps` shows it without inspecting.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health/ready >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      start_period: 20s
+      retries: 5
+
+  indexer:
+    profiles: [full]
+    build:
+      context: .
+      dockerfile: apps/indexer/Dockerfile
+      target: runner
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: *database-url
+      SOROBAN_RPC_URL: ${SOROBAN_RPC_URL:-https://soroban-testnet.stellar.org}
+      STELLAR_NETWORK: ${STELLAR_NETWORK:-testnet}
+      POLL_INTERVAL_MS: ${POLL_INTERVAL_MS:-5000}
+      WEBHOOK_CONCURRENCY: ${WEBHOOK_CONCURRENCY:-10}
+      REGISTRY_SECRET: ${REGISTRY_SECRET:-local-dev-registry-secret-change-me}
+      REGISTRY_PORT: "3002"
+    ports:
+      - "${INDEXER_REGISTRY_PORT:-3002}:3002"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3002/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      start_period: 20s
+      retries: 5
+
+  web:
+    profiles: [full]
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: runner
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: *database-url
+      API_URL: http://api:3000
+      API_KEY: ${STELLARLENS_API_KEY:-local-dev-api-key-change-me}
+      SESSION_SECRET: ${SESSION_SECRET:-local-dev-session-secret-change-me}
+      SITE_URL: ${SITE_URL:-http://localhost:3000}
+      PUBLIC_DEMO: ${PUBLIC_DEMO:-false}
+      PORT: "3000"
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+      seed:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/login >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      start_period: 20s
+      retries: 5
 
 volumes:
   postgres_data:

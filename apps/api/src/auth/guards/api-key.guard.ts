@@ -5,13 +5,19 @@ import {
   Inject,
   Injectable,
   Logger,
+  ForbiddenException,
+  Inject,
+  Injectable,
   UnauthorizedException
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { and, eq, isNull } from "drizzle-orm";
-import { apiKeys, type Database } from "@stellarlens/db";
+import { apiKeys, type ApiKeyScope, type Database } from "@stellarlens/db";
 import { DATABASE } from "../../database/database.module";
 import { IS_PUBLIC_KEY } from "../decorators/public.decorator";
+import { REQUIRED_SCOPE_KEY } from "./require-scope.decorator";
+
+const MUTATING_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
 
 const LAST_USED_AT_THROTTLE_MS = 60_000;
 
@@ -25,10 +31,10 @@ export class ApiKeyGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
-      context.getHandler(),
-      context.getClass()
-    ]);
+    const isPublic = this.reflector.getAllAndOverride<boolean>(
+      IS_PUBLIC_KEY,
+      [context.getHandler(), context.getClass()]
+    );
     if (isPublic) {
       return true;
     }
@@ -50,6 +56,25 @@ export class ApiKeyGuard implements CanActivate {
     }
 
     this.touchLastUsedAt(apiKey.id, apiKey.lastUsedAt);
+    // Expired keys are rejected here. Key rotation relies on this: the old key
+    // gets an `expiresAt` set to the end of the overlap window, so it keeps
+    // working until then and fails afterwards.
+    if (apiKey.expiresAt && apiKey.expiresAt.getTime() <= Date.now()) {
+      throw new UnauthorizedException("invalid api key");
+    }
+
+    const method = String(request.method ?? "").toUpperCase();
+    if (apiKey.scope === "read" && MUTATING_METHODS.has(method)) {
+      throw new ForbiddenException("read-only api key cannot perform mutating requests");
+    }
+
+    const requiredScope = this.reflector.getAllAndOverride<ApiKeyScope>(REQUIRED_SCOPE_KEY, [
+      context.getHandler(),
+      context.getClass()
+    ]);
+    if (requiredScope === "full" && apiKey.scope !== "full") {
+      throw new ForbiddenException(`api key requires the "${requiredScope}" scope`);
+    }
 
     request.apiKey = apiKey;
     return true;

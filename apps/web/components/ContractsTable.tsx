@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Contract } from "@/lib/api";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { loadContracts } from "@/app/(dashboard)/contracts/actions";
 
 type SortKey = "address" | "name" | "network";
 
@@ -12,10 +14,24 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: "network", label: "Network" }
 ];
 
-export function ContractsTable({ contracts }: { contracts: Contract[] }) {
+const DEBOUNCE_MS = 300;
+
+export interface ContractsTableProps {
+  initialContracts: Contract[];
+  initialNextCursor: number | null;
+}
+
+export function ContractsTable({ initialContracts, initialNextCursor }: ContractsTableProps) {
+  const [contracts, setContracts] = useState<Contract[]>(initialContracts);
+  const [nextCursor, setNextCursor] = useState<number | null>(initialNextCursor);
   const [query, setQuery] = useState("");
-  const [network, setNetwork] = useState("all");
+  const [network, setNetwork] = useState("");
   const [sort, setSort] = useState<{ key: SortKey; direction: "asc" | "desc" } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const requestIdRef = useRef(0);
+  const skipFirstFilterEffect = useRef(true);
 
   function handleSort(key: SortKey) {
     setSort((current) =>
@@ -25,21 +41,65 @@ export function ContractsTable({ contracts }: { contracts: Contract[] }) {
     );
   }
 
-  const networks = Array.from(new Set(contracts.map((contract) => contract.network))).sort();
-  const normalizedQuery = query.trim().toLowerCase();
-  const visibleContracts = contracts.filter(
-    (contract) =>
-      (network === "all" || contract.network === network) &&
-      (!normalizedQuery ||
-        contract.address.toLowerCase().includes(normalizedQuery) ||
-        (contract.name ?? "").toLowerCase().includes(normalizedQuery))
-  );
-  if (sort) {
-    visibleContracts.sort((a, b) => {
-      const result = (a[sort.key] ?? "").localeCompare(b[sort.key] ?? "");
-      return sort.direction === "asc" ? result : -result;
-    });
+
+    useEffect(() => {
+    if (skipFirstFilterEffect.current) {
+      skipFirstFilterEffect.current = false;
+      return;
+    }
+    const timer = setTimeout(async () => {
+      const id = ++requestIdRef.current;
+      setLoading(true);
+      setError(null);
+      const params: { name?: string; network?: string } = {};
+      const trimmedQuery = query.trim();
+      if (trimmedQuery) params.name = trimmedQuery;
+      const trimmedNetwork = network.trim();
+      if (trimmedNetwork) params.network = trimmedNetwork;
+      try {
+        const page = await loadContracts(params);
+        if (id !== requestIdRef.current) return;
+        setContracts(page.data);
+        setNextCursor(page.nextCursor);
+      } catch (e) {
+        if (id !== requestIdRef.current) return;
+        setError(e instanceof Error ? e.message : "Failed to load contracts.");
+      } finally {
+        if (id === requestIdRef.current) setLoading(false);
+      }
+    }, DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [query, network]);
+
+    async function handleLoadMore() {
+    if (nextCursor === null || loading) return;
+    const id = ++requestIdRef.current;
+    setLoading(true);
+    setError(null);
+    const params: { cursor?: number; name?: string; network?: string } = { cursor: nextCursor };
+    const trimmedQuery = query.trim();
+    if (trimmedQuery) params.name = trimmedQuery;
+    const trimmedNetwork = network.trim();
+    if (trimmedNetwork) params.network = trimmedNetwork;
+    try {
+      const page = await loadContracts(params);
+      if (id !== requestIdRef.current) return;
+      setContracts((prev) => [...prev, ...page.data]);
+      setNextCursor(page.nextCursor);
+    } catch (e) {
+      if (id !== requestIdRef.current) return;
+      setError(e instanceof Error ? e.message : "Failed to load more contracts.");
+    } finally {
+      if (id === requestIdRef.current) setLoading(false);
+    }
   }
+
+  const sorted = sort
+    ? [...contracts].sort((a, b) => {
+        const result = (a[sort.key] ?? "").localeCompare(b[sort.key] ?? "");
+        return sort.direction === "asc" ? result : -result;
+      })
+    : contracts;
 
   return (
     <div className="space-y-3">
@@ -54,36 +114,31 @@ export function ContractsTable({ contracts }: { contracts: Contract[] }) {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Filter by address or name"
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm"
           />
         </div>
         <div>
           <label htmlFor="contracts-network" className="sr-only">
             Filter by network
           </label>
-          <select
+          <input
             id="contracts-network"
+            type="text"
             value={network}
             onChange={(event) => setNetwork(event.target.value)}
-            className="rounded border border-gray-300 px-3 py-2 text-sm"
-          >
-            <option value="all">All networks</option>
-            {networks.map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
+            placeholder="Network (exact)"
+            className="rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm"
+          />
         </div>
       </div>
 
       <div className="overflow-x-auto">
         <table className="w-full min-w-[480px] border-collapse text-left text-sm">
           <caption className="sr-only">
-            Registered contracts with address, name and network. Column headers sort the table.
+            Registered contracts with address, name and network. Column headers sort the loaded rows.
           </caption>
           <thead>
-            <tr className="border-b border-gray-200 text-gray-500">
+            <tr className="border-b border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400">
               {COLUMNS.map((column) => {
                 const direction = sort?.key === column.key ? sort.direction : null;
                 return (
@@ -98,10 +153,10 @@ export function ContractsTable({ contracts }: { contracts: Contract[] }) {
                     <button
                       type="button"
                       onClick={() => handleSort(column.key)}
-                      className="inline-flex items-center gap-1 hover:text-gray-900"
+                      className="inline-flex items-center gap-1 hover:text-gray-900 dark:hover:text-gray-100"
                     >
                       {column.label}
-                      <span aria-hidden="true" className={direction ? "" : "text-gray-300"}>
+                      <span aria-hidden="true" className={direction ? "" : "text-gray-300 dark:text-gray-600"}>
                         {direction === "desc" ? "↓" : "↑"}
                       </span>
                     </button>
@@ -111,12 +166,15 @@ export function ContractsTable({ contracts }: { contracts: Contract[] }) {
             </tr>
           </thead>
           <tbody>
-            {visibleContracts.map((contract) => (
-              <tr key={contract.id} className="border-b border-gray-100">
+            {sorted.map((contract) => (
+              <tr key={contract.id} className="border-b border-gray-100 dark:border-gray-800">
                 <td className="py-2 font-mono text-xs">
-                  <Link href={`/contracts/${contract.id}`} className="hover:underline">
-                    {contract.address}
-                  </Link>
+                  <span className="inline-flex items-center gap-2">
+                    <Link href={`/contracts/${contract.id}`} className="hover:underline">
+                      {contract.address}
+                    </Link>
+                    <CopyButton value={contract.address} ariaLabel={`Copy address ${contract.address}`} />
+                  </span>
                 </td>
                 <td className="py-2">{contract.name ?? "—"}</td>
                 <td className="py-2">{contract.network}</td>
@@ -126,8 +184,23 @@ export function ContractsTable({ contracts }: { contracts: Contract[] }) {
         </table>
       </div>
 
-      {visibleContracts.length === 0 && (
-        <p className="text-sm text-gray-500">No contracts match the current filters.</p>
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+
+      {sorted.length === 0 && !loading && (
+        <p className="text-sm text-gray-500 dark:text-gray-400">No contracts match the current filters.</p>
+      )}
+
+      {nextCursor !== null && (
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={handleLoadMore}
+            disabled={loading}
+            className="rounded border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+          >
+            {loading ? "Loading…" : "Load more"}
+          </button>
+        </div>
       )}
     </div>
   );

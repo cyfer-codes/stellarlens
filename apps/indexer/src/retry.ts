@@ -8,6 +8,13 @@ export interface RetryOptions {
   maxRetries?: number;
   baseDelayMs?: number;
   maxDelayMs?: number;
+  shouldRetry?: (err: unknown) => boolean;
+  /**
+   * Optional delay override for a given failure, e.g. a server's `Retry-After` hint. When it
+   * returns `undefined` the exponential backoff is used instead. Either way the delay is capped at
+   * `maxDelayMs`.
+   */
+  retryDelayMs?: (err: unknown) => number | undefined;
 }
 
 export async function withRetry<T>(label: string, fn: () => Promise<T>, options?: RetryOptions): Promise<T> {
@@ -22,10 +29,14 @@ export async function withRetry<T>(label: string, fn: () => Promise<T>, options?
       return await fn();
     } catch (err) {
       attempt += 1;
-      if (attempt > maxRetries) {
+      if (options?.shouldRetry?.(err) === false || attempt > maxRetries) {
         throw err;
       }
-      const delay = Math.min(baseDelayMs * 2 ** (attempt - 1), maxDelayMs);
+      const requestedDelay = options?.retryDelayMs?.(err);
+      const delay =
+        requestedDelay === undefined
+          ? Math.min(baseDelayMs * 2 ** (attempt - 1), maxDelayMs)
+          : Math.min(Math.max(requestedDelay, 0), maxDelayMs);
       console.error(`${label} failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms:`, err);
       await sleep(delay);
     }

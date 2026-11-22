@@ -16,7 +16,7 @@ smart contracts on Stellar. Register a contract address, and stellarlens:
 
 - polls Soroban RPC for that contract's events and decodes them (raw XDR alongside native values),
 - detects SEP-41 token transfers and tracks volume/sender/receiver stats,
-- fires signed webhooks to your own endpoints as new events land,
+- fires signed webhooks to your own endpoints as new events land ([docs/webhooks.md](docs/webhooks.md)),
 - and surfaces all of it in a login-gated web dashboard, a REST api, a typed SDK, and a CLI.
 
 ## Screenshots
@@ -53,6 +53,9 @@ pnpm --filter @stellarlens/web seed-admin   # SEED_ADMIN_EMAIL / SEED_ADMIN_PASS
 pnpm dev   # starts every app in watch mode
 ```
 
+Prefer containers? See [Running everything with Docker](#running-everything-with-docker) for a
+single-command stack.
+
 Then open the web dashboard (default `:3000` — see the per-workspace table below for exact ports and
 env vars each app needs), log in with the seeded admin account, and generate your first api key from
 **Settings**.
@@ -66,14 +69,69 @@ env vars each app needs), log in with the seeded admin account, and generate you
 | `packages/cli` | `pnpm --filter @stellarlens/cli dev` | Needs `STELLARLENS_API_URL` / `STELLARLENS_API_KEY` to actually run the built binary — see `packages/cli/README.md` |
 | `packages/db` | n/a (library) | `db:generate` / `db:migrate` / `db:studio` wrap `drizzle-kit`; needs `DATABASE_URL` and Postgres running |
 
+To audit a database for contract rows that use unsupported Stellar networks, run
+`pnpm --filter @stellarlens/db db:report-unsupported-networks` with `DATABASE_URL` configured.
+The command lists each offending contract and exits non-zero when any are found; it does not
+modify or delete existing records.
+
+The indexer runs as a daemon by default. Set `POLL_ONCE=true` to process one poll cycle and exit; in
+this mode the registry server is not started. `WEBHOOK_CONCURRENCY` optionally sets the maximum
+number of simultaneous webhook deliveries per event (default: `10`). `WEBHOOK_MAX_RETRIES`,
+`WEBHOOK_RETRY_BASE_DELAY_MS`, `WEBHOOK_RETRY_MAX_DELAY_MS` and `WEBHOOK_TIMEOUT_MS` tune delivery
+retries and the per-attempt timeout (defaults: `3`, `500`, `5000`, `5000`); see
+[docs/webhooks.md](docs/webhooks.md#configuration) for everything else that affects delivery.
+
 Full pipeline check before opening a PR:
 
 ```bash
 pnpm lint
 pnpm typecheck
 pnpm build
+pnpm --filter @stellarlens/db db:migrate   # tests run against the migrated schema; they don't create tables
 pnpm test
 ```
+
+The api and indexer test suites never create or migrate tables themselves: they fail fast with a
+"database is missing N migration(s)" error unless `DATABASE_URL` has every migration applied. CI
+applies all migrations to a fresh Postgres before testing, runs `drizzle-kit check`, and fails if
+`drizzle-kit generate` would produce a new migration — so after changing `packages/db/src/schema`,
+run `pnpm --filter @stellarlens/db db:generate` and commit the generated files.
+
+## Running everything with Docker
+
+`docker compose up -d` still starts only Postgres and Redis (for `pnpm dev` on the host). The `full`
+profile builds and runs the whole stack:
+
+```bash
+docker compose --profile full up -d --build --wait
+```
+
+| Service | What it does | Host port |
+|---|---|---|
+| `postgres`, `redis` | Datastores (health-checked) | `5433`, `6379` |
+| `migrate` | One-shot `drizzle-kit migrate` against the compose database; everything else waits for it to exit `0` | — |
+| `seed` | One-shot, idempotent: creates the dashboard admin user and registers the dashboard's api key | — |
+| `api` | NestJS api, healthy once `GET /health/ready` can reach the database | `3001` (`API_PORT`) |
+| `indexer` | Polling worker; health-checked via the registry server's `GET /health` | `3002` (`INDEXER_REGISTRY_PORT`) |
+| `web` | Next.js dashboard, started once the api is healthy and seeding has finished | `3000` (`WEB_PORT`) |
+
+Open <http://localhost:3000> and log in as `admin@stellarlens.local` / `stellarlens-local`. The CLI
+can use the same stack:
+`STELLARLENS_API_URL=http://localhost:3001 STELLARLENS_API_KEY=local-dev-api-key-change-me stellarlens contracts list`.
+
+The defaults are for local use only. Override them from the shell or a root `.env` file:
+`SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `STELLARLENS_API_KEY` (the key the dashboard sends, seeded
+into `api_keys`), `SESSION_SECRET`, `SOROBAN_RPC_URL`, `STELLAR_NETWORK`, `POLL_INTERVAL_MS`,
+`WEBHOOK_CONCURRENCY`, `REGISTRY_SECRET` (required by the indexer; send it as `X-Registry-Secret`
+when calling `POST /contracts`), `CORS_ORIGINS`, `PUBLIC_DEMO`, `SITE_URL`, and the host ports above.
+`docker compose --profile full down -v` removes everything, including the database volume.
+
+Each app has a multi-stage Dockerfile (`apps/api/Dockerfile`, `apps/indexer/Dockerfile`,
+`apps/web/Dockerfile`) that runs `turbo prune <app> --docker`, so an image only installs and builds
+that app and its workspace dependencies, and the runtime stage carries production dependencies plus
+compiled output. Build any of them from the repo root, e.g.
+`docker build -f apps/api/Dockerfile -t stellarlens-api .`. Extra targets: `apps/api/Dockerfile`'s
+`migrate` and `apps/web/Dockerfile`'s `tools` (seeding). CI builds every image on each push and PR.
 
 ## Architecture
 
@@ -115,9 +173,10 @@ one thing that can't depend on an api key existing yet: creating the first one (
 - **Indexer** (`apps/indexer`): a polling worker, no framework — decodes XDR, detects transfers, delivers webhooks
 - **Web** (`apps/web`): Next.js 14 App Router, Tailwind, session-cookie auth gating every route
 - **SDK** (`packages/sdk`): typed client for the api, published as `@stellarlens/sdk`
-- **CLI** (`packages/cli`): `stellarlens contracts add/list`, `stellarlens events tail`, built on the SDK
+- **CLI** (`packages/cli`): `stellarlens contracts add` (single or bulk) / `list`, `stellarlens events tail`, built on the SDK
+- **CLI** (`packages/cli`): `stellarlens contracts add/list`, `stellarlens events tail` (starts at the latest event; `--since <cursor|iso-date>` or `--from-start` to replay), built on the SDK
 - **DB** (`packages/db`): Drizzle ORM + Postgres, `drizzle-kit` for migrations
-- **CI**: GitHub Actions — install, lint, typecheck, build, test on every push and PR
+- **CI**: GitHub Actions — install, lint, typecheck, build, migrate + drift check, test, and Docker image builds on every push and PR
 
 ## Monorepo layout
 
@@ -132,7 +191,7 @@ packages/
   db/        Drizzle schema, migrations, and the shared db client
 docs/        Supplementary docs (see docs/screenshots.md)
 .github/     CI workflow, CONTRIBUTING.md, CODE_OF_CONDUCT.md, PR/issue templates
-docker-compose.yml   Local Postgres + Redis
+docker-compose.yml   Local Postgres + Redis; `--profile full` adds migrations, api, indexer, web
 .env.example         Root-level env vars for db/indexer; apps/web and apps/api have their own
 ```
 
@@ -140,6 +199,8 @@ Workspaces are `apps/*` and `packages/*` (see `pnpm-workspace.yaml`), scoped as 
 
 ## Docs
 
+- [docs/webhooks.md](docs/webhooks.md) — webhook delivery semantics, retries, signature verification,
+  blocked destinations, pausing, the delivery history api, and related env vars
 - [docs/screenshots.md](docs/screenshots.md) — capture checklist for the README's screenshots
 - Deployment: see the Render + Vercel runbook shared separately (ask if you need it re-sent)
 

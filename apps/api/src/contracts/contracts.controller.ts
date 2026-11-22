@@ -1,25 +1,37 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query } from "@nestjs/common";
 import { ContractsService } from "./contracts.service";
+import { BulkCreateContractsDto } from "./dto/bulk-create-contracts.dto";
 import { CreateContractDto } from "./dto/create-contract.dto";
+import { FindContractsQueryDto } from "./dto/find-contracts-query.dto";
 import { UpdateContractDto } from "./dto/update-contract.dto";
 
 @Controller("contracts")
 export class ContractsController {
-  constructor(private readonly contractsService: ContractsService) {}
+  constructor(private readonly contractsService: ContractsService) { }
 
   @Post()
   register(@Body() dto: CreateContractDto) {
     return this.contractsService.register(dto);
   }
 
+  @Post("bulk")
+  registerBulk(@Body() dto: BulkCreateContractsDto) {
+    return this.contractsService.registerBulk(dto);
+  }
+
   @Get()
-  findAll() {
-    return this.contractsService.findAll();
+  findAll(@Query() query: FindContractsQueryDto) {
+    return this.contractsService.findAll(query);
   }
 
   @Get(":id")
   findOne(@Param("id", ParseIntPipe) id: number) {
     return this.contractsService.findOne(id);
+  }
+
+  @Get(":id/status")
+  findStatus(@Param("id", ParseIntPipe) id: number) {
+    return this.contractsService.findStatus(id);
   }
 
   @Patch(":id")

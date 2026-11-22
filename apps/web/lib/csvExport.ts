@@ -1,11 +1,16 @@
-import type { EventRow } from "@/lib/api";
+import { escapeCsvCell, toCsv, toCsvRows } from "@stellarlens/sdk";
+import type { EventRow, TransferRow } from "@/lib/api";
+
+// CSV escaping (including formula-injection protection) lives in the SDK so the CLI export shares it.
+export { escapeCsvCell, toCsv, toCsvRows };
 
 type CsvRecord = Record<string, string>;
 
-const BASE_EVENT_COLUMNS = ["id", "contract_id", "ledger", "tx_hash", "created_at", "event_type"];
-
-// Spreadsheet apps evaluate cells starting with these characters as formulas.
-const FORMULA_PREFIX = /^[=+\-@\t\r]/;
+// "indexed_at" (not "ledger_timestamp"/ledger close time): this is when the
+// indexer ingested the row, which can lag the real ledger close time after a
+// backfill or catch-up. Rename to a ledger-close-time column once the api
+// returns one.
+const BASE_EVENT_COLUMNS = ["id", "contract_id", "ledger", "tx_hash", "indexed_at", "event_type"];
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -57,7 +62,7 @@ export function flattenEvent(event: EventRow): CsvRecord {
     contract_id: String(event.contractId),
     ledger: String(event.ledger),
     tx_hash: event.txHash,
-    created_at: event.createdAt,
+    indexed_at: event.createdAt,
     event_type: event.topic
   };
 
@@ -112,13 +117,50 @@ export function escapeCsvCell(raw: string): string {
   return value;
 }
 
-export function toCsv(headers: string[], rows: string[][]): string {
-  return [headers, ...rows].map((row) => row.map(escapeCsvCell).join(",")).join("\r\n");
+export function toCsvRows(rows: string[][]): string {
+  return rows.map((row) => row.map(escapeCsvCell).join(",")).join("\r\n");
 }
 
-export function downloadCsv(filename: string, csv: string): void {
+export function toCsv(headers: string[], rows: string[][]): string {
+  return toCsvRows([headers, ...rows]);
+}
+
+// Matches the columns shown on the contract transfers table. "Indexed At"
+// (not "Ledger Timestamp"): transfer.createdAt is ingestion time, which can
+// lag the real ledger close time after a backfill or catch-up. Rename to
+// "Ledger Closed At" and read ledgerClosedAt once the api returns it.
+// Matches the columns shown on the contract transfers table.
+export const TRANSFER_CSV_HEADERS = [
+  "Sender",
+  "Receiver",
+  "Amount",
+  "Asset",
+  "Indexed At",
+  "Tx Hash"
+];
+
+/** Serializes transfers to CSV rows (no header line) in `TRANSFER_CSV_HEADERS` order. */
+export function transfersToCsvRows(transfers: TransferRow[]): string {
+  return toCsvRows(
+    transfers.map((transfer) => [
+      transfer.from,
+      transfer.to,
+      transfer.amount,
+      transfer.asset,
+      transfer.createdAt,
+      transfer.txHash
+    ])
+  );
+}
+
+/**
+ * Downloads `csv` as a file. Accepts pre-chunked text so large exports can be
+ * assembled page by page without concatenating one huge string first.
+ */
+export function downloadCsv(filename: string, csv: string | string[]): void {
   // Prefix a BOM so Excel detects UTF-8.
-  const blob = new Blob(["﻿", csv], { type: "text/csv;charset=utf-8" });
+  const parts = Array.isArray(csv) ? csv : [csv];
+  const blob = new Blob(["﻿", ...parts], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

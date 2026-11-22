@@ -8,6 +8,10 @@ jobs:
   ci:
     runs-on: ubuntu-latest
 
+    env:
+      DATABASE_URL: postgres://stellarlens:stellarlens@localhost:5432/stellarlens
+      REGISTRY_SECRET: ci-registry-secret
+
     services:
       postgres:
         image: postgres:16-alpine
@@ -37,14 +41,147 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Check generated SDK types are up to date
+        run: |
+          pnpm --filter @stellarlens/sdk generate
+          if [ -n "$(git status --porcelain -- packages/sdk/src/generated)" ]; then
+            git diff -- packages/sdk/src/generated
+            echo "::error::packages/sdk/src/generated is out of date with apps/api/openapi.json. Run 'pnpm --filter @stellarlens/sdk generate' and commit the result."
+            exit 1
+          fi
+
       - run: pnpm lint
 
       - run: pnpm typecheck
 
       - run: pnpm build
 
+      # Includes the CLI end-to-end suite (packages/cli/test/e2e), which boots the built api against a
+      # throwaway database on the postgres service above and drives the built CLI binary.
+      # The service container is a fresh, empty database: apply every migration exactly as a
+      # deploy would, so a broken or out-of-order migration fails here rather than in production.
+      - name: Apply migrations to a fresh database
+        run: pnpm --filter @stellarlens/db db:migrate
+
+      # Catches inconsistent snapshots/journal entries (e.g. two migrations sharing an index).
+      - name: Check migration history is consistent
+        run: pnpm --filter @stellarlens/db exec drizzle-kit check
+
+      # If the Drizzle schema has changed without a matching migration, generate writes a new
+      # file; any change under migrations/ means the schema and migrations have drifted.
+      - name: Fail on schema/migration drift
+        timeout-minutes: 5
+        run: |
+          pnpm --filter @stellarlens/db db:generate
+          if [ -n "$(git status --porcelain -- packages/db/migrations)" ]; then
+            echo "::error::packages/db/src/schema has changes with no migration. Run 'pnpm --filter @stellarlens/db db:generate' and commit the result."
+            git status --porcelain -- packages/db/migrations
+            git diff -- packages/db/migrations
+            exit 1
+          fi
+
+      # Test setups assert the schema above is fully migrated instead of creating tables themselves.
+      - run: pnpm test
+      - name: Check OpenAPI spec is up to date
+        run: |
+          pnpm --filter @stellarlens/api openapi:generate
+          git diff --exit-code openapi.json
+        env:
+          SOROBAN_RPC_URL: https://soroban-testnet.stellar.org
+          STELLAR_NETWORK: testnet
+
       - run: pnpm test
         env:
           DATABASE_URL: postgres://stellarlens:stellarlens@localhost:5432/stellarlens
           SOROBAN_RPC_URL: https://soroban-testnet.stellar.org
           STELLAR_NETWORK: testnet
+
+  e2e:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: stellarlens
+          POSTGRES_PASSWORD: stellarlens
+          POSTGRES_DB: stellarlens
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U stellarlens"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgres://stellarlens:stellarlens@localhost:5432/stellarlens
+      SOROBAN_RPC_URL: https://soroban-testnet.stellar.org
+      STELLAR_NETWORK: testnet
+      SEED_ADMIN_EMAIL: admin@stellarlens.local
+      SEED_ADMIN_PASSWORD: e2e-admin-password-1
+      SESSION_SECRET: e2e-session-secret-at-least-16-bytes
+      REGISTRY_SECRET: e2e-registry-secret
+      API_URL: http://localhost:3400
+      PORT: 3400
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --filter @stellarlens/db build
+
+      - run: pnpm --filter @stellarlens/api build
+
+      - run: pnpm --filter @stellarlens/web build
+
+      - run: pnpm --filter @stellarlens/db db:migrate
+
+      - run: pnpm --filter @stellarlens/web seed-admin
+
+      - name: Seed a full-scope api key for the web app to proxy with
+        id: seed-api-key
+        working-directory: apps/web
+        run: echo "key=$(pnpm --silent seed-api-key)" >> "$GITHUB_OUTPUT"
+
+      - name: Start the api
+        working-directory: apps/api
+        run: |
+          node dist/main.js > api.log 2>&1 &
+          npx wait-on -t 30000 http://localhost:3400/health
+
+      - name: Start the web app
+        working-directory: apps/web
+        env:
+          API_KEY: ${{ steps.seed-api-key.outputs.key }}
+        run: |
+          npx next start -p 3100 > web.log 2>&1 &
+          npx wait-on -t 30000 http://localhost:3100/login
+
+      - run: pnpm --filter @stellarlens/web exec playwright install --with-deps chromium
+
+      - run: pnpm --filter @stellarlens/web test:e2e
+        env:
+          E2E_BASE_URL: http://localhost:3100
+
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 7
+
+      - if: failure()
+        run: |
+          echo "--- api.log ---"; cat apps/api/api.log || true
+          echo "--- web.log ---"; cat apps/web/web.log || true
