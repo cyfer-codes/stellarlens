@@ -1,5 +1,6 @@
 import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
+import { isIP, type LookupFunction } from "node:net";
+import { Agent } from "undici";
 import { and, eq } from "drizzle-orm";
 import {
   decryptWebhookSecret,
@@ -30,6 +31,8 @@ export interface WebhookEventPayload {
 }
 
 type DnsResolver = (hostname: string) => Promise<Array<{ address: string }>>;
+
+const defaultResolve: DnsResolver = (hostname) => lookup(hostname, { all: true, verbatim: true });
 
 function ipv4IsPublic(address: string): boolean {
   const octets = address.split(".").map(Number);
@@ -110,7 +113,7 @@ export class NonPublicWebhookUrlError extends Error {
 
 export async function assertPublicWebhookUrl(
   url: string,
-  resolve: DnsResolver = (hostname) => lookup(hostname, { all: true, verbatim: true })
+  resolve: DnsResolver = defaultResolve
 ): Promise<void> {
   const hostname = new URL(url).hostname.replace(/^\[|\]$/g, "");
   const addresses = isIP(hostname) ? [{ address: hostname }] : await resolve(hostname);
@@ -119,6 +122,39 @@ export async function assertPublicWebhookUrl(
     throw new NonPublicWebhookUrlError();
   }
 }
+
+/**
+ * DNS lookup used for the delivery connection itself. It resolves the host again and only hands
+ * back addresses that pass the public-IP check, so a rebinding DNS server can't swap in a private
+ * address between `assertPublicWebhookUrl` and the request. Because only the lookup is replaced,
+ * TLS SNI and the Host header still use the original hostname.
+ */
+export function createPublicOnlyLookup(resolve: DnsResolver = defaultResolve): LookupFunction {
+  return (hostname, options, callback) => {
+    resolve(hostname).then(
+      (addresses) => {
+        if (addresses.length === 0 || addresses.some(({ address }) => !ipIsPublic(address))) {
+          callback(new NonPublicWebhookUrlError(), "", 0);
+          return;
+        }
+        const resolved = addresses.map(({ address }) => ({ address, family: isIP(address) }));
+        if ((options as { all?: boolean }).all) {
+          (callback as unknown as (err: null, addresses: typeof resolved) => void)(null, resolved);
+          return;
+        }
+        callback(null, resolved[0].address, resolved[0].family);
+      },
+      (err: NodeJS.ErrnoException) => callback(err, "", 0)
+    );
+  };
+}
+
+/** Dispatcher whose connections are pinned to addresses validated by `createPublicOnlyLookup`. */
+export function createWebhookAgent(resolve: DnsResolver = defaultResolve): Agent {
+  return new Agent({ connect: { lookup: createPublicOnlyLookup(resolve) } });
+}
+
+const webhookAgent = createWebhookAgent();
 
 /** Stable across every retry of the same webhook/event pair so receivers can deduplicate. */
 export function webhookDeliveryId(webhookId: number, eventId: number): string {
@@ -149,12 +185,19 @@ async function postWebhook(
         [WEBHOOK_SIGNATURE_HEADER]: signature
       },
       body,
-      signal: controller.signal
-    });
+      signal: controller.signal,
+      dispatcher: webhookAgent
+    } as RequestInit);
 
     if (!response.ok) {
       throw new Error(`webhook responded with status ${response.status}`);
     }
+  } catch (err) {
+    // A rebinding answer rejected by the pinned lookup surfaces as fetch's `cause`.
+    if (err instanceof Error && err.cause instanceof NonPublicWebhookUrlError) {
+      throw err.cause;
+    }
+    throw err;
   } finally {
     clearTimeout(timeout);
   }

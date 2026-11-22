@@ -1,4 +1,6 @@
 import { createHmac } from "node:crypto";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { eq } from "drizzle-orm";
 import { nativeToScVal, rpc } from "@stellar/stellar-sdk";
 import {
@@ -17,7 +19,12 @@ import {
 } from "../src/config.js";
 import { processEventsBatch } from "../src/events.js";
 import { registerContract } from "../src/registry.js";
-import { assertPublicWebhookUrl, deliverWebhooksForEvent, ipIsPublic } from "../src/webhooks.js";
+import {
+  assertPublicWebhookUrl,
+  createWebhookAgent,
+  deliverWebhooksForEvent,
+  ipIsPublic
+} from "../src/webhooks.js";
 import { contractAddress } from "./addresses.js";
 import { mockJsonRpc, TEST_RPC_URL } from "./rpc-mocks.js";
 import { getTestDb, mswServer } from "./setup.js";
@@ -174,6 +181,39 @@ const MALFORMED_ADDRESSES = [
   "1.1.1.1/32",
   " 1.1.1.1"
 ];
+
+describe("webhook DNS rebinding protection", () => {
+  it("never connects to a private address returned after the public-IP check", async () => {
+    let hits = 0;
+    const server = createServer((_req, res) => {
+      hits += 1;
+      res.end("ok");
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as AddressInfo;
+
+    // First answer is public (passes the check), every later answer rebinds to loopback.
+    let calls = 0;
+    const resolver = vi.fn(async () =>
+      calls++ === 0 ? [{ address: "93.184.216.34" }] : [{ address: "127.0.0.1" }]
+    );
+    const url = `http://rebind.example:${port}/webhook`;
+    const agent = createWebhookAgent(resolver);
+
+    try {
+      await expect(assertPublicWebhookUrl(url, resolver)).resolves.toBeUndefined();
+      await expect(
+        agent.request({ origin: `http://rebind.example:${port}`, path: "/webhook", method: "POST", body: "{}" })
+      ).rejects.toThrow("non-public IP address");
+
+      expect(resolver).toHaveBeenCalledTimes(2);
+      expect(hits).toBe(0);
+    } finally {
+      await agent.close();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+});
 
 describe("ipIsPublic", () => {
   it.each(NON_PUBLIC_ADDRESSES)("rejects %s (%s)", (address) => {

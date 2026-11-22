@@ -224,8 +224,9 @@ IPv4-mapped addresses (`::ffff:a.b.c.d`) are checked against the IPv4 rules.
 
 Known limits, for operators assessing the protection:
 
-- The check resolves the host separately from the HTTP request, so a DNS-rebinding host could
-  answer differently between the two lookups.
+- The HTTP connection uses its own DNS lookup that re-checks every resolved address and connects
+  only to a validated public one, so a DNS-rebinding host can't switch to a private address after
+  the check. TLS SNI and the `Host` header still use the configured hostname.
 - HTTP redirects are followed (`fetch`'s default) and the redirect target is **not** re-checked.
 - Registration doesn't check the destination, so a webhook pointing at a blocked address can be
   created; every delivery to it is then recorded as `failed`.
