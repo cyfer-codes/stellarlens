@@ -9,9 +9,15 @@ import {
 import { EVENTS_BATCH_LIMIT, STELLAR_NETWORK } from "./config.js";
 import { tryDecodeScVal } from "@stellarlens/decode";
 import { loadRegisteredContracts } from "./registry.js";
-import { detectTransfer } from "./transfers.js";
+import { detectTokenMovement } from "./transfers.js";
 import { withRetry } from "./retry.js";
 import { deliverWebhooksForEvent, type WebhookEventPayload } from "./webhooks.js";
+import {
+  eventsIndexedTotal,
+  indexerLagLedgers,
+  pollDurationSeconds,
+  rpcRetriesTotal
+} from "./metrics.js";
 
 async function getStoredCursor(db: Database): Promise<string | undefined> {
   const [row] = await db
@@ -68,8 +74,15 @@ export async function processEventsBatch(
   db: Database,
   server: rpc.Server
 ): Promise<ProcessEventsBatchResult> {
+  const cycleStart = process.hrtime.bigint();
+  const endCycle = () => {
+    const elapsedSeconds = Number(process.hrtime.bigint() - cycleStart) / 1e9;
+    pollDurationSeconds.observe(elapsedSeconds);
+  };
+
   const registeredContracts = await loadRegisteredContracts(db, STELLAR_NETWORK);
   if (registeredContracts.size === 0) {
+    endCycle();
     return { indexedCount: 0, cursor: null };
   }
 
@@ -79,11 +92,15 @@ export async function processEventsBatch(
     ? { filters: [{ type: "contract" as const }], cursor, limit: EVENTS_BATCH_LIMIT }
     : {
       filters: [{ type: "contract" as const }],
-      startLedger: (await withRetry("getLatestLedger", () => server._getLatestLedger())).sequence,
+      startLedger: (await withRetry("getLatestLedger", () => server._getLatestLedger(), {
+        onRetry: () => rpcRetriesTotal.inc({ method: "getLatestLedger" })
+      })).sequence,
       limit: EVENTS_BATCH_LIMIT
     };
 
-  const response = await withRetry("getEvents", () => server._getEvents(request));
+  const response = await withRetry("getEvents", () => server._getEvents(request), {
+    onRetry: () => rpcRetriesTotal.inc({ method: "getEvents" })
+  });
 
   let indexedCount = 0;
   const webhookPayloads: WebhookEventPayload[] = [];
@@ -138,15 +155,16 @@ export async function processEventsBatch(
         value: decodedValue
       });
 
-      const transfer = detectTransfer(decodedTopic, decodedValue);
-      if (transfer) {
+      const movement = detectTokenMovement(decodedTopic, decodedValue);
+      if (movement) {
         await tx
           .insert(tokenTransfers)
           .values({
             contractId,
-            from: transfer.from,
-            to: transfer.to,
-            amount: transfer.amount,
+            kind: movement.kind,
+            from: movement.from,
+            to: movement.to,
+            amount: movement.amount,
             asset: event.contractId,
             txHash: event.txHash,
             ledger: event.ledger,
@@ -168,6 +186,10 @@ export async function processEventsBatch(
   for (const payload of webhookPayloads) {
     await deliverWebhooksForEvent(db, payload);
   }
+
+  eventsIndexedTotal.inc(indexedCount);
+  indexerLagLedgers.set(Math.max(0, response.latestLedger - response.events.at(-1)!.ledger));
+  endCycle();
 
   return { indexedCount, cursor: response.cursor };
 }
