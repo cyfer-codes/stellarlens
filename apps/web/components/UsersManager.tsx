@@ -76,11 +76,11 @@ export function UsersManager() {
 
   return (
     <div className="space-y-6">
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       <form onSubmit={handleAdd} className="flex max-w-xl flex-col gap-2 sm:flex-row sm:items-end">
         <div className="flex-1">
-          <label htmlFor="new-user-email" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="new-user-email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Email
           </label>
           <input
@@ -89,11 +89,11 @@ export function UsersManager() {
             required
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm"
           />
         </div>
         <div className="flex-1">
-          <label htmlFor="new-user-password" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="new-user-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Password
           </label>
           <input
@@ -103,18 +103,18 @@ export function UsersManager() {
             minLength={8}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm"
           />
         </div>
         <div>
-          <label htmlFor="new-user-role" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="new-user-role" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Role
           </label>
           <select
             id="new-user-role"
             value={role}
             onChange={(event) => setRole(event.target.value as (typeof ROLE_OPTIONS)[number])}
-            className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm"
           >
             {ROLE_OPTIONS.map((option) => (
               <option key={option} value={option}>
@@ -126,7 +126,7 @@ export function UsersManager() {
         <button
           type="submit"
           disabled={adding}
-          className="rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          className="rounded bg-gray-900 dark:bg-gray-100 px-4 py-2 text-sm font-medium text-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-200 disabled:opacity-50"
         >
           {adding ? "Adding…" : "Add user"}
         </button>
@@ -141,7 +141,7 @@ export function UsersManager() {
           <table className="w-full min-w-[480px] border-collapse text-left text-sm">
             <caption className="sr-only">Users with email, role and actions</caption>
             <thead>
-              <tr className="border-b border-gray-200 text-gray-500">
+              <tr className="border-b border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400">
                 <th scope="col" className="py-2 font-medium">Email</th>
                 <th scope="col" className="py-2 font-medium">Role</th>
                 <th scope="col" className="py-2 font-medium">
@@ -151,7 +151,7 @@ export function UsersManager() {
             </thead>
             <tbody>
               {users.map((user) => (
-                <tr key={user.id} className="border-b border-gray-100">
+                <tr key={user.id} className="border-b border-gray-100 dark:border-gray-800">
                   <td className="py-2">{user.email}</td>
                   <td className="py-2">{user.role}</td>
                   <td className="py-2 text-right">
@@ -160,7 +160,7 @@ export function UsersManager() {
                       onClick={() => handleRemove(user.id)}
                       disabled={users.length === 1}
                       aria-label={`Remove ${user.email}`}
-                      className="text-xs font-medium text-red-600 hover:underline disabled:cursor-not-allowed disabled:text-gray-400 disabled:no-underline"
+                      className="text-xs font-medium text-red-600 dark:text-red-400 hover:underline disabled:cursor-not-allowed disabled:text-gray-400 dark:disabled:text-gray-500 disabled:no-underline"
                     >
                       Remove
                     </button>

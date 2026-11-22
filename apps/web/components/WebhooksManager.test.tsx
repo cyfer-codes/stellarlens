@@ -180,6 +180,21 @@ describe("WebhooksManager", () => {
     expect(screen.queryByText("new-secret-value")).not.toBeInTheDocument();
   });
 
+  it("shows an error state with retry when the webhook list fails to load", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ error: "boom" }, 502));
+
+    render(<WebhooksManager contractId={1} authenticated={false} />);
+
+    expect(await screen.findByText(/couldn't load webhooks/i)).toBeInTheDocument();
+    expect(screen.getByText(/request failed with 502/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no webhooks yet/i)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /try again/i }));
+
+    expect(await screen.findByText("https://example.com/hook")).toBeInTheDocument();
+    expect(screen.queryByText(/couldn't load webhooks/i)).not.toBeInTheDocument();
+  });
+
   it("copy button copies the revealed secret", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });

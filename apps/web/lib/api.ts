@@ -271,6 +271,14 @@ export function listRecentEvents(limit = 20): Promise<RecentEventRow[]> {
   return apiFetch<RecentEventRow[]>(`/events?limit=${limit}`);
 }
 
+// Page sizes the transfers table offers; `limit` below is sent to the api as-is. The URL/pagination helpers live
+// in a module without server env access so client components can import them too.
+export {
+  DEFAULT_TRANSFER_PAGE_SIZE,
+  TRANSFER_PAGE_SIZES,
+  type TransferPageSize
+} from "./transfersPagination";
+
 export function listTransfers(contractId: number, params?: ListTransfersParams): Promise<TransfersPage> {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params ?? {})) {

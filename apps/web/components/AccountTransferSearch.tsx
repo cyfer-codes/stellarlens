@@ -17,9 +17,9 @@ export function AccountTransferSearch({ address = "" }: { address?: string }) {
                         ? ""
                         : "Enter a valid Stellar account address."
                 )}
-                className="min-w-0 flex-1 rounded border border-gray-300 px-3 py-2 font-mono text-sm"
+                className="min-w-0 flex-1 rounded border border-gray-300 dark:border-gray-600 px-3 py-2 font-mono text-sm"
             />
-            <button type="submit" className="rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800">Search</button>
+            <button type="submit" className="rounded bg-gray-900 dark:bg-gray-100 px-4 py-2 text-sm font-medium text-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-200">Search</button>
         </form>
     );
 }

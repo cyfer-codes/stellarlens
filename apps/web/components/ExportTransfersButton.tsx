@@ -72,7 +72,7 @@ export function ExportTransfersButton({ contractId, filters }: { contractId: num
 
   return (
     <div className="flex items-center gap-3">
-      <span role="status" aria-live="polite" className="text-xs text-gray-500">
+      <span role="status" aria-live="polite" className="text-xs text-gray-500 dark:text-gray-400">
         {exportStatus}
       </span>
       <button
@@ -80,7 +80,7 @@ export function ExportTransfersButton({ contractId, filters }: { contractId: num
         onClick={handleExport}
         disabled={exporting}
         aria-label="Export CSV of all transfers for this contract"
-        className="rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+        className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
       >
         {exporting ? "Exporting…" : "Export CSV"}
       </button>

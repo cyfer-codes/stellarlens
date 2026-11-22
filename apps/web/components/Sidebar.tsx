@@ -20,13 +20,13 @@ export function Sidebar({ authenticated }: { authenticated: boolean }) {
   return (
     <>
       {/* Mobile-only top bar. Hidden entirely at md and above, where the sidebar is always visible. */}
-      <header className="flex items-center justify-between border-b border-gray-200 p-4 md:hidden">
+      <header className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 p-4 md:hidden">
         <span className="text-lg font-bold">stellarlens</span>
         <button
           type="button"
           onClick={() => setOpen(true)}
           aria-label="Open menu"
-          className="rounded p-2 text-gray-700 hover:bg-gray-100"
+          className="rounded p-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
         >
           <svg
             viewBox="0 0 24 24"
@@ -53,7 +53,7 @@ export function Sidebar({ authenticated }: { authenticated: boolean }) {
         this exactly reproduces the pre-responsive behavior, unaffected by `open`.
       */}
       <nav
-        className={`fixed inset-y-0 left-0 z-40 w-64 transform border-r border-gray-200 bg-white p-4 transition-transform duration-200 ease-in-out md:static md:z-auto md:w-56 md:translate-x-0 md:transition-none ${
+        className={`fixed inset-y-0 left-0 z-40 w-64 transform border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4 transition-transform duration-200 ease-in-out md:static md:z-auto md:w-56 md:translate-x-0 md:transition-none ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -63,7 +63,7 @@ export function Sidebar({ authenticated }: { authenticated: boolean }) {
             type="button"
             onClick={() => setOpen(false)}
             aria-label="Close menu"
-            className="rounded p-1 text-gray-500 hover:bg-gray-100 md:hidden"
+            className="rounded p-1 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 md:hidden"
           >
             <svg
               viewBox="0 0 24 24"
@@ -88,7 +88,7 @@ export function Sidebar({ authenticated }: { authenticated: boolean }) {
                   href={item.href}
                   onClick={() => setOpen(false)}
                   className={`block rounded px-3 py-2 text-sm font-medium ${
-                    active ? "bg-gray-900 text-white" : "text-gray-700 hover:bg-gray-100"
+                    active ? "bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
                   }`}
                 >
                   {item.label}
@@ -99,17 +99,17 @@ export function Sidebar({ authenticated }: { authenticated: boolean }) {
         </ul>
 
         {authenticated ? (
-          <form action={logout} className="mt-6 border-t border-gray-200 pt-4">
-            <button type="submit" className="w-full rounded px-3 py-2 text-left text-sm text-gray-500 hover:bg-gray-100">
+          <form action={logout} className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-4">
+            <button type="submit" className="w-full rounded px-3 py-2 text-left text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
               Sign out
             </button>
           </form>
         ) : (
-          <div className="mt-6 border-t border-gray-200 pt-4">
+          <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-4">
             <Link
               href="/login"
               onClick={() => setOpen(false)}
-              className="block rounded px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+              className="block rounded px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
             >
               Sign in
             </Link>
