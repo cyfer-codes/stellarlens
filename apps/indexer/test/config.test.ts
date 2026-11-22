@@ -147,4 +147,40 @@ describe("indexer configuration", () => {
       'POLL_INTERVAL_MS must be a positive integer; received "0"'
     );
   });
+
+  it("reads REGISTRY_PORT from the environment", async () => {
+    vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+    vi.stubEnv("REGISTRY_SECRET", "test-registry-secret");
+    vi.stubEnv("STELLAR_NETWORK", "testnet");
+    vi.stubEnv("REGISTRY_PORT", "4000");
+    vi.resetModules();
+
+    const config = await import("../src/config.js");
+
+    expect(config.REGISTRY_PORT).toBe(4000);
+  });
+
+  it("rejects a non-numeric REGISTRY_PORT", async () => {
+    vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+    vi.stubEnv("REGISTRY_SECRET", "test-registry-secret");
+    vi.stubEnv("STELLAR_NETWORK", "testnet");
+    vi.stubEnv("REGISTRY_PORT", "abc");
+    vi.resetModules();
+
+    await expect(import("../src/config.js")).rejects.toThrow(
+      'REGISTRY_PORT must be a positive integer; received "abc"'
+    );
+  });
+
+  it("rejects an out-of-range REGISTRY_PORT", async () => {
+    vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+    vi.stubEnv("REGISTRY_SECRET", "test-registry-secret");
+    vi.stubEnv("STELLAR_NETWORK", "testnet");
+    vi.stubEnv("REGISTRY_PORT", "70000");
+    vi.resetModules();
+
+    await expect(import("../src/config.js")).rejects.toThrow(
+      'REGISTRY_PORT must be at most 65535; received "70000"'
+    );
+  });
 });

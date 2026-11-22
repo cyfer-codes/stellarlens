@@ -41,19 +41,25 @@ export class ApiKeysService {
     return { ...apiKey, key: rawKey };
   }
 
-  findAll() {
-    return this.db
+  async findAll() {
+    const rows = await this.db
       .select({
         id: apiKeys.id,
         name: apiKeys.name,
         scope: apiKeys.scope,
         createdAt: apiKeys.createdAt,
+        expiresAt: apiKeys.expiresAt,
         revokedAt: apiKeys.revokedAt,
-        lastUsedAt: apiKeys.lastUsedAt
+        lastUsedAt: apiKeys.lastUsedAt,
         rateLimitPerMinute: apiKeys.rateLimitPerMinute
       })
       .from(apiKeys)
       .orderBy(desc(apiKeys.createdAt));
+
+    return rows.map((row) => ({
+      ...row,
+      expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null
+    }));
   }
 
   async update(id: number, dto: UpdateApiKeyDto) {

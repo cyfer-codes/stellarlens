@@ -9,6 +9,21 @@ import { contractAddress } from "./addresses.js";
 import { mockJsonRpc, TEST_RPC_URL } from "./rpc-mocks.js";
 import { getTestDb, mswServer } from "./setup.js";
 
+// Soroban RPC limits enforced by the indexer when building getEvents filters.
+const MAX_CONTRACT_IDS_PER_FILTER = 5;
+const MAX_FILTERS_PER_REQUEST = 5;
+const MAX_CONTRACT_IDS_PER_REQUEST = MAX_CONTRACT_IDS_PER_FILTER * MAX_FILTERS_PER_REQUEST;
+
+interface GetEventsParams {
+  filters?: { type: string; contractIds?: string[] }[];
+  pagination?: { cursor?: string };
+  startLedger?: number;
+}
+
+function contractIdsFromCall(params: GetEventsParams): string[] {
+  return (params.filters ?? []).flatMap((filter) => filter.contractIds ?? []);
+}
+
 const ADDRESS_A = "GCEHQXSV35ZJRBJR3K4Y4VVO44BJI3NHCFR5HHVG5NCRVRSU4ZLM6T5O";
 const ADDRESS_B = "GCK3UYYUG22NJQT2HPLOZL3SREHZP5MLEIKE7LUGLH6XYMB4QEOOXWFD";
 // An scvI128 type tag with no body, so `xdr.ScVal.fromXdr` throws.
@@ -90,10 +105,7 @@ describe("processEventsBatch", () => {
     await processEventsBatch(db, server);
 
     expect(firstEventsSpy).toHaveBeenCalledTimes(1);
-    const firstCallParams = firstEventsSpy.mock.calls[0][0] as {
-      pagination?: { cursor?: string };
-      startLedger?: number;
-    };
+    const firstCallParams = firstEventsSpy.mock.calls[0][0] as GetEventsParams;
     expect(firstCallParams.pagination?.cursor).toBeUndefined();
     expect(firstCallParams.startLedger).toBe(1000);
 
@@ -117,7 +129,7 @@ describe("processEventsBatch", () => {
 
     // the second call must resume from the stored cursor, not re-derive startLedger
     expect(secondEventsSpy).toHaveBeenCalledTimes(1);
-    const secondCallParams = secondEventsSpy.mock.calls[0][0] as { pagination?: { cursor?: string } };
+    const secondCallParams = secondEventsSpy.mock.calls[0][0] as GetEventsParams;
     expect(secondCallParams.pagination?.cursor).toBe("CURSOR_1");
 
     const [afterSecond] = await db
@@ -449,5 +461,136 @@ describe("processEventsBatch", () => {
 
     expect(result).toEqual({ indexedCount: 0, cursor: null });
     expect(getEventsSpy).not.toHaveBeenCalled();
+  });
+
+  describe("contract id chunking", () => {
+    async function registerMany(db: ReturnType<typeof getTestDb>, count: number): Promise<string[]> {
+      const addresses: string[] = [];
+      for (let i = 0; i < count; i += 1) {
+        const address = contractAddress(`CONTRACT_CHUNK_${count}_${i}`);
+        addresses.push(address);
+        await registerContract(db, { address, network: NETWORK });
+      }
+      return addresses;
+    }
+
+    function assertWithinLimits(params: GetEventsParams) {
+      const filters = params.filters ?? [];
+      expect(filters.length).toBeGreaterThan(0);
+      expect(filters.length).toBeLessThanOrEqual(MAX_FILTERS_PER_REQUEST);
+      for (const filter of filters) {
+        expect(filter.type).toBe("contract");
+        expect(filter.contractIds).toBeDefined();
+        expect(filter.contractIds!.length).toBeGreaterThan(0);
+        expect(filter.contractIds!.length).toBeLessThanOrEqual(MAX_CONTRACT_IDS_PER_FILTER);
+      }
+    }
+
+    it.each([1, 5, 30])("chunks getEvents requests for %i registered contracts", async (count) => {
+      const db = getTestDb();
+      const addresses = await registerMany(db, count);
+
+      const getEventsSpy = vi.fn((_params: GetEventsParams) => ({
+        events: [],
+        cursor: `CURSOR_CHUNK_${count}`,
+        latestLedger: 7000
+      }));
+
+      mswServer.use(
+        mockJsonRpc({
+          getLatestLedger: () => buildLatestLedger(7000),
+          getEvents: getEventsSpy
+        })
+      );
+
+      await processEventsBatch(db, makeServer());
+
+      const expectedRequests = Math.ceil(count / MAX_CONTRACT_IDS_PER_REQUEST);
+      expect(getEventsSpy).toHaveBeenCalledTimes(expectedRequests);
+
+      const requestedIds: string[] = [];
+      for (const call of getEventsSpy.mock.calls) {
+        const params = call[0] as GetEventsParams;
+        assertWithinLimits(params);
+        requestedIds.push(...contractIdsFromCall(params));
+      }
+
+      // every registered contract is requested exactly once, and nothing else
+      expect(requestedIds.sort()).toEqual([...addresses].sort());
+      expect(new Set(requestedIds).size).toBe(count);
+    });
+  });
+
+  describe("indexer heartbeat", () => {
+    it("records lastPolledAt, lastLedger, latestNetworkLedger and a null lastError after a successful poll", async () => {
+      const db = getTestDb();
+      await registerContract(db, { address: contractAddress("CONTRACT_HEARTBEAT"), network: NETWORK });
+
+      mswServer.use(
+        mockJsonRpc({
+          getLatestLedger: () => buildLatestLedger(8000),
+          getEvents: () => ({
+            events: [
+              buildRawEvent({
+                contractId: contractAddress("CONTRACT_HEARTBEAT"),
+                ledger: 8010,
+                topic: [symbolXdr("fee")],
+                value: i128Xdr(-1n)
+              })
+            ],
+            cursor: "CURSOR_HEARTBEAT",
+            latestLedger: 8010
+          })
+        })
+      );
+
+      const before = Date.now();
+      await processEventsBatch(db, makeServer());
+      const after = Date.now();
+
+      const [checkpoint] = await db
+        .select()
+        .from(indexerCheckpoints)
+        .where(eq(indexerCheckpoints.network, NETWORK));
+
+      expect(checkpoint).toBeDefined();
+      expect(checkpoint.lastError).toBeNull();
+      expect(checkpoint.lastLedger).toBe(8010);
+      expect(checkpoint.latestNetworkLedger).toBe(8000);
+
+      const lastPolledAt = checkpoint.lastPolledAt;
+      expect(lastPolledAt).not.toBeNull();
+      const polledAtMs =
+        lastPolledAt instanceof Date ? lastPolledAt.getTime() : new Date(lastPolledAt as string).getTime();
+      expect(Number.isNaN(polledAtMs)).toBe(false);
+      expect(polledAtMs).toBeGreaterThanOrEqual(before);
+      expect(polledAtMs).toBeLessThanOrEqual(after);
+    });
+
+    it("records lastError when getEvents fails", async () => {
+      const db = getTestDb();
+      await registerContract(db, { address: contractAddress("CONTRACT_HEARTBEAT_ERROR"), network: NETWORK });
+
+      mswServer.use(
+        mockJsonRpc({
+          getLatestLedger: () => buildLatestLedger(9000),
+          getEvents: () => {
+            throw new Error("rpc unavailable");
+          }
+        })
+      );
+
+      await expect(processEventsBatch(db, makeServer())).rejects.toThrow();
+
+      const [checkpoint] = await db
+        .select()
+        .from(indexerCheckpoints)
+        .where(eq(indexerCheckpoints.network, NETWORK));
+
+      expect(checkpoint).toBeDefined();
+      expect(checkpoint.lastError).toBeTruthy();
+      expect(String(checkpoint.lastError)).toContain("rpc unavailable");
+      expect(checkpoint.lastPolledAt).not.toBeNull();
+    });
   });
 });
