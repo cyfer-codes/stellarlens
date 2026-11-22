@@ -286,4 +286,144 @@ describe("StellarLensClient", () => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe("deleteContract", () => {
+    it("sends DELETE /contracts/:id and resolves on 204", async () => {
+      const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+        expect(String(url)).toBe("https://api.example.com/contracts/7");
+        expect(init?.method).toBe("DELETE");
+        expect((init?.headers as Record<string, string>)["x-api-key"]).toBe("test-key");
+        return new Response(null, { status: 204 });
+      }) as unknown as typeof fetch;
+
+      await expect(makeClient(fetchMock).deleteContract(7)).resolves.toBeUndefined();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("throws StellarLensApiError with the body on 404", async () => {
+      const body = { statusCode: 404, message: "contract 999 not found" };
+      const fetchMock = vi.fn(async () => jsonResponse(body, 404)) as unknown as typeof fetch;
+
+      const error = await makeClient(fetchMock)
+        .deleteContract(999)
+        .catch((err: unknown) => err);
+
+      expect(error).toBeInstanceOf(StellarLensApiError);
+      expect((error as StellarLensApiError).status).toBe(404);
+      expect((error as StellarLensApiError).body).toEqual(body);
+    });
+  });
+
+  describe("listAllEvents / listAllTransfers", () => {
+    const event = (id: number) => ({
+      id,
+      contractId: 1,
+      ledger: 1000 + id,
+      txHash: "a".repeat(64),
+      topic: "[]",
+      decodedData: null,
+      createdAt: "2026-01-01T00:00:00Z"
+    });
+    const transfer = (id: number) => ({ id, contractId: 1, from: "GA", to: "GB", amount: String(id), asset: "native" });
+
+    /** Serves `pages` keyed by the request's `cursor` query param ("" for the first page), recording each query. */
+    function pagedFetch(pages: Record<string, unknown>) {
+      const queries: string[] = [];
+      const fetchMock = vi.fn(async (url: string | URL) => {
+        const parsed = new URL(String(url));
+        queries.push(`${parsed.pathname}${parsed.search}`);
+        const page = pages[parsed.searchParams.get("cursor") ?? ""];
+        if (!page) {
+          throw new Error(`unexpected request ${parsed.pathname}${parsed.search}`);
+        }
+        return jsonResponse(page);
+      }) as unknown as typeof fetch;
+      return { fetchMock, queries };
+    }
+
+    it("listAllEvents yields every event in order across pages and stops when nextCursor is null", async () => {
+      const { fetchMock, queries } = pagedFetch({
+        "": { data: [event(1), event(2)], nextCursor: 2 },
+        "2": { data: [event(3), event(4)], nextCursor: 4 },
+        "4": { data: [event(5)], nextCursor: null }
+      });
+
+      const ids: number[] = [];
+      for await (const e of makeClient(fetchMock).listAllEvents(1, { limit: 2, topic: "transfer" })) {
+        ids.push(e.id);
+      }
+
+      expect(ids).toEqual([1, 2, 3, 4, 5]);
+      expect(queries).toEqual([
+        "/contracts/1/events?limit=2&topic=transfer",
+        "/contracts/1/events?limit=2&topic=transfer&cursor=2",
+        "/contracts/1/events?limit=2&topic=transfer&cursor=4"
+      ]);
+    });
+
+    it("listAllTransfers yields every transfer in order across pages and stops when nextCursor is absent", async () => {
+      const { fetchMock, queries } = pagedFetch({
+        "": { data: [transfer(1), transfer(2)], nextCursor: 2 },
+        "2": { data: [transfer(3)] }
+      });
+
+      const ids: number[] = [];
+      for await (const t of makeClient(fetchMock).listAllTransfers(1, { asset: "native" })) {
+        ids.push(t.id);
+      }
+
+      expect(ids).toEqual([1, 2, 3]);
+      expect(queries).toEqual(["/contracts/1/transfers?asset=native", "/contracts/1/transfers?asset=native&cursor=2"]);
+    });
+
+    it("resumes from a given cursor", async () => {
+      const { fetchMock, queries } = pagedFetch({ "10": { data: [event(11)], nextCursor: null } });
+
+      const ids: number[] = [];
+      for await (const e of makeClient(fetchMock).listAllEvents(1, { cursor: 10 })) {
+        ids.push(e.id);
+      }
+
+      expect(ids).toEqual([11]);
+      expect(queries).toEqual(["/contracts/1/events?cursor=10"]);
+    });
+
+    it("yields nothing for an empty first page", async () => {
+      const { fetchMock } = pagedFetch({ "": { data: [], nextCursor: null } });
+
+      const ids: number[] = [];
+      for await (const t of makeClient(fetchMock).listAllTransfers(1)) {
+        ids.push(t.id);
+      }
+
+      expect(ids).toEqual([]);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("stops instead of looping when the api returns the cursor it was given", async () => {
+      const { fetchMock } = pagedFetch({
+        "": { data: [event(1)], nextCursor: 1 },
+        "1": { data: [event(2)], nextCursor: 1 }
+      });
+
+      const ids: number[] = [];
+      for await (const e of makeClient(fetchMock).listAllEvents(1)) {
+        ids.push(e.id);
+      }
+
+      expect(ids).toEqual([1, 2]);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("fetches pages lazily", async () => {
+      const { fetchMock } = pagedFetch({ "": { data: [event(1), event(2)], nextCursor: 2 } });
+
+      for await (const e of makeClient(fetchMock).listAllEvents(1)) {
+        expect(e.id).toBe(1);
+        break;
+      }
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+  });
 });

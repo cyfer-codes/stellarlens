@@ -320,7 +320,45 @@ try {
 }
 ```
 
+### Timeouts and cancellation
+
+Every request is aborted after `timeoutMs` (default `10000`) and rejects with a `StellarLensTimeoutError`. Set it
+on the client, override it per call, or pass `0` to disable it. Every method also takes an optional
+`AbortSignal` in its last `options` argument. A signal that's already aborted sends nothing; one that aborts
+mid-flight aborts `fetch`. Either way the call rejects with `signal.reason`.
+
+```ts
+import { StellarLensClient, StellarLensTimeoutError } from "@stellarlens/sdk";
+
+const client = new StellarLensClient({ baseUrl, apiKey, timeoutMs: 5000 });
+
+const controller = new AbortController();
+setTimeout(() => controller.abort(), 1000);
+
+try {
+  await client.listEvents(contractId, { limit: 100 }, { signal: controller.signal, timeoutMs: 30_000 });
+} catch (err) {
+  if (err instanceof StellarLensTimeoutError) console.error(`gave up after ${err.timeoutMs}ms`);
+  else if ((err as Error).name === "AbortError") console.log("cancelled");
+  else throw err;
+}
+```
+
+### Iterating every page
+
+`listAllContracts`, `listAllEvents` and `listAllTransfers` are async iterators. They fetch pages lazily and
+follow `nextCursor` until it comes back `null`. Every page request uses the same `options`, so a signal stops
+the whole walk.
+
+```ts
+for await (const transfer of client.listAllTransfers(contractId, { asset: "native" })) {
+  console.log(transfer.amount);
+}
+```
+
 ## API reference
+
+Every request-making method accepts an optional final `options?: RequestOptions` (`{ signal?, timeoutMs? }`).
 
 | Method | Description |
 |---|---|
@@ -332,9 +370,12 @@ try {
 | `listContracts(params?)` | One cursor-paginated page of contracts (`cursor`, `limit`, `name`, `network`) |
 | `listAllContracts(params?)` | Async iterator over every matching contract, following `nextCursor` |
 | `getContract(id)` | Fetch a single contract by id |
+| `deleteContract(id)` | `DELETE /contracts/:id`; resolves on `204`, throws `StellarLensApiError` (e.g. `404`) otherwise |
 | `listEvents(contractId, params?)` | Cursor-paginated events for a contract (`cursor`, `limit`, `topic`, `from`, `to`) |
+| `listAllEvents(contractId, params?)` | Async iterator over every matching event, following `nextCursor` |
 | `watchEvents(contractId, options?)` | Async iterator yielding new events as they're indexed, until `signal` aborts |
 | `listTransfers(contractId, params?)` | Cursor-paginated token transfers for a contract (`cursor`, `limit`) |
+| `listAllTransfers(contractId, params?)` | Async iterator over every matching transfer, following `nextCursor` |
 | `getStats(contractId, params?)` | Transfer summary stats for a contract (`from`, `to`) |
 | `formatAmount(amount, decimals, { maxFractionDigits }?)` | Format a base-unit amount for display, using `bigint` |
 | `parseAmount(display, decimals)` | Parse a display amount into base units as a `bigint` |
