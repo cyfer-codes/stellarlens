@@ -312,6 +312,12 @@ export class StellarLensClient {
     }
   }
 
+  /** Registers a new contract. Throws StellarLensApiError (409) with existingId when the address is already registered; use PATCH to update it. */
+  registerContract(input: RegisterContractInput): Promise<Contract> {
+    return this.request<Contract>("/contracts", {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
   /** Registers a new contract, or updates the name/network of one already registered at that address. */
   registerContract(input: RegisterContractInput, options?: RequestOptions): Promise<Contract> {
     return this.request<Contract>(

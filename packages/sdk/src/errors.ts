@@ -1,12 +1,18 @@
 export class StellarLensApiError extends Error {
   readonly status: number;
   readonly body: unknown;
+  /** Existing contract id returned by POST /contracts when registration conflicts. */
+  readonly existingId?: number;
 
   constructor(status: number, body: unknown) {
     super(`stellarlens api request failed with status ${status}`);
     this.name = "StellarLensApiError";
     this.status = status;
     this.body = body;
+    if (status === 409 && typeof body === "object" && body !== null && "existingId" in body) {
+      const existingId = (body as { existingId?: unknown }).existingId;
+      if (typeof existingId === "number") this.existingId = existingId;
+    }
   }
 }
 
