@@ -148,6 +148,10 @@ describe("indexer configuration", () => {
     );
   });
 
+  it("defaults EVENTS_BATCH_LIMIT to 100 when unset", async () => {
+    vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+    vi.stubEnv("STELLAR_NETWORK", "testnet");
+    vi.stubEnv("EVENTS_BATCH_LIMIT", undefined);
   it("reads REGISTRY_PORT from the environment", async () => {
     vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
     vi.stubEnv("REGISTRY_SECRET", "test-registry-secret");
@@ -164,6 +168,13 @@ describe("indexer configuration", () => {
 
     const config = await import("../src/config.js");
 
+    expect(config.EVENTS_BATCH_LIMIT).toBe(100);
+  });
+
+  it("reads EVENTS_BATCH_LIMIT from the environment", async () => {
+    vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+    vi.stubEnv("STELLAR_NETWORK", "testnet");
+    vi.stubEnv("EVENTS_BATCH_LIMIT", "250");
     expect(config.SOROBAN_RPC_URLS).toEqual([
       "https://primary.example.com",
       "https://secondary.example.com",
@@ -205,6 +216,13 @@ describe("indexer configuration", () => {
 
     const config = await import("../src/config.js");
 
+    expect(config.EVENTS_BATCH_LIMIT).toBe(250);
+  });
+
+  it("falls back to 100 for a non-numeric EVENTS_BATCH_LIMIT", async () => {
+    vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+    vi.stubEnv("STELLAR_NETWORK", "testnet");
+    vi.stubEnv("EVENTS_BATCH_LIMIT", "not-a-number");
     expect(config.RPC_FAILOVER_THRESHOLD).toBe(3);
     expect(config.RPC_PRIMARY_PROBE_INTERVAL_MS).toBe(60000);
   });
@@ -219,6 +237,34 @@ describe("indexer configuration", () => {
 
     const config = await import("../src/config.js");
 
+    expect(config.EVENTS_BATCH_LIMIT).toBe(100);
+  });
+
+  it("falls back to 100 for an empty or whitespace-only EVENTS_BATCH_LIMIT", async () => {
+    for (const value of ["", "   "]) {
+      vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+      vi.stubEnv("STELLAR_NETWORK", "testnet");
+      vi.stubEnv("EVENTS_BATCH_LIMIT", value);
+      vi.resetModules();
+
+      const config = await import("../src/config.js");
+
+      expect(config.EVENTS_BATCH_LIMIT).toBe(100);
+    }
+  });
+
+  it("never produces NaN for an invalid EVENTS_BATCH_LIMIT", async () => {
+    for (const value of ["abc", "10.5", "0", "-5", ""]) {
+      vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+      vi.stubEnv("STELLAR_NETWORK", "testnet");
+      vi.stubEnv("EVENTS_BATCH_LIMIT", value);
+      vi.resetModules();
+
+      const config = await import("../src/config.js");
+
+      expect(Number.isNaN(config.EVENTS_BATCH_LIMIT)).toBe(false);
+      expect(config.EVENTS_BATCH_LIMIT).toBe(100);
+    }
     expect(config.REGISTRY_PORT).toBe(4000);
   });
 
