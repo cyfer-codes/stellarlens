@@ -39,7 +39,7 @@ const EMPTY_DELIVERIES: DeliveriesState = {
 
 export function WebhooksManager({ contractId, authenticated }: { contractId: number; authenticated: boolean }) {
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(authenticated);
   /** Failure of a create/delete/rotate action. */
   const [error, setError] = useState<string | null>(null);
   /** Failure loading the webhook list itself. */
@@ -87,8 +87,13 @@ export function WebhooksManager({ contractId, authenticated }: { contractId: num
   }
 
   useEffect(() => {
+    if (!authenticated) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     refresh();
-  }, [contractId]);
+  }, [contractId, authenticated]);
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -365,7 +370,12 @@ export function WebhooksManager({ contractId, authenticated }: { contractId: num
         </form>
       )}
 
-      {loading ? (
+      {!authenticated ? (
+        <EmptyState
+          title="Sign in to manage webhooks"
+          description="Webhook URLs are only visible to the contract owner. Sign in to view, add or edit webhooks."
+        />
+      ) : loading ? (
         <LoadingState label="Loading webhooks…" />
       ) : loadError && webhooks.length === 0 ? (
         <ErrorState title="Couldn't load webhooks" message={loadError} onRetry={handleRetryLoad} />
