@@ -11,6 +11,7 @@ import {
   type rpc
 } from "@stellar/stellar-sdk";
 import { contracts, type Database } from "@stellarlens/db";
+import { logger } from "./logger";
 
 export interface ContractRegistration {
   address: string;
@@ -110,8 +111,14 @@ export async function fetchTokenMetadata(
       } else if (typeof value === "string") {
         metadata[method as Exclude<MetadataMethod, "decimals">] = value;
       }
-    } catch {
+    } catch (err) {
       // Non-token contract or transient RPC failure: leave this field null.
+      logger.debug("token metadata read failed", {
+        contractAddress: address,
+        network: networkPassphrase,
+        method,
+        err
+      });
     }
   }
 
@@ -222,7 +229,8 @@ export async function fetchContractSpec(
     const wasm = codeEntry.val.contractCode().code();
     const specs = parseContractSpecFromWasm(new Uint8Array(wasm));
     return specs.length > 0 ? specs : null;
-  } catch {
+  } catch (err) {
+    logger.debug("contract spec fetch failed", { contractAddress: address, err });
     return null;
   }
 }
