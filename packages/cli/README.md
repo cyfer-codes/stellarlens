@@ -103,3 +103,35 @@ The command exits with status `1` if any address is invalid or failed to registe
 in scripts and CI.
 
 Run `stellarlens --help` (or `--help` on any subcommand) for full option details.
+
+## Shell completion
+
+Print and source a completion script so your shell tab-completes `stellarlens` commands and subcommands.
+
+### bash
+
+```bash
+# Add to ~/.bashrc or ~/.bash_profile to persist:
+source <(stellarlens completion bash)
+```
+
+Or write it to a system directory for all users:
+
+```bash
+stellarlens completion bash | sudo tee /etc/bash_completion.d/stellarlens > /dev/null
+```
+
+### zsh
+
+```zsh
+# Add to ~/.zshrc to persist:
+source <(stellarlens completion zsh)
+```
+
+Or write it to a `$fpath` directory:
+
+```zsh
+stellarlens completion zsh > "${fpath[1]}/_stellarlens"
+```
+
+Reload your shell after sourcing the script.

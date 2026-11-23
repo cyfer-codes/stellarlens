@@ -1,15 +1,20 @@
 #!/usr/bin/env node
 import { Argument, Command, InvalidArgumentError, Option } from "commander";
 import { createClientFromEnv } from "./client.js";
-import { addContract, getContract, listContracts } from "./commands/contracts.js";
-import { runDecode } from "./commands/decode.js";
 import { StellarLensApiError } from "@stellarlens/sdk";
-import { listEvents, tailEvents } from "./commands/events.js";
+import {
+  type ContractEntry,
+  getContract,
+  listContracts,
+  readContractsFile,
+  runAddContracts
+} from "./commands/contracts.js";
+import { runDecode } from "./commands/decode.js";
+import { DEFAULT_POLL_INTERVAL_MS, listEvents, tailEvents } from "./commands/events.js";
 import { runExport, type ExportFormat, type ExportKind } from "./commands/export.js";
-import { addWebhook, listenForWebhooks, listWebhooks, removeWebhook } from "./commands/webhooks.js";
-import { listTransfers } from "./commands/transfers.js";
 import { showStats } from "./commands/stats.js";
-import { listenForWebhooks } from "./commands/webhooks.js";
+import { listTransfers } from "./commands/transfers.js";
+import { addWebhook, listenForWebhooks, listWebhooks, removeWebhook } from "./commands/webhooks.js";
 
 function parsePort(value: string): number {
   const port = Number(value);
@@ -44,16 +49,6 @@ function parseContractId(value: string): number {
   }
   return id;
 }
-import { Command, Option } from "commander";
-import { Command, InvalidArgumentError } from "commander";
-import { createClientFromEnv } from "./client.js";
-import {
-  type ContractEntry,
-  listContracts,
-  readContractsFile,
-  runAddContracts
-} from "./commands/contracts.js";
-import { tailEvents } from "./commands/events.js";
 
 const program = new Command();
 
@@ -106,7 +101,7 @@ contractsCommand
   .description("List registered contracts (follows pagination to the end)")
   .option("--name <name>", "Only contracts whose name contains this (case-insensitive)")
   .option("-n, --network <network>", "Only contracts on this network")
-  .option("--page-size <size>", "Contracts fetched per api request (1-100)", parsePageSize, 100)
+  .option("--page-size <size>", "Contracts fetched per api request (1-100)", parsePositiveInt, 100)
   .action(async (options: { name?: string; network?: string; pageSize: number }) => {
     await listContracts(createClientFromEnv(), { ...options, json: jsonOutput() });
   });
@@ -152,9 +147,6 @@ eventsCommand
     ).conflicts("fromStart")
   )
   .addOption(new Option("--from-start", "replay every event from the beginning of history").conflicts("since"))
-  .action(async (contractId: string, options: { since?: string; fromStart?: boolean }) => {
-    await tailEvents(createClientFromEnv(), Number(contractId), options);
-  .description("Follow new events for a contract in real time")
   .option("--latest", "Skip existing events and only show ones indexed from now on")
   .option("--interval <ms>", "Poll interval in milliseconds", parsePositiveInt, DEFAULT_POLL_INTERVAL_MS)
   .action(async (contractId: string, options: { latest?: boolean; interval: number }) => {
@@ -267,9 +259,114 @@ webhooksCommand
     await listenForWebhooks(options);
   });
 
+// Shell completion (issue #129)
+program
+  .command("completion <shell>")
+  .description("Print a sourceable shell completion script for bash or zsh")
+  .action((shell: string) => {
+    if (shell !== "bash" && shell !== "zsh") {
+      console.error(`Unsupported shell: ${shell}. Supported: bash, zsh`);
+      process.exitCode = 1;
+      return;
+    }
+
+    const topLevel = program.commands
+      .map((c) => c.name())
+      .filter((name) => name !== "completion");
+
+    if (shell === "bash") {
+      console.log(`# stellarlens bash completion
+# Add to ~/.bashrc or ~/.bash_profile:
+#   source <(stellarlens completion bash)
+
+_stellarlens_completion() {
+  local cur prev words cword
+  _init_completion 2>/dev/null || {
+    COMPREPLY=()
+    cur="\${COMP_WORDS[COMP_CWORD]}"
+    prev="\${COMP_WORDS[COMP_CWORD-1]}"
+  }
+
+  local commands="${topLevel.join(" ")}"
+
+  if [[ \${COMP_CWORD} -eq 1 ]]; then
+    COMPREPLY=( $(compgen -W "\${commands}" -- "\${cur}") )
+    return
+  fi
+
+  case "\${COMP_WORDS[1]}" in
+    contracts)
+      COMPREPLY=( $(compgen -W "add list get" -- "\${cur}") )
+      ;;
+    events)
+      COMPREPLY=( $(compgen -W "list tail" -- "\${cur}") )
+      ;;
+    transfers)
+      COMPREPLY=( $(compgen -W "list" -- "\${cur}") )
+      ;;
+    webhooks)
+      COMPREPLY=( $(compgen -W "add list remove listen" -- "\${cur}") )
+      ;;
+    export)
+      COMPREPLY=( $(compgen -W "events transfers" -- "\${cur}") )
+      ;;
+    *)
+      COMPREPLY=()
+      ;;
+  esac
+}
+
+complete -F _stellarlens_completion stellarlens`);
+    } else {
+      // zsh
+      console.log(`#compdef stellarlens
+# stellarlens zsh completion
+# Add to your ~/.zshrc:
+#   source <(stellarlens completion zsh)
+
+_stellarlens() {
+  local -a commands
+  commands=(
+${topLevel.map((name) => `    '${name}'`).join("\n")}
+  )
+
+  local -a contracts_cmds events_cmds transfers_cmds webhooks_cmds
+  contracts_cmds=('add' 'list' 'get')
+  events_cmds=('list' 'tail')
+  transfers_cmds=('list')
+  webhooks_cmds=('add' 'list' 'remove' 'listen')
+
+  if (( CURRENT == 2 )); then
+    _describe 'command' commands
+    return
+  fi
+
+  case \${words[2]} in
+    contracts)
+      _describe 'contracts command' contracts_cmds
+      ;;
+    events)
+      _describe 'events command' events_cmds
+      ;;
+    transfers)
+      _describe 'transfers command' transfers_cmds
+      ;;
+    webhooks)
+      _describe 'webhooks command' webhooks_cmds
+      ;;
+    export)
+      local -a export_kinds
+      export_kinds=('events' 'transfers')
+      _describe 'export kind' export_kinds
+      ;;
+  esac
+}
+
+_stellarlens "\$@"`);
+    }
+  });
+
 program.parseAsync(process.argv).catch((err: unknown) => {
   console.error(`error: ${describeError(err)}`);
-program.parseAsync(process.argv).catch((error: unknown) => {
-  console.error(`error: ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = 1;
 });
