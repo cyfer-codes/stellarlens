@@ -11,7 +11,11 @@ function requireEnv(name: string): string {
   return value;
 }
 
-function positiveIntegerEnv(name: string, defaultValue: number): number {
+function positiveIntegerEnv(
+  name: string,
+  defaultValue: number,
+  options: { max?: number } = {}
+): number {
   const value = process.env[name];
   if (value === undefined) {
     return defaultValue;
@@ -20,6 +24,9 @@ function positiveIntegerEnv(name: string, defaultValue: number): number {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 1) {
     throw new Error(`${name} must be a positive integer; received "${value}"`);
+  }
+  if (options.max !== undefined && parsed > options.max) {
+    throw new Error(`${name} must be at most ${options.max}; received "${value}"`);
   }
   return parsed;
 }
@@ -95,7 +102,7 @@ if (!isStellarNetwork(stellarNetwork)) {
   );
 }
 export const STELLAR_NETWORK = stellarNetwork;
-export const REGISTRY_PORT = Number(process.env.REGISTRY_PORT ?? 3002);
+export const REGISTRY_PORT = positiveIntegerEnv("REGISTRY_PORT", 3002, { max: 65535 });
 /** Shared secret clients must send in the X-Registry-Secret header when registering contracts. */
 export const REGISTRY_SECRET = requireEnv("REGISTRY_SECRET");
 export const WEBHOOK_CONCURRENCY = positiveIntegerEnv("WEBHOOK_CONCURRENCY", 10);

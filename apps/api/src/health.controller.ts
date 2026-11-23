@@ -16,6 +16,7 @@ const DEFAULT_INDEXER_STALE_AFTER_SECONDS = 60;
 interface IndexerCheckpointRow {
   checkpoint: string | number | null;
   updated_at: string | Date | null;
+  last_polled_at?: string | Date | null;
 }
 
 @ApiTags("health")
@@ -82,16 +83,18 @@ export class HealthController {
     let lastCheckpointAt: Date | null = null;
     try {
       const result = await this.db.execute<IndexerCheckpointRow>(
-        sql`select checkpoint, updated_at from indexer_checkpoints order by updated_at desc limit 1`,
+        sql`select checkpoint, updated_at, last_polled_at from indexer_checkpoints order by coalesce(last_polled_at, updated_at) desc limit 1`,
       );
       const rows = (result as unknown as { rows?: IndexerCheckpointRow[] })
         .rows ?? (result as unknown as IndexerCheckpointRow[]);
       const row = Array.isArray(rows) ? rows[0] : undefined;
-      if (row?.updated_at) {
+      // Prefer the heartbeat timestamp (last_polled_at) when present; fall
+      // back to updated_at for rows written before the heartbeat column
+      // existed.
+      const heartbeat = row?.last_polled_at ?? row?.updated_at ?? null;
+      if (heartbeat) {
         lastCheckpointAt =
-          row.updated_at instanceof Date
-            ? row.updated_at
-            : new Date(row.updated_at);
+          heartbeat instanceof Date ? heartbeat : new Date(heartbeat);
       }
     } catch {
       // If the checkpoint table is unavailable, treat the indexer as stale

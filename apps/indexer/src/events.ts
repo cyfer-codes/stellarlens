@@ -28,6 +28,70 @@ async function getStoredCursor(db: Database): Promise<string | undefined> {
   return row?.cursor;
 }
 
+// Soroban RPC limits for getEvents filters. We chunk the registered contract
+// ids so a single request never exceeds these bounds.
+export const MAX_FILTERS_PER_REQUEST = 5;
+export const MAX_CONTRACT_IDS_PER_FILTER = 100;
+
+export interface ContractFilterChunk {
+  filters: { type: "contract"; contractIds: string[] }[];
+}
+
+/**
+ * Split the registered contract addresses into getEvents request chunks.
+ *
+ * Each request carries up to MAX_FILTERS_PER_REQUEST filters, and each filter
+ * carries up to MAX_CONTRACT_IDS_PER_FILTER contract ids.
+ */
+export function chunkContractIds(contractAddresses: string[]): ContractFilterChunk[] {
+  const chunks: ContractFilterChunk[] = [];
+  const idsPerRequest = MAX_FILTERS_PER_REQUEST * MAX_CONTRACT_IDS_PER_FILTER;
+
+  for (let i = 0; i < contractAddresses.length; i += idsPerRequest) {
+    const requestIds = contractAddresses.slice(i, i + idsPerRequest);
+    const filters: ContractFilterChunk["filters"] = [];
+    for (let j = 0; j < requestIds.length; j += MAX_CONTRACT_IDS_PER_FILTER) {
+      filters.push({
+        type: "contract",
+        contractIds: requestIds.slice(j, j + MAX_CONTRACT_IDS_PER_FILTER)
+      });
+    }
+    chunks.push({ filters });
+  }
+
+  return chunks;
+}
+
+async function recordHeartbeat(
+  db: Database,
+  values: {
+    lastPolledAt: Date;
+    lastLedger: number;
+    latestNetworkLedger: number;
+    lastError: string | null;
+  }
+): Promise<void> {
+  await db
+    .insert(indexerCheckpoints)
+    .values({
+      network: STELLAR_NETWORK,
+      lastPolledAt: values.lastPolledAt,
+      lastLedger: values.lastLedger,
+      latestNetworkLedger: values.latestNetworkLedger,
+      lastError: values.lastError
+    })
+    .onConflictDoUpdate({
+      target: indexerCheckpoints.network,
+      set: {
+        lastPolledAt: values.lastPolledAt,
+        lastLedger: values.lastLedger,
+        latestNetworkLedger: values.latestNetworkLedger,
+        lastError: values.lastError,
+        updatedAt: new Date()
+      }
+    });
+}
+
 type RawEvent = Awaited<ReturnType<rpc.Server["_getEvents"]>>["events"][number];
 
 export interface DecodeError {
@@ -145,6 +209,50 @@ export async function processEventsBatch(
 
   const cursor = await getStoredCursor(db);
 
+  // Cursor strategy: we keep a single stored cursor per network and only
+  // advance it after every chunk for this cycle succeeds. When the registered
+  // contract set changes, the next cycle re-requests from the stored cursor
+  // with the new contractIds, so no events are lost (at worst some events are
+  // re-fetched and deduped by the existing unique constraints).
+  const contractAddresses = [...registeredContracts.keys()];
+  const chunks = chunkContractIds(contractAddresses);
+
+  const startLedger = cursor
+    ? undefined
+    : (await withRetry("getLatestLedger", () => server._getLatestLedger())).sequence;
+
+  const responses: Awaited<ReturnType<rpc.Server["_getEvents"]>>[] = [];
+  try {
+    for (const chunk of chunks) {
+      const request = cursor
+        ? { filters: chunk.filters, cursor, limit: EVENTS_BATCH_LIMIT }
+        : { filters: chunk.filters, startLedger: startLedger!, limit: EVENTS_BATCH_LIMIT };
+      responses.push(await withRetry("getEvents", () => server._getEvents(request)));
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await recordHeartbeat(db, {
+      lastPolledAt: new Date(),
+      lastLedger: 0,
+      latestNetworkLedger: 0,
+      lastError: message
+    });
+    throw error;
+  }
+
+  const response = {
+    events: responses.flatMap((r) => r.events),
+    cursor: responses.length > 0 ? responses[responses.length - 1].cursor : cursor ?? "",
+    latestLedger: responses.reduce((max, r) => Math.max(max, r.latestLedger), 0)
+  };
+
+  const highestEventLedger = response.events.reduce((max, e) => Math.max(max, e.ledger), 0);
+
+  await recordHeartbeat(db, {
+    lastPolledAt: new Date(),
+    lastLedger: highestEventLedger > 0 ? highestEventLedger : response.latestLedger,
+    latestNetworkLedger: response.latestLedger,
+    lastError: null
   const request = cursor
     ? { filters: [{ type: "contract" as const }], cursor, limit: EVENTS_BATCH_LIMIT }
     : {
