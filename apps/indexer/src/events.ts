@@ -9,9 +9,16 @@ import {
 import { EVENTS_BATCH_LIMIT, STELLAR_NETWORK } from "./config.js";
 import { tryDecodeScVal } from "@stellarlens/decode";
 import { loadRegisteredContracts } from "./registry.js";
-import { detectTransfer } from "./transfers.js";
+import { detectTokenMovement } from "./transfers.js";
 import { withRetry } from "./retry.js";
 import { deliverWebhooksForEvent, type WebhookEventPayload } from "./webhooks.js";
+import {
+  eventsIndexedTotal,
+  indexerLagLedgers,
+  pollDurationSeconds,
+  rpcRetriesTotal
+} from "./metrics.js";
+import { logger } from "./logger.js";
 
 async function getStoredCursor(db: Database): Promise<string | undefined> {
   const [row] = await db
@@ -87,18 +94,31 @@ async function recordHeartbeat(
 
 type RawEvent = Awaited<ReturnType<rpc.Server["_getEvents"]>>["events"][number];
 
-interface DecodeError {
+export interface DecodeError {
   field: string;
   error: string;
 }
 
-interface DecodedEventPayload {
+export interface DecodedEventPayload {
   decodedTopic: unknown[];
   decodedValue: unknown;
   decodeErrors: DecodeError[];
 }
 
-function decodeEventPayload(event: RawEvent): DecodedEventPayload {
+/**
+ * Minimal shape needed to (re-)decode an event payload. Both live RPC events
+ * and rows read back from the database (raw XDR) satisfy this.
+ */
+export interface DecodableEvent {
+  id: string;
+  contractId: string;
+  ledger: number;
+  txHash: string;
+  topic: string[];
+  value: string;
+}
+
+export function decodeEventPayload(event: DecodableEvent): DecodedEventPayload {
   const decodeErrors: DecodeError[] = [];
 
   const decodeField = (field: string, base64Xdr: string): unknown => {
@@ -114,13 +134,56 @@ function decodeEventPayload(event: RawEvent): DecodedEventPayload {
   const decodedValue = decodeField("value", event.value);
 
   if (decodeErrors.length > 0) {
-    const details = decodeErrors.map(({ field, error }) => `${field}: ${error}`).join("; ");
-    console.error(
-      `failed to decode event ${event.id} (contract=${event.contractId}, ledger=${event.ledger}, tx=${event.txHash}): ${details}`
-    );
+    logger.warn("failed to decode event", {
+      eventId: event.id,
+      contractAddress: event.contractId,
+      ledger: event.ledger,
+      txHash: event.txHash,
+      decodeErrors
+    });
   }
 
   return { decodedTopic, decodedValue, decodeErrors };
+}
+
+/**
+ * Re-detect a transfer from already-decoded topic/value and upsert it
+ * idempotently. Shared by the live indexer and the `redecode` job so both
+ * paths store the same `asset` value (SAC `topic[3]` string when present,
+ * otherwise the emitting contract address).
+ */
+export async function upsertDetectedTransfer(
+  tx: Pick<Database, "insert">,
+  params: {
+    contractId: string;
+    contractAddress: string;
+    decodedTopic: unknown[];
+    decodedValue: unknown;
+    txHash: string;
+    ledger: number;
+    rpcEventId: string;
+  }
+): Promise<boolean> {
+  const transfer = detectTransfer(params.decodedTopic, params.decodedValue);
+  if (!transfer) {
+    return false;
+  }
+
+  await tx
+    .insert(tokenTransfers)
+    .values({
+      contractId: params.contractId,
+      from: transfer.from,
+      to: transfer.to,
+      amount: transfer.amount,
+      asset: transfer.asset ?? params.contractAddress,
+      txHash: params.txHash,
+      ledger: params.ledger,
+      rpcEventId: params.rpcEventId
+    })
+    .onConflictDoNothing();
+
+  return true;
 }
 
 export interface ProcessEventsBatchResult {
@@ -132,8 +195,15 @@ export async function processEventsBatch(
   db: Database,
   server: rpc.Server
 ): Promise<ProcessEventsBatchResult> {
+  const cycleStart = process.hrtime.bigint();
+  const endCycle = () => {
+    const elapsedSeconds = Number(process.hrtime.bigint() - cycleStart) / 1e9;
+    pollDurationSeconds.observe(elapsedSeconds);
+  };
+
   const registeredContracts = await loadRegisteredContracts(db, STELLAR_NETWORK);
   if (registeredContracts.size === 0) {
+    endCycle();
     return { indexedCount: 0, cursor: null };
   }
 
@@ -183,6 +253,18 @@ export async function processEventsBatch(
     lastLedger: highestEventLedger > 0 ? highestEventLedger : response.latestLedger,
     latestNetworkLedger: response.latestLedger,
     lastError: null
+  const request = cursor
+    ? { filters: [{ type: "contract" as const }], cursor, limit: EVENTS_BATCH_LIMIT }
+    : {
+      filters: [{ type: "contract" as const }],
+      startLedger: (await withRetry("getLatestLedger", () => server._getLatestLedger(), {
+        onRetry: () => rpcRetriesTotal.inc({ method: "getLatestLedger" })
+      })).sequence,
+      limit: EVENTS_BATCH_LIMIT
+    };
+
+  const response = await withRetry("getEvents", () => server._getEvents(request), {
+    onRetry: () => rpcRetriesTotal.inc({ method: "getEvents" })
   });
 
   let indexedCount = 0;
@@ -238,15 +320,16 @@ export async function processEventsBatch(
         value: decodedValue
       });
 
-      const transfer = detectTransfer(decodedTopic, decodedValue);
-      if (transfer) {
+      const movement = detectTokenMovement(decodedTopic, decodedValue);
+      if (movement) {
         await tx
           .insert(tokenTransfers)
           .values({
             contractId,
-            from: transfer.from,
-            to: transfer.to,
-            amount: transfer.amount,
+            kind: movement.kind,
+            from: movement.from,
+            to: movement.to,
+            amount: movement.amount,
             asset: event.contractId,
             txHash: event.txHash,
             ledger: event.ledger,
@@ -254,6 +337,15 @@ export async function processEventsBatch(
           })
           .onConflictDoNothing();
       }
+      await upsertDetectedTransfer(tx, {
+        contractId,
+        contractAddress: event.contractId,
+        decodedTopic,
+        decodedValue,
+        txHash: event.txHash,
+        ledger: event.ledger,
+        rpcEventId: event.id
+      });
     }
 
     await tx
@@ -268,6 +360,10 @@ export async function processEventsBatch(
   for (const payload of webhookPayloads) {
     await deliverWebhooksForEvent(db, payload);
   }
+
+  eventsIndexedTotal.inc(indexedCount);
+  indexerLagLedgers.set(Math.max(0, response.latestLedger - response.events.at(-1)!.ledger));
+  endCycle();
 
   return { indexedCount, cursor: response.cursor };
 }

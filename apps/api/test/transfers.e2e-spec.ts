@@ -311,4 +311,159 @@ describe("transfers (e2e)", () => {
       expect(response.status).toBe(200);
     }
   });
+
+  it("reports minted and burned totals per kind in stats", async () => {
+    const contractId = await registerContract(apiKey);
+
+    await getTestDb()
+      .insert(tokenTransfers)
+      .values([
+        // Rows without an explicit kind default to "transfer".
+        {
+          contractId,
+          from: ACCOUNT_A,
+          to: ACCOUNT_B,
+          amount: "10",
+          asset: "USDC",
+          txHash: "1".repeat(64),
+          ledger: 5000,
+          closedAt: T0
+        },
+        {
+          contractId,
+          from: ACCOUNT_B,
+          to: ACCOUNT_C,
+          amount: "5",
+          asset: "USDC",
+          txHash: "2".repeat(64),
+          ledger: 5001,
+          closedAt: T0
+        },
+        {
+          contractId,
+          from: null,
+          to: ACCOUNT_A,
+          amount: "100",
+          asset: "USDC",
+          kind: "mint",
+          txHash: "3".repeat(64),
+          ledger: 5002,
+          closedAt: T0
+        },
+        {
+          contractId,
+          from: null,
+          to: ACCOUNT_B,
+          amount: "40",
+          asset: "USDC",
+          kind: "mint",
+          txHash: "4".repeat(64),
+          ledger: 5003,
+          closedAt: T0
+        },
+        {
+          contractId,
+          from: ACCOUNT_A,
+          to: null,
+          amount: "25",
+          asset: "USDC",
+          kind: "burn",
+          txHash: "5".repeat(64),
+          ledger: 5004,
+          closedAt: T0
+        },
+        {
+          contractId,
+          from: ACCOUNT_B,
+          to: null,
+          amount: "15",
+          asset: "USDC",
+          kind: "burn",
+          txHash: "6".repeat(64),
+          ledger: 5005,
+          closedAt: T0
+        },
+        {
+          contractId,
+          from: ACCOUNT_C,
+          to: null,
+          amount: "7",
+          asset: "USDC",
+          kind: "clawback",
+          txHash: "7".repeat(64),
+          ledger: 5006,
+          closedAt: T0
+        }
+      ]);
+
+    const response = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/stats`)
+      .set("x-api-key", apiKey);
+
+    expect(response.status).toBe(200);
+    expect(response.body.mintedTotal).toBe("140");
+    expect(response.body.burnedTotal).toBe("40");
+  });
+
+  it("excludes mint/burn/clawback rows from transfer volume stats", async () => {
+    const contractId = await registerContract(apiKey);
+
+    await getTestDb()
+      .insert(tokenTransfers)
+      .values([
+        {
+          contractId,
+          from: ACCOUNT_A,
+          to: ACCOUNT_B,
+          amount: "10",
+          asset: "USDC",
+          txHash: "1".repeat(64),
+          ledger: 6000,
+          closedAt: T0
+        },
+        {
+          contractId,
+          from: null,
+          to: ACCOUNT_A,
+          amount: "100",
+          asset: "USDC",
+          kind: "mint",
+          txHash: "2".repeat(64),
+          ledger: 6001,
+          closedAt: T0
+        },
+        {
+          contractId,
+          from: ACCOUNT_A,
+          to: null,
+          amount: "25",
+          asset: "USDC",
+          kind: "burn",
+          txHash: "3".repeat(64),
+          ledger: 6002,
+          closedAt: T0
+        },
+        {
+          contractId,
+          from: ACCOUNT_C,
+          to: null,
+          amount: "7",
+          asset: "USDC",
+          kind: "clawback",
+          txHash: "4".repeat(64),
+          ledger: 6003,
+          closedAt: T0
+        }
+      ]);
+
+    const response = await request(getApp().getHttpServer())
+      .get(`/contracts/${contractId}/stats`)
+      .set("x-api-key", apiKey);
+
+    expect(response.status).toBe(200);
+    expect(response.body.mintedTotal).toBe("100");
+    expect(response.body.burnedTotal).toBe("32");
+    expect(response.body.totalVolume).toBe("10");
+    expect(response.body.transferCount).toBe(1);
+  });
 });

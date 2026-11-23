@@ -44,7 +44,52 @@ function nonNegativeIntegerEnv(name: string, defaultValue: number): number {
   return parsed;
 }
 
-export const SOROBAN_RPC_URL = requireEnv("SOROBAN_RPC_URL");
+function parseRpcUrls(name: string): string[] {
+  const raw = requireEnv(name);
+  const urls = raw
+    .split(",")
+    .map((url) => url.trim())
+    .filter((url) => url.length > 0);
+
+  if (urls.length === 0) {
+    throw new Error(`${name} must contain at least one non-empty URL; received "${raw}"`);
+  }
+  return urls;
+}
+
+/** Ordered list of Soroban RPC endpoints; the first entry is the primary. */
+export const SOROBAN_RPC_URLS = parseRpcUrls("SOROBAN_RPC_URL");
+/** Primary Soroban RPC endpoint (first entry of `SOROBAN_RPC_URLS`), kept for backwards compatibility. */
+export const SOROBAN_RPC_URL = SOROBAN_RPC_URLS[0]!;
+/** Consecutive failures against the active endpoint before rotating to the next one. */
+export const RPC_FAILOVER_THRESHOLD = positiveIntegerEnv("RPC_FAILOVER_THRESHOLD", 3);
+/** How often to probe the primary endpoint while running on a fallback. */
+export const RPC_PRIMARY_PROBE_INTERVAL_MS = positiveIntegerEnv(
+  "RPC_PRIMARY_PROBE_INTERVAL_MS",
+  60000
+);
+
+export const LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
+export type LogLevel = (typeof LOG_LEVELS)[number];
+
+function isLogLevel(value: string): value is LogLevel {
+  return LOG_LEVELS.some((level) => level === value);
+}
+
+function logLevelEnv(name: string, defaultValue: LogLevel): LogLevel {
+  const value = process.env[name];
+  if (value === undefined || value.trim() === "") {
+    return defaultValue;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (!isLogLevel(normalized)) {
+    throw new Error(`${name} must be one of: ${LOG_LEVELS.join(", ")}; received "${value}"`);
+  }
+  return normalized;
+}
+
+export const LOG_LEVEL = logLevelEnv("LOG_LEVEL", "info");
 
 const stellarNetwork = requireEnv("STELLAR_NETWORK");
 function isStellarNetwork(value: string): value is StellarNetwork {

@@ -153,6 +153,68 @@ describe("indexer configuration", () => {
     vi.stubEnv("REGISTRY_SECRET", "test-registry-secret");
     vi.stubEnv("STELLAR_NETWORK", "testnet");
     vi.stubEnv("REGISTRY_PORT", "4000");
+  it("parses a comma-separated SOROBAN_RPC_URL into an ordered list", async () => {
+    vi.stubEnv(
+      "SOROBAN_RPC_URL",
+      "https://primary.example.com, https://secondary.example.com ,https://tertiary.example.com"
+    );
+    vi.stubEnv("REGISTRY_SECRET", "test-registry-secret");
+    vi.stubEnv("STELLAR_NETWORK", "testnet");
+    vi.resetModules();
+
+    const config = await import("../src/config.js");
+
+    expect(config.SOROBAN_RPC_URLS).toEqual([
+      "https://primary.example.com",
+      "https://secondary.example.com",
+      "https://tertiary.example.com",
+    ]);
+    expect(config.SOROBAN_RPC_URL).toBe("https://primary.example.com");
+  });
+
+  it("treats a single SOROBAN_RPC_URL as a one-element list", async () => {
+    vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+    vi.stubEnv("REGISTRY_SECRET", "test-registry-secret");
+    vi.stubEnv("STELLAR_NETWORK", "testnet");
+    vi.resetModules();
+
+    const config = await import("../src/config.js");
+
+    expect(config.SOROBAN_RPC_URLS).toEqual(["https://rpc.example.com"]);
+    expect(config.SOROBAN_RPC_URL).toBe("https://rpc.example.com");
+  });
+
+  it("rejects an empty SOROBAN_RPC_URL list", async () => {
+    vi.stubEnv("SOROBAN_RPC_URL", " , ,");
+    vi.stubEnv("REGISTRY_SECRET", "test-registry-secret");
+    vi.stubEnv("STELLAR_NETWORK", "testnet");
+    vi.resetModules();
+
+    await expect(import("../src/config.js")).rejects.toThrow(
+      "SOROBAN_RPC_URL must contain at least one endpoint"
+    );
+  });
+
+  it("defaults RPC failover tuning when unset", async () => {
+    vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+    vi.stubEnv("REGISTRY_SECRET", "test-registry-secret");
+    vi.stubEnv("STELLAR_NETWORK", "testnet");
+    vi.stubEnv("RPC_FAILOVER_THRESHOLD", undefined);
+    vi.stubEnv("RPC_PRIMARY_PROBE_INTERVAL_MS", undefined);
+    vi.resetModules();
+
+    const config = await import("../src/config.js");
+
+    expect(config.RPC_FAILOVER_THRESHOLD).toBe(3);
+    expect(config.RPC_PRIMARY_PROBE_INTERVAL_MS).toBe(60000);
+  });
+
+  it("reads RPC failover tuning from the environment", async () => {
+    vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+    vi.stubEnv("REGISTRY_SECRET", "test-registry-secret");
+    vi.stubEnv("STELLAR_NETWORK", "testnet");
+    vi.stubEnv("RPC_FAILOVER_THRESHOLD", "5");
+    vi.stubEnv("RPC_PRIMARY_PROBE_INTERVAL_MS", "15000");
     vi.resetModules();
 
     const config = await import("../src/config.js");
@@ -181,6 +243,67 @@ describe("indexer configuration", () => {
 
     await expect(import("../src/config.js")).rejects.toThrow(
       'REGISTRY_PORT must be at most 65535; received "70000"'
+    expect(config.RPC_FAILOVER_THRESHOLD).toBe(5);
+    expect(config.RPC_PRIMARY_PROBE_INTERVAL_MS).toBe(15000);
+  });
+
+  it("rejects a non-positive RPC_FAILOVER_THRESHOLD", async () => {
+    vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+    vi.stubEnv("REGISTRY_SECRET", "test-registry-secret");
+    vi.stubEnv("STELLAR_NETWORK", "testnet");
+    vi.stubEnv("RPC_FAILOVER_THRESHOLD", "0");
+    vi.resetModules();
+
+    await expect(import("../src/config.js")).rejects.toThrow(
+      'RPC_FAILOVER_THRESHOLD must be a positive integer; received "0"'
+    );
+  });
+
+  it("rejects a non-positive RPC_PRIMARY_PROBE_INTERVAL_MS", async () => {
+    vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+    vi.stubEnv("REGISTRY_SECRET", "test-registry-secret");
+    vi.stubEnv("STELLAR_NETWORK", "testnet");
+    vi.stubEnv("RPC_PRIMARY_PROBE_INTERVAL_MS", "-5");
+    vi.resetModules();
+
+    await expect(import("../src/config.js")).rejects.toThrow(
+      'RPC_PRIMARY_PROBE_INTERVAL_MS must be a positive integer; received "-5"'
+    );
+  });
+
+  it("defaults LOG_LEVEL to info", async () => {
+    vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+    vi.stubEnv("REGISTRY_SECRET", "test-registry-secret");
+    vi.stubEnv("STELLAR_NETWORK", "testnet");
+    vi.stubEnv("LOG_LEVEL", undefined);
+    vi.resetModules();
+
+    const config = await import("../src/config.js");
+
+    expect(config.LOG_LEVEL).toBe("info");
+  });
+
+  it("reads LOG_LEVEL from the environment", async () => {
+    vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+    vi.stubEnv("REGISTRY_SECRET", "test-registry-secret");
+    vi.stubEnv("STELLAR_NETWORK", "testnet");
+    vi.stubEnv("LOG_LEVEL", "debug");
+    vi.resetModules();
+
+    const config = await import("../src/config.js");
+
+    expect(config.LOG_LEVEL).toBe("debug");
+  });
+
+  it("rejects an invalid LOG_LEVEL", async () => {
+    vi.stubEnv("SOROBAN_RPC_URL", "https://rpc.example.com");
+    vi.stubEnv("REGISTRY_SECRET", "test-registry-secret");
+    vi.stubEnv("STELLAR_NETWORK", "testnet");
+    vi.stubEnv("LOG_LEVEL", "verbose");
+    vi.resetModules();
+
+    await expect(import("../src/config.js")).rejects.toThrow(
+      'LOG_LEVEL must be one of: debug, info, warn, error; received "verbose"'
     );
   });
 });

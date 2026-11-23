@@ -1,6 +1,7 @@
 import { http, HttpResponse } from "msw";
 
 export const TEST_RPC_URL = "http://localhost:9999/soroban/rpc";
+export const TEST_RPC_URL_SECONDARY = "http://localhost:9998/soroban/rpc";
 
 interface JsonRpcRequestBody {
   jsonrpc: string;
@@ -28,6 +29,9 @@ export function mockJsonRpc(methodHandlers: MethodHandlers): MockJsonRpcResult {
   const calls: RecordedJsonRpcCall[] = [];
 
   const handler = http.post(TEST_RPC_URL, async ({ request }) => {
+/** Mocks a specific JSON-RPC endpoint, dispatching by request body `method`. */
+export function mockJsonRpcAt(url: string, methodHandlers: MethodHandlers) {
+  return http.post(url, async ({ request }) => {
     const body = (await request.json()) as JsonRpcRequestBody;
 
     calls.push({ method: body.method, params: body.params });
@@ -54,4 +58,9 @@ export function mockJsonRpc(methodHandlers: MethodHandlers): MockJsonRpcResult {
     getEventsCalls: () =>
       calls.filter((call) => call.method === "getEvents").map((call) => call.params)
   };
+}
+
+/** Mocks the single JSON-RPC endpoint, dispatching by request body `method`. */
+export function mockJsonRpc(methodHandlers: MethodHandlers) {
+  return mockJsonRpcAt(TEST_RPC_URL, methodHandlers);
 }

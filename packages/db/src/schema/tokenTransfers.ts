@@ -11,6 +11,8 @@ export const tokenTransfers = pgTable(
     from: text("from").notNull(),
     to: text("to").notNull(),
     amount: numeric("amount").notNull(),
+    // SEP-41 movement kind: transfer, mint, burn or clawback. Existing rows default to transfer.
+    kind: text("kind").$type<"transfer" | "mint" | "burn" | "clawback">().notNull().default("transfer"),
     asset: text("asset").notNull(),
     txHash: text("tx_hash").notNull(),
     ledger: bigint("ledger", { mode: "number" }).notNull(),
@@ -33,6 +35,8 @@ export const tokenTransfers = pgTable(
     index("token_transfers_contract_from_id_idx").on(table.contractId, table.from, table.id),
     index("token_transfers_contract_to_id_idx").on(table.contractId, table.to, table.id),
     index("token_transfers_contract_asset_id_idx").on(table.contractId, table.asset, table.id),
+    // Backs the contract-scoped stats aggregation grouped by movement kind.
+    index("token_transfers_contract_kind_idx").on(table.contractId, table.kind),
     // Standalone indexes backing the cross-contract account history endpoint.
     index("token_transfers_from_idx").on(table.from),
     index("token_transfers_to_idx").on(table.to),
