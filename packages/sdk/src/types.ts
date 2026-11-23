@@ -23,10 +23,24 @@ export type ListContractsParams = QueryOf<"listContracts">;
 
 export type DecodedEventData = Schemas["DecodedEventData"];
 export type EventRecord = Schemas["EventRecord"];
-export type ListEventsParams = QueryOf<"listEvents">;
+export type ListEventsParams = QueryOf<"listEvents"> & {
+  /** Only return events whose topics match, in order. Serialized as repeated `topics` query params. */
+  topics?: string[];
+};
 
 export type TransferRecord = Schemas["TransferRecord"];
-export type ListTransfersParams = QueryOf<"listTransfers">;
+export type ListTransfersParams = QueryOf<"listTransfers"> & {
+  /** Only return transfers of this asset (contract id of the token). */
+  asset?: string;
+  /** Only return transfers sent from this address. */
+  from?: string;
+  /** Only return transfers sent to this address. */
+  to?: string;
+  /** Only return transfers of at least this amount. A string to stay i128-safe. */
+  minAmount?: string;
+  /** Only return transfers of at most this amount. A string to stay i128-safe. */
+  maxAmount?: string;
+};
 
 export type GetStatsParams = QueryOf<"getStats">;
 export type ContractStats = Schemas["ContractStats"];

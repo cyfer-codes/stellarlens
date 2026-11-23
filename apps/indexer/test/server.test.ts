@@ -6,6 +6,8 @@ import { REGISTRY_SECRET } from "../src/config.js";
 import { MAX_REGISTRATION_BODY_BYTES, startRegistryServer } from "../src/server.js";
 import { ContractAlreadyRegisteredError, registerContract } from "../src/registry.js";
 import { getTestDb, mswServer } from "./setup.js";
+import { runIndexerCycle } from "../src/events.js";
+import { metricsRegistry } from "../src/metrics.js";
 
 // The server tests cover authentication and the body guard, not database persistence.
 vi.mock("../src/registry.js", async (importOriginal) => {
@@ -139,5 +141,20 @@ describe("registry server", () => {
 
     expect(response.status).toBe(413);
     expect(await response.json()).toEqual({ error: "request body too large" });
+  });
+
+  it("serves Prometheus metrics after a mocked indexing cycle", async () => {
+    metricsRegistry.reset();
+    await runIndexerCycle(getTestDb());
+
+    const response = await fetch(`${await listen()}/metrics`);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/plain");
+    const body = await response.text();
+    expect(body).toContain("stellarlens_indexer_events_indexed_total");
+    expect(body).toContain("stellarlens_indexer_poll_duration_seconds");
+    expect(body).toContain("stellarlens_indexer_webhook_deliveries_total");
+    expect(body).toContain("stellarlens_indexer_lag_ledgers");
   });
 });

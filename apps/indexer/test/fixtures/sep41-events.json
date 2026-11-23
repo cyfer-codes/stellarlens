@@ -225,6 +225,25 @@
       }
     },
     {
+      "name": "muxed burn ({ amount, from_muxed_id })",
+      "topic": [
+        "burn",
+        "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      ],
+      "value": {
+        "amount": "30",
+        "from_muxed_id": "7"
+      },
+      "transfer": null,
+      "movement": {
+        "kind": "burn",
+        "from": "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "to": null,
+        "amount": "30",
+        "toMuxedId": null
+      }
+    },
+    {
       "name": "SAC burn with asset topic",
       "topic": [
         "burn",
@@ -277,6 +296,26 @@
       }
     },
     {
+      "name": "muxed clawback ({ amount, from_muxed_id })",
+      "topic": [
+        "clawback",
+        "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "USDC:GISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      ],
+      "value": {
+        "amount": "12",
+        "from_muxed_id": "3"
+      },
+      "transfer": null,
+      "movement": {
+        "kind": "clawback",
+        "from": "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "to": null,
+        "amount": "12",
+        "toMuxedId": null
+      }
+    },
+    {
       "name": "mint with no recipient",
       "topic": [
         "mint"
@@ -292,6 +331,35 @@
         "GFROMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
       ],
       "value": null,
+      "transfer": null,
+      "movement": null
+    },
+    {
+      "name": "burn with non-string from",
+      "topic": [
+        "burn",
+        42
+      ],
+      "value": "30",
+      "transfer": null,
+      "movement": null
+    },
+    {
+      "name": "clawback with too few topics",
+      "topic": [
+        "clawback"
+      ],
+      "value": "12",
+      "transfer": null,
+      "movement": null
+    },
+    {
+      "name": "mint with non-string to",
+      "topic": [
+        "mint",
+        42
+      ],
+      "value": "700",
       "transfer": null,
       "movement": null
     }

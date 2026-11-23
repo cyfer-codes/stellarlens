@@ -15,7 +15,9 @@ import {
   WEBHOOK_RETRY_MAX_DELAY_MS,
   WEBHOOK_TIMEOUT_MS
 } from "./config.js";
+import { logger } from "./logger.js";
 import { withRetry } from "./retry.js";
+import { webhookDeliveriesTotal } from "./metrics.js";
 import { WEBHOOK_SIGNATURE_HEADER, signWebhookPayload } from "./webhook-signature.js";
 
 export interface WebhookEventPayload {
@@ -219,7 +221,7 @@ async function postWebhook(
   url: string,
   body: string,
   signature: string,
-  deliveryHeaders: Record<string, string>
+  deliveryHeaders: Record<string, string>,
   timeoutMs: number = WEBHOOK_TIMEOUT_MS
 ): Promise<void> {
   const controller = new AbortController();
@@ -231,7 +233,6 @@ async function postWebhook(
       headers: {
         "Content-Type": "application/json",
         ...deliveryHeaders,
-        "X-Webhook-Signature": signature
         [WEBHOOK_SIGNATURE_HEADER]: signature
       },
       body,
@@ -370,11 +371,17 @@ function webhookRetryDelayMs(err: unknown): number | undefined {
 async function pauseWebhook(db: Database, webhook: { id: number; url: string }): Promise<void> {
   try {
     await db.update(webhooksTable).set({ active: false }).where(eq(webhooksTable.id, webhook.id));
-    console.warn(
-      `webhook ${webhook.id} for ${webhook.url} paused (active = false) after a 410 Gone response`
-    );
+    logger.warn("webhook paused after 410 Gone response", {
+      webhookId: webhook.id,
+      url: webhook.url,
+      active: false
+    });
   } catch (err) {
-    console.error(`webhook ${webhook.id} could not be paused after a 410 Gone response:`, err);
+    logger.error("webhook could not be paused after 410 Gone response", {
+      webhookId: webhook.id,
+      url: webhook.url,
+      error: errorMessage(err)
+    });
   }
 }
 
@@ -397,7 +404,14 @@ async function recordDelivery(
   try {
     await db.insert(webhookDeliveriesTable).values(outcome);
   } catch (err) {
-    console.error(`webhook ${outcome.webhookId} delivery outcome could not be persisted:`, err);
+    logger.error("webhook delivery outcome could not be persisted", {
+      webhookId: outcome.webhookId,
+      eventId: outcome.eventId,
+      idempotencyKey: outcome.idempotencyKey,
+      status: outcome.status,
+      attempts: outcome.attempts,
+      error: errorMessage(err)
+    });
   }
 }
 
@@ -418,10 +432,13 @@ export async function deliverWebhooksForEvent(
         )
     ).filter((webhook) => matchesEventTypes(webhook, payload));
   } catch (err) {
-    console.error(
-      `webhook recipients could not be loaded for contract ${payload.contractId}:`,
-      err
-    );
+    logger.error("webhook recipients could not be loaded", {
+      contractId: payload.contractId,
+      contractAddress: payload.contractAddress,
+      eventId: payload.eventId,
+      ledger: payload.ledger,
+      error: errorMessage(err)
+    });
     return;
   }
 
@@ -459,14 +476,12 @@ export async function deliverWebhooksForEvent(
               maxRetries: WEBHOOK_MAX_RETRIES,
               baseDelayMs: WEBHOOK_RETRY_BASE_DELAY_MS,
               maxDelayMs: WEBHOOK_RETRY_MAX_DELAY_MS,
-              shouldRetry: (err) =>
-                !(err instanceof NonPublicWebhookUrlError) &&
-                !(err instanceof WebhookRedirectError) &&
-                !isDnsResolutionFailure(err)
               shouldRetry: shouldRetryWebhookDelivery,
               retryDelayMs: webhookRetryDelayMs
             }
           );
+
+          webhookDeliveriesTotal.inc({ outcome: "success" });
 
           await recordDelivery(db, {
             webhookId: webhook.id,
@@ -478,16 +493,29 @@ export async function deliverWebhooksForEvent(
             deliveredAt: new Date()
           });
         } catch (err) {
+          webhookDeliveriesTotal.inc({ outcome: "failed" });
+
           const dnsFailure = isDnsResolutionFailure(err);
           const gone = err instanceof WebhookResponseError && err.status === 410;
 
-          console.error(
+          logger.error(
             dnsFailure
-              ? `webhook ${webhook.id} for contract ${contractAddress} endpoint ${webhook.url} is unreachable due to DNS resolution failure:`
+              ? "webhook endpoint is unreachable due to DNS resolution failure"
               : gone
-                ? `webhook ${webhook.id} for contract ${contractAddress} endpoint ${webhook.url} is permanently gone (410 Gone):`
-                : `webhook ${webhook.id} for contract ${contractAddress} delivery failed after retries:`,
-            err
+                ? "webhook endpoint is permanently gone (410 Gone)"
+                : "webhook delivery failed after retries",
+            {
+              webhookId: webhook.id,
+              contractId: payload.contractId,
+              contractAddress,
+              eventId: payload.eventId,
+              ledger: payload.ledger,
+              txHash: payload.txHash,
+              url: webhook.url,
+              deliveryId,
+              attempts,
+              error: errorMessage(err)
+            }
           );
 
           if (gone) {

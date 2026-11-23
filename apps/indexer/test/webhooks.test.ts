@@ -25,10 +25,10 @@ import {
   deliverWebhooksForEvent,
   ipIsPublic
 } from "../src/webhooks.js";
-import { assertPublicWebhookUrl, deliverWebhooksForEvent, parseRetryAfterMs } from "../src/webhooks.js";
 import { contractAddress } from "./addresses.js";
 import { mockJsonRpc, TEST_RPC_URL } from "./rpc-mocks.js";
 import { getTestDb, mswServer } from "./setup.js";
+import { captureLogs } from "./logger.js";
 
 const WEBHOOK_URL = "http://8.8.8.8/webhook-endpoint";
 
@@ -402,7 +402,7 @@ describe("webhook delivery", () => {
     });
     await registerWebhook(contract.id, "failed-secret");
 
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const logs = captureLogs();
     const webhookSpy = vi.fn(() => new HttpResponse(null, { status: 500 }));
 
     mswServer.use(
@@ -430,11 +430,18 @@ describe("webhook delivery", () => {
 
     expect(indexedCount).toBe(1);
     expect(webhookSpy).toHaveBeenCalledTimes(WEBHOOK_MAX_RETRIES + 1);
-    expect(consoleError).toHaveBeenCalledWith(
-      expect.stringContaining(contractAddress("CONTRACT_HOOK_DELIVERY_FAILED")),
-      expect.any(Error)
+
+    const failureLog = logs.find(
+      (entry) =>
+        entry.level === "error" &&
+        entry.contractAddress === contractAddress("CONTRACT_HOOK_DELIVERY_FAILED") &&
+        entry.ledger === 5205
     );
-    consoleError.mockRestore();
+    expect(failureLog).toBeDefined();
+    expect(failureLog?.webhookId).toBeTypeOf("number");
+    expect(failureLog?.msg).toContain("webhook delivery failed");
+    expect(failureLog?.error).toContain("status 500");
+    logs.restore();
 
     const [event] = await db.select().from(eventsTable);
     const [delivery] = await db.select().from(webhookDeliveries);
@@ -458,7 +465,7 @@ describe("webhook delivery", () => {
       .insert(webhooksTable)
       .values({ contractId: contract.id, url: privateUrl, secret: "private-secret", eventTypes: null });
 
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const logs = captureLogs();
     const webhookSpy = vi.fn(() => HttpResponse.json({ ok: true }));
     mswServer.use(http.post(privateUrl, webhookSpy));
     const [event] = await db
@@ -475,7 +482,17 @@ describe("webhook delivery", () => {
       topic: ["fee"],
       value: "-1"
     });
-    consoleError.mockRestore();
+
+    const failureLog = logs.find(
+      (entry) =>
+        entry.level === "error" &&
+        entry.contractAddress === contractAddress("CONTRACT_HOOK_PRIVATE") &&
+        entry.ledger === 1
+    );
+    expect(failureLog).toBeDefined();
+    expect(failureLog?.webhookId).toBeTypeOf("number");
+    expect(failureLog?.error).toContain("non-public IP address");
+    logs.restore();
 
     expect(webhookSpy).not.toHaveBeenCalled();
     const [delivery] = await db.select().from(webhookDeliveries);
@@ -493,7 +510,7 @@ describe("webhook delivery", () => {
     await registerWebhook(contract.id, "redirect-secret");
     const internalUrl = "http://169.254.169.254/latest/meta-data";
 
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const logs = captureLogs();
     const webhookSpy = vi.fn(
       () => new HttpResponse(null, { status: 302, headers: { Location: internalUrl } })
     );
@@ -513,7 +530,17 @@ describe("webhook delivery", () => {
       topic: ["fee"],
       value: "-1"
     });
-    consoleError.mockRestore();
+
+    const failureLog = logs.find(
+      (entry) =>
+        entry.level === "error" &&
+        entry.contractAddress === contractAddress("CONTRACT_HOOK_REDIRECT") &&
+        entry.ledger === 1
+    );
+    expect(failureLog).toBeDefined();
+    expect(failureLog?.webhookId).toBeTypeOf("number");
+    expect(failureLog?.error).toContain("redirect status 302");
+    logs.restore();
 
     expect(webhookSpy).toHaveBeenCalledTimes(1);
     expect(internalSpy).not.toHaveBeenCalled();
@@ -525,7 +552,7 @@ describe("webhook delivery", () => {
   });
 
   it("does not throw when persisting a delivery outcome fails", async () => {
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const logs = captureLogs();
     const failingDb = {
       select: () => ({
         from: () => ({
@@ -562,11 +589,16 @@ describe("webhook delivery", () => {
       })
     ).resolves.toBeUndefined();
 
-    expect(consoleError).toHaveBeenCalledWith(
-      expect.stringContaining("delivery outcome could not be persisted"),
-      expect.any(Error)
+    const persistLog = logs.find(
+      (entry) =>
+        entry.level === "error" &&
+        entry.contractAddress === "CONTRACT_DELIVERY_LOG" &&
+        entry.ledger === 1
     );
-    consoleError.mockRestore();
+    expect(persistLog).toBeDefined();
+    expect(persistLog?.msg).toContain("delivery outcome could not be persisted");
+    expect(persistLog?.error).toContain("database unavailable");
+    logs.restore();
   });
 
   it("retries a failing webhook before giving up, without failing the indexing batch", async () => {
@@ -629,7 +661,7 @@ describe("webhook delivery", () => {
       .values({ contractId: contract.id, ledger: 1, txHash: "5".repeat(64), topic: "[]" })
       .returning({ id: eventsTable.id });
 
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const logs = captureLogs();
     const received: Array<{ id: string | null; event: string | null; attempt: string | null }> = [];
     mswServer.use(
       http.post(WEBHOOK_URL, ({ request }) => {
@@ -653,7 +685,17 @@ describe("webhook delivery", () => {
       topic: ["transfer", "GABC"],
       value: "1"
     });
-    consoleError.mockRestore();
+
+    const retryLog = logs.find(
+      (entry) =>
+        entry.level === "warn" &&
+        entry.webhookId === webhook.id &&
+        entry.contractAddress === contractAddress("CONTRACT_HOOK_IDEMPOTENCY") &&
+        entry.ledger === 1
+    );
+    expect(retryLog).toBeDefined();
+    expect(retryLog?.msg).toContain("webhook delivery attempt failed");
+    logs.restore();
 
     const expectedId = `wh_${webhook.id}_evt_${event.id}`;
     expect(received).toEqual([

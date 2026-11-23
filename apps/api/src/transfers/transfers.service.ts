@@ -97,7 +97,9 @@ export class TransfersService {
       .select({
         transferCount: sql<string>`count(*)`,
         uniqueSenders: sql<string>`count(distinct ${tokenTransfers.from})`,
-        uniqueReceivers: sql<string>`count(distinct ${tokenTransfers.to})`
+        uniqueReceivers: sql<string>`count(distinct ${tokenTransfers.to})`,
+        mintedTotal: sql<string>`coalesce(sum(${tokenTransfers.amount}) filter (where ${tokenTransfers.kind} = 'mint'), 0)`,
+        burnedTotal: sql<string>`coalesce(sum(${tokenTransfers.amount}) filter (where ${tokenTransfers.kind} = 'burn'), 0)`
       })
       .from(tokenTransfers)
       .where(where);
@@ -111,11 +113,28 @@ export class TransfersService {
       .where(where)
       .groupBy(tokenTransfers.asset);
 
+    const byKind = await this.db
+      .select({
+        kind: tokenTransfers.kind,
+        count: sql<string>`count(*)`,
+        volume: sql<string>`sum(${tokenTransfers.amount})`
+      })
+      .from(tokenTransfers)
+      .where(where)
+      .groupBy(tokenTransfers.kind);
+
     return {
       transferCount: Number(summary?.transferCount ?? 0),
       uniqueSenders: Number(summary?.uniqueSenders ?? 0),
       uniqueReceivers: Number(summary?.uniqueReceivers ?? 0),
-      volumeByAsset
+      mintedTotal: summary?.mintedTotal ?? "0",
+      burnedTotal: summary?.burnedTotal ?? "0",
+      volumeByAsset,
+      byKind: byKind.map((row) => ({
+        kind: row.kind,
+        count: Number(row.count),
+        volume: row.volume
+      }))
     };
   }
 

@@ -7,6 +7,7 @@ import { ContractsModule } from "./contracts/contracts.module";
 import { DatabaseModule } from "./database/database.module";
 import { EventsModule } from "./events/events.module";
 import { HealthController } from "./health.controller";
+import { IndexerController } from "./indexer.controller";
 import { TransactionsModule } from "./transactions/transactions.module";
 import { TransfersModule } from "./transfers/transfers.module";
 import { WebhooksModule } from "./webhooks/webhooks.module";
@@ -22,7 +23,7 @@ import { WebhooksModule } from "./webhooks/webhooks.module";
     TransactionsModule,
     WebhooksModule
   ],
-  controllers: [HealthController],
+  controllers: [HealthController, IndexerController],
   providers: [
     {
       provide: APP_FILTER,

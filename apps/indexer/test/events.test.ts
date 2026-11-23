@@ -1,13 +1,30 @@
 import { eq } from "drizzle-orm";
 import { nativeToScVal, rpc } from "@stellar/stellar-sdk";
 import { contracts, events as eventsTable, indexerCheckpoints, tokenTransfers } from "@stellarlens/db";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { STELLAR_NETWORK as NETWORK } from "../src/config.js";
 import { processEventsBatch } from "../src/events.js";
+import { redecodeEvents } from "../src/redecode.js";
 import { registerContract } from "../src/registry.js";
+import { logger } from "../src/logger.js";
 import { contractAddress } from "./addresses.js";
 import { mockJsonRpc, TEST_RPC_URL } from "./rpc-mocks.js";
 import { getTestDb, mswServer } from "./setup.js";
+
+// Soroban RPC limits enforced by the indexer when building getEvents filters.
+const MAX_CONTRACT_IDS_PER_FILTER = 5;
+const MAX_FILTERS_PER_REQUEST = 5;
+const MAX_CONTRACT_IDS_PER_REQUEST = MAX_CONTRACT_IDS_PER_FILTER * MAX_FILTERS_PER_REQUEST;
+
+interface GetEventsParams {
+  filters?: { type: string; contractIds?: string[] }[];
+  pagination?: { cursor?: string };
+  startLedger?: number;
+}
+
+function contractIdsFromCall(params: GetEventsParams): string[] {
+  return (params.filters ?? []).flatMap((filter) => filter.contractIds ?? []);
+}
 
 const ADDRESS_A = "GCEHQXSV35ZJRBJR3K4Y4VVO44BJI3NHCFR5HHVG5NCRVRSU4ZLM6T5O";
 const ADDRESS_B = "GCK3UYYUG22NJQT2HPLOZL3SREHZP5MLEIKE7LUGLH6XYMB4QEOOXWFD";
@@ -24,6 +41,15 @@ function addressXdr(address: string): string {
 
 function i128Xdr(value: bigint): string {
   return nativeToScVal(value, { type: "i128" }).toXdr("base64");
+}
+
+function stringXdr(value: string): string {
+  return nativeToScVal(value, { type: "string" }).toXdr("base64");
+}
+
+function parseLogLine(spy: ReturnType<typeof vi.spyOn>, index = 0): Record<string, unknown> {
+  const raw = String(spy.mock.calls[index][0]);
+  return JSON.parse(raw) as Record<string, unknown>;
 }
 
 interface RawEventFixture {
@@ -62,6 +88,10 @@ function buildLatestLedger(sequence: number) {
 }
 
 describe("processEventsBatch", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("advances the checkpoint across polls and resumes from the stored cursor", async () => {
     const db = getTestDb();
     await registerContract(db, { address: contractAddress("CONTRACT_A"), network: NETWORK });
@@ -90,10 +120,7 @@ describe("processEventsBatch", () => {
     await processEventsBatch(db, server);
 
     expect(firstEventsSpy).toHaveBeenCalledTimes(1);
-    const firstCallParams = firstEventsSpy.mock.calls[0][0] as {
-      pagination?: { cursor?: string };
-      startLedger?: number;
-    };
+    const firstCallParams = firstEventsSpy.mock.calls[0][0] as GetEventsParams;
     expect(firstCallParams.pagination?.cursor).toBeUndefined();
     expect(firstCallParams.startLedger).toBe(1000);
 
@@ -117,7 +144,7 @@ describe("processEventsBatch", () => {
 
     // the second call must resume from the stored cursor, not re-derive startLedger
     expect(secondEventsSpy).toHaveBeenCalledTimes(1);
-    const secondCallParams = secondEventsSpy.mock.calls[0][0] as { pagination?: { cursor?: string } };
+    const secondCallParams = secondEventsSpy.mock.calls[0][0] as GetEventsParams;
     expect(secondCallParams.pagination?.cursor).toBe("CURSOR_1");
 
     const [afterSecond] = await db
@@ -201,6 +228,7 @@ describe("processEventsBatch", () => {
     expect(transfer.from).toBe(ADDRESS_A);
     expect(transfer.to).toBe(ADDRESS_B);
     expect(transfer.amount).toBe("30000000");
+    // no 4th topic: fall back to the emitting contract address
     expect(transfer.asset).toBe(contractAddress("CONTRACT_C"));
     expect(transfer.ledger).toBe(3010);
     expect(transfer.txHash).toBe("c".repeat(64));
@@ -209,6 +237,83 @@ describe("processEventsBatch", () => {
     const [contract] = await db.select().from(contracts).where(eq(contracts.address, contractAddress("CONTRACT_C")));
     const eventRows = await db.select().from(eventsTable).where(eq(eventsTable.contractId, contract.id));
     expect(eventRows).toHaveLength(1);
+  });
+
+  it("stores the SAC asset from topic[3] instead of the contract address", async () => {
+    const db = getTestDb();
+    await registerContract(db, { address: contractAddress("CONTRACT_SAC"), network: NETWORK });
+
+    mswServer.use(
+      mockJsonRpc({
+        getLatestLedger: () => buildLatestLedger(3300),
+        getEvents: () => ({
+          events: [
+            buildRawEvent({
+              id: "0000000000000003310-0000000001",
+              contractId: contractAddress("CONTRACT_SAC"),
+              ledger: 3310,
+              txHash: "f".repeat(64),
+              topic: [
+                symbolXdr("transfer"),
+                addressXdr(ADDRESS_A),
+                addressXdr(ADDRESS_B),
+                stringXdr(`USDC:${ADDRESS_A}`)
+              ],
+              value: i128Xdr(1234n)
+            }),
+            buildRawEvent({
+              id: "0000000000000003311-0000000001",
+              contractId: contractAddress("CONTRACT_SAC"),
+              ledger: 3311,
+              txHash: "0".repeat(64),
+              topic: [symbolXdr("transfer"), addressXdr(ADDRESS_A), addressXdr(ADDRESS_B), stringXdr("native")],
+              value: i128Xdr(99n)
+            })
+          ],
+          cursor: "CURSOR_SAC",
+          latestLedger: 3311
+        })
+      })
+    );
+
+    await processEventsBatch(db, makeServer());
+
+    const transferRows = await db.select().from(tokenTransfers).orderBy(tokenTransfers.ledger);
+    expect(transferRows).toHaveLength(2);
+    expect(transferRows[0].asset).toBe(`USDC:${ADDRESS_A}`);
+    expect(transferRows[0].amount).toBe("1234");
+    expect(transferRows[1].asset).toBe("native");
+    expect(transferRows[1].amount).toBe("99");
+  });
+
+  it("falls back to the contract address when topic[3] is not a string", async () => {
+    const db = getTestDb();
+    await registerContract(db, { address: contractAddress("CONTRACT_SAC_FALLBACK"), network: NETWORK });
+
+    mswServer.use(
+      mockJsonRpc({
+        getLatestLedger: () => buildLatestLedger(3350),
+        getEvents: () => ({
+          events: [
+            buildRawEvent({
+              contractId: contractAddress("CONTRACT_SAC_FALLBACK"),
+              ledger: 3351,
+              txHash: "9".repeat(64),
+              topic: [symbolXdr("transfer"), addressXdr(ADDRESS_A), addressXdr(ADDRESS_B), i128Xdr(7n)],
+              value: i128Xdr(42n)
+            })
+          ],
+          cursor: "CURSOR_SAC_FALLBACK",
+          latestLedger: 3351
+        })
+      })
+    );
+
+    await processEventsBatch(db, makeServer());
+
+    const [transfer] = await db.select().from(tokenTransfers);
+    expect(transfer.asset).toBe(contractAddress("CONTRACT_SAC_FALLBACK"));
+    expect(transfer.amount).toBe("42");
   });
 
   it("does not insert a duplicate transfer when the ledger range is reprocessed", async () => {
@@ -312,7 +417,7 @@ describe("processEventsBatch", () => {
   it("keeps processing the batch when one event has a malformed XDR payload", async () => {
     const db = getTestDb();
     await registerContract(db, { address: contractAddress("CONTRACT_D"), network: NETWORK });
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => { });
+    const errorSpy = vi.spyOn(logger, "error").mockImplementation(() => { });
 
     mswServer.use(
       mockJsonRpc({
@@ -388,20 +493,22 @@ describe("processEventsBatch", () => {
         .where(eq(indexerCheckpoints.network, NETWORK));
       expect(checkpoint?.cursor).toBe("CURSOR_MALFORMED");
 
-      expect(consoleError).toHaveBeenCalledTimes(1);
-      const message = String(consoleError.mock.calls[0][0]);
-      expect(message).toContain(contractAddress("CONTRACT_D"));
-      expect(message).toContain("ledger=5002");
-      expect(message).toContain(`tx=${"2".repeat(64)}`);
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      const logLine = parseLogLine(errorSpy);
+      expect(logLine.level).toBe("error");
+      expect(typeof logLine.msg).toBe("string");
+      expect(logLine.contractAddress).toBe(contractAddress("CONTRACT_D"));
+      expect(logLine.ledger).toBe(5002);
+      expect(logLine.txHash).toBe("2".repeat(64));
     } finally {
-      consoleError.mockRestore();
+      errorSpy.mockRestore();
     }
   });
 
   it("stores null for a malformed topic entry and skips transfer detection", async () => {
     const db = getTestDb();
     await registerContract(db, { address: contractAddress("CONTRACT_E"), network: NETWORK });
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => { });
+    const errorSpy = vi.spyOn(logger, "error").mockImplementation(() => { });
 
     mswServer.use(
       mockJsonRpc({
@@ -433,10 +540,81 @@ describe("processEventsBatch", () => {
       expect(decodedData.decodeErrors?.map((e) => e.field)).toEqual(["topic[1]"]);
 
       expect(await db.select().from(tokenTransfers)).toHaveLength(0);
-      expect(consoleError).toHaveBeenCalledTimes(1);
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      const logLine = parseLogLine(errorSpy);
+      expect(logLine.level).toBe("error");
+      expect(logLine.contractAddress).toBe(contractAddress("CONTRACT_E"));
+      expect(logLine.ledger).toBe(6001);
     } finally {
-      consoleError.mockRestore();
+      errorSpy.mockRestore();
     }
+  });
+
+  it("re-decodes a previously malformed event and inserts its transfer idempotently", async () => {
+    const db = getTestDb();
+    await registerContract(db, { address: contractAddress("CONTRACT_REDECODE"), network: NETWORK });
+    const errorSpy = vi.spyOn(logger, "error").mockImplementation(() => { });
+
+    mswServer.use(
+      mockJsonRpc({
+        getLatestLedger: () => buildLatestLedger(7000),
+        getEvents: () => ({
+          events: [
+            buildRawEvent({
+              id: "0000000000000007001-0000000001",
+              contractId: contractAddress("CONTRACT_REDECODE"),
+              ledger: 7001,
+              txHash: "7".repeat(64),
+              topic: [symbolXdr("transfer"), addressXdr(ADDRESS_A), addressXdr(ADDRESS_B)],
+              value: MALFORMED_XDR
+            })
+          ],
+          cursor: "CURSOR_REDECODE",
+          latestLedger: 7001
+        })
+      })
+    );
+
+    await processEventsBatch(db, makeServer());
+
+    const [before] = await db.select().from(eventsTable);
+    const beforeData = before.decodedData as { decodeErrors?: { field: string }[] };
+    expect(beforeData.decodeErrors?.map((e) => e.field)).toEqual(["value"]);
+    expect(await db.select().from(tokenTransfers)).toHaveLength(0);
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+
+    // simulate the decoder being fixed: the stored raw XDR is now valid
+    await db
+      .update(eventsTable)
+      .set({
+        decodedData: {
+          raw: { topic: JSON.parse(before.topic) as string[], value: i128Xdr(500n) },
+          decoded: { topic: null, value: null },
+          decodeErrors: [{ field: "value", error: "stale" }]
+        }
+      })
+      .where(eq(eventsTable.id, before.id));
+
+    const summary = await redecodeEvents(db, { dryRun: false });
+    expect(summary.updated).toBe(1);
+
+    const [after] = await db.select().from(eventsTable);
+    const afterData = after.decodedData as {
+      decoded: { topic: unknown[]; value: unknown };
+      decodeErrors?: unknown[];
+    };
+    expect(afterData.decodeErrors).toBeUndefined();
+    expect(afterData.decoded).toEqual({ topic: ["transfer", ADDRESS_A, ADDRESS_B], value: "500" });
+
+    const transferRows = await db.select().from(tokenTransfers);
+    expect(transferRows).toHaveLength(1);
+    expect(transferRows[0].amount).toBe("500");
+
+    // running again must not duplicate the transfer
+    await redecodeEvents(db, { dryRun: false });
+    expect(await db.select().from(tokenTransfers)).toHaveLength(1);
+
+    errorSpy.mockRestore();
   });
 
   it("returns a null cursor and skips the rpc call when no contracts are registered", async () => {
@@ -449,5 +627,136 @@ describe("processEventsBatch", () => {
 
     expect(result).toEqual({ indexedCount: 0, cursor: null });
     expect(getEventsSpy).not.toHaveBeenCalled();
+  });
+
+  describe("contract id chunking", () => {
+    async function registerMany(db: ReturnType<typeof getTestDb>, count: number): Promise<string[]> {
+      const addresses: string[] = [];
+      for (let i = 0; i < count; i += 1) {
+        const address = contractAddress(`CONTRACT_CHUNK_${count}_${i}`);
+        addresses.push(address);
+        await registerContract(db, { address, network: NETWORK });
+      }
+      return addresses;
+    }
+
+    function assertWithinLimits(params: GetEventsParams) {
+      const filters = params.filters ?? [];
+      expect(filters.length).toBeGreaterThan(0);
+      expect(filters.length).toBeLessThanOrEqual(MAX_FILTERS_PER_REQUEST);
+      for (const filter of filters) {
+        expect(filter.type).toBe("contract");
+        expect(filter.contractIds).toBeDefined();
+        expect(filter.contractIds!.length).toBeGreaterThan(0);
+        expect(filter.contractIds!.length).toBeLessThanOrEqual(MAX_CONTRACT_IDS_PER_FILTER);
+      }
+    }
+
+    it.each([1, 5, 30])("chunks getEvents requests for %i registered contracts", async (count) => {
+      const db = getTestDb();
+      const addresses = await registerMany(db, count);
+
+      const getEventsSpy = vi.fn((_params: GetEventsParams) => ({
+        events: [],
+        cursor: `CURSOR_CHUNK_${count}`,
+        latestLedger: 7000
+      }));
+
+      mswServer.use(
+        mockJsonRpc({
+          getLatestLedger: () => buildLatestLedger(7000),
+          getEvents: getEventsSpy
+        })
+      );
+
+      await processEventsBatch(db, makeServer());
+
+      const expectedRequests = Math.ceil(count / MAX_CONTRACT_IDS_PER_REQUEST);
+      expect(getEventsSpy).toHaveBeenCalledTimes(expectedRequests);
+
+      const requestedIds: string[] = [];
+      for (const call of getEventsSpy.mock.calls) {
+        const params = call[0] as GetEventsParams;
+        assertWithinLimits(params);
+        requestedIds.push(...contractIdsFromCall(params));
+      }
+
+      // every registered contract is requested exactly once, and nothing else
+      expect(requestedIds.sort()).toEqual([...addresses].sort());
+      expect(new Set(requestedIds).size).toBe(count);
+    });
+  });
+
+  describe("indexer heartbeat", () => {
+    it("records lastPolledAt, lastLedger, latestNetworkLedger and a null lastError after a successful poll", async () => {
+      const db = getTestDb();
+      await registerContract(db, { address: contractAddress("CONTRACT_HEARTBEAT"), network: NETWORK });
+
+      mswServer.use(
+        mockJsonRpc({
+          getLatestLedger: () => buildLatestLedger(8000),
+          getEvents: () => ({
+            events: [
+              buildRawEvent({
+                contractId: contractAddress("CONTRACT_HEARTBEAT"),
+                ledger: 8010,
+                topic: [symbolXdr("fee")],
+                value: i128Xdr(-1n)
+              })
+            ],
+            cursor: "CURSOR_HEARTBEAT",
+            latestLedger: 8010
+          })
+        })
+      );
+
+      const before = Date.now();
+      await processEventsBatch(db, makeServer());
+      const after = Date.now();
+
+      const [checkpoint] = await db
+        .select()
+        .from(indexerCheckpoints)
+        .where(eq(indexerCheckpoints.network, NETWORK));
+
+      expect(checkpoint).toBeDefined();
+      expect(checkpoint.lastError).toBeNull();
+      expect(checkpoint.lastLedger).toBe(8010);
+      expect(checkpoint.latestNetworkLedger).toBe(8000);
+
+      const lastPolledAt = checkpoint.lastPolledAt;
+      expect(lastPolledAt).not.toBeNull();
+      const polledAtMs =
+        lastPolledAt instanceof Date ? lastPolledAt.getTime() : new Date(lastPolledAt as string).getTime();
+      expect(Number.isNaN(polledAtMs)).toBe(false);
+      expect(polledAtMs).toBeGreaterThanOrEqual(before);
+      expect(polledAtMs).toBeLessThanOrEqual(after);
+    });
+
+    it("records lastError when getEvents fails", async () => {
+      const db = getTestDb();
+      await registerContract(db, { address: contractAddress("CONTRACT_HEARTBEAT_ERROR"), network: NETWORK });
+
+      mswServer.use(
+        mockJsonRpc({
+          getLatestLedger: () => buildLatestLedger(9000),
+          getEvents: () => {
+            throw new Error("rpc unavailable");
+          }
+        })
+      );
+
+      await expect(processEventsBatch(db, makeServer())).rejects.toThrow();
+
+      const [checkpoint] = await db
+        .select()
+        .from(indexerCheckpoints)
+        .where(eq(indexerCheckpoints.network, NETWORK));
+
+      expect(checkpoint).toBeDefined();
+      expect(checkpoint.lastError).toBeTruthy();
+      expect(String(checkpoint.lastError)).toContain("rpc unavailable");
+      expect(checkpoint.lastPolledAt).not.toBeNull();
+    });
   });
 });

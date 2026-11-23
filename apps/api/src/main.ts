@@ -5,18 +5,13 @@ import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { AppModule } from "./app.module";
 
-type ApiKeyIdCandidate = string | number | string[] | undefined;
-
 interface LoggedRequest {
   method: string;
   url: string;
   originalUrl?: string;
   requestId?: string;
   apiKey?: { id?: number };
-  apiKeyId?: ApiKeyIdCandidate;
-  user?: { apiKeyId?: ApiKeyIdCandidate };
-  auth?: { apiKeyId?: ApiKeyIdCandidate };
-  headers?: Record<string, ApiKeyIdCandidate>;
+  headers?: Record<string, string | string[] | undefined>;
 }
 
 interface LoggedResponse {
@@ -34,20 +29,8 @@ function getRequestId(req: LoggedRequest): string {
   return randomUUID();
 }
 
-function getApiKeyId(req: LoggedRequest): string | number | null {
-  const candidates = [
-    req?.apiKey?.id,
-    req?.apiKeyId,
-    req?.user?.apiKeyId,
-    req?.auth?.apiKeyId,
-    req?.headers?.["x-api-key-id"],
-  ];
-  for (const candidate of candidates) {
-    if (candidate !== undefined && candidate !== null && candidate !== "") {
-      return candidate as string | number;
-    }
-  }
-  return null;
+function getApiKeyId(req: LoggedRequest): number | null {
+  return req?.apiKey?.id ?? null;
 }
 
 async function bootstrap() {

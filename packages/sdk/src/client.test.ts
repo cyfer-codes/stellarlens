@@ -53,23 +53,24 @@ describe("StellarLensClient", () => {
   it("sends the transfer filters", async () => {
     const fetchMock = vi.fn(async (url: string | URL) => {
       expect(String(url)).toBe(
-        "https://api.example.com/contracts/1/transfers?minAmount=170141183460469231731687303715884105727&from=GA&to=GB&asset=native"
+        "https://api.example.com/contracts/1/transfers?asset=native&from=GA&to=GB&minAmount=170141183460469231731687303715884105727&maxAmount=340282366920938463463374607431768211455"
       );
       return jsonResponse({ data: [], nextCursor: null });
     }) as unknown as typeof fetch;
 
     await makeClient(fetchMock).listTransfers(1, {
-      minAmount: "170141183460469231731687303715884105727",
+      asset: "native",
       from: "GA",
       to: "GB",
-      asset: "native"
+      minAmount: "170141183460469231731687303715884105727",
+      maxAmount: "340282366920938463463374607431768211455"
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("sends array filters comma-separated", async () => {
+  it("serializes topics as repeated query params", async () => {
     const fetchMock = vi.fn(async (url: string | URL) => {
-      expect(new URL(String(url)).searchParams.get("topics")).toBe("transfer,mint");
+      expect(new URL(String(url)).searchParams.getAll("topics")).toEqual(["transfer", "mint"]);
       return jsonResponse({ data: [], nextCursor: null });
     }) as unknown as typeof fetch;
 
