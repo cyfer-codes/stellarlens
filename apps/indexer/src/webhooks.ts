@@ -17,6 +17,7 @@ import {
 } from "./config.js";
 import { logger } from "./logger.js";
 import { withRetry } from "./retry.js";
+import { webhookDeliveriesTotal } from "./metrics.js";
 import { WEBHOOK_SIGNATURE_HEADER, signWebhookPayload } from "./webhook-signature.js";
 
 export interface WebhookEventPayload {
@@ -480,6 +481,8 @@ export async function deliverWebhooksForEvent(
             }
           );
 
+          webhookDeliveriesTotal.inc({ outcome: "success" });
+
           await recordDelivery(db, {
             webhookId: webhook.id,
             eventId: payload.eventId,
@@ -490,6 +493,8 @@ export async function deliverWebhooksForEvent(
             deliveredAt: new Date()
           });
         } catch (err) {
+          webhookDeliveriesTotal.inc({ outcome: "failed" });
+
           const dnsFailure = isDnsResolutionFailure(err);
           const gone = err instanceof WebhookResponseError && err.status === 410;
 
