@@ -18,6 +18,7 @@ import {
   pollDurationSeconds,
   rpcRetriesTotal
 } from "./metrics.js";
+import { logger } from "./logger.js";
 
 async function getStoredCursor(db: Database): Promise<string | undefined> {
   const [row] = await db
@@ -29,18 +30,31 @@ async function getStoredCursor(db: Database): Promise<string | undefined> {
 
 type RawEvent = Awaited<ReturnType<rpc.Server["_getEvents"]>>["events"][number];
 
-interface DecodeError {
+export interface DecodeError {
   field: string;
   error: string;
 }
 
-interface DecodedEventPayload {
+export interface DecodedEventPayload {
   decodedTopic: unknown[];
   decodedValue: unknown;
   decodeErrors: DecodeError[];
 }
 
-function decodeEventPayload(event: RawEvent): DecodedEventPayload {
+/**
+ * Minimal shape needed to (re-)decode an event payload. Both live RPC events
+ * and rows read back from the database (raw XDR) satisfy this.
+ */
+export interface DecodableEvent {
+  id: string;
+  contractId: string;
+  ledger: number;
+  txHash: string;
+  topic: string[];
+  value: string;
+}
+
+export function decodeEventPayload(event: DecodableEvent): DecodedEventPayload {
   const decodeErrors: DecodeError[] = [];
 
   const decodeField = (field: string, base64Xdr: string): unknown => {
@@ -56,13 +70,56 @@ function decodeEventPayload(event: RawEvent): DecodedEventPayload {
   const decodedValue = decodeField("value", event.value);
 
   if (decodeErrors.length > 0) {
-    const details = decodeErrors.map(({ field, error }) => `${field}: ${error}`).join("; ");
-    console.error(
-      `failed to decode event ${event.id} (contract=${event.contractId}, ledger=${event.ledger}, tx=${event.txHash}): ${details}`
-    );
+    logger.warn("failed to decode event", {
+      eventId: event.id,
+      contractAddress: event.contractId,
+      ledger: event.ledger,
+      txHash: event.txHash,
+      decodeErrors
+    });
   }
 
   return { decodedTopic, decodedValue, decodeErrors };
+}
+
+/**
+ * Re-detect a transfer from already-decoded topic/value and upsert it
+ * idempotently. Shared by the live indexer and the `redecode` job so both
+ * paths store the same `asset` value (SAC `topic[3]` string when present,
+ * otherwise the emitting contract address).
+ */
+export async function upsertDetectedTransfer(
+  tx: Pick<Database, "insert">,
+  params: {
+    contractId: string;
+    contractAddress: string;
+    decodedTopic: unknown[];
+    decodedValue: unknown;
+    txHash: string;
+    ledger: number;
+    rpcEventId: string;
+  }
+): Promise<boolean> {
+  const transfer = detectTransfer(params.decodedTopic, params.decodedValue);
+  if (!transfer) {
+    return false;
+  }
+
+  await tx
+    .insert(tokenTransfers)
+    .values({
+      contractId: params.contractId,
+      from: transfer.from,
+      to: transfer.to,
+      amount: transfer.amount,
+      asset: transfer.asset ?? params.contractAddress,
+      txHash: params.txHash,
+      ledger: params.ledger,
+      rpcEventId: params.rpcEventId
+    })
+    .onConflictDoNothing();
+
+  return true;
 }
 
 export interface ProcessEventsBatchResult {
@@ -172,6 +229,15 @@ export async function processEventsBatch(
           })
           .onConflictDoNothing();
       }
+      await upsertDetectedTransfer(tx, {
+        contractId,
+        contractAddress: event.contractId,
+        decodedTopic,
+        decodedValue,
+        txHash: event.txHash,
+        ledger: event.ledger,
+        rpcEventId: event.id
+      });
     }
 
     await tx

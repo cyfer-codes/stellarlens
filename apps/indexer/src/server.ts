@@ -3,6 +3,7 @@ import http from "node:http";
 import type { Database } from "@stellarlens/db";
 import { REGISTRY_PORT, REGISTRY_SECRET } from "./config.js";
 import { renderMetrics, METRICS_CONTENT_TYPE } from "./metrics.js";
+import { logger } from "./logger.js";
 import { ContractAlreadyRegisteredError, registerContract } from "./registry.js";
 
 /** Hard cap on registration request bodies so one oversized POST cannot exhaust memory. */
@@ -81,7 +82,7 @@ export function startRegistryServer(db: Database, port: number = REGISTRY_PORT):
   });
 
   server.listen(port, () => {
-    console.log(`contract registry listening on :${port}`);
+    logger.info("contract registry listening", { port });
   });
 
   return server;
