@@ -1,3 +1,4 @@
+import Redis from "ioredis";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 import { createApiKey } from "./helpers";
@@ -63,5 +64,19 @@ describe("api key throttling (e2e)", () => {
     const updatedThrottled = await request(getApp().getHttpServer()).get("/contracts").set("x-api-key", customKey);
     expect(updatedThrottled.status).toBe(429);
     expect(Number(updatedThrottled.headers["retry-after"])).toBeGreaterThan(0);
+  });
+
+  it("stores throttling records in Redis when REDIS_URL is configured", async () => {
+    if (!process.env.REDIS_URL?.trim()) {
+      return;
+    }
+    const redis = new Redis(process.env.REDIS_URL.trim());
+    const apiKey = await createApiKey(getTestDb(), { rateLimitPerMinute: 10 });
+    const response = await request(getApp().getHttpServer()).get("/contracts").set("x-api-key", apiKey);
+    expect(response.status).toBe(200);
+
+    const keys = await redis.keys("*");
+    expect(keys.length).toBeGreaterThan(0);
+    await redis.quit();
   });
 });

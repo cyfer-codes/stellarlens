@@ -82,6 +82,7 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: *database-url
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       PORT: "3000"
       CORS_ORIGINS: ${CORS_ORIGINS:-}
     ports:
@@ -89,6 +90,8 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     # Also defined in the image; repeated here so `docker compose ps` shows it without inspecting.
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health/ready >/dev/null || exit 1"]

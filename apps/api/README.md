@@ -24,6 +24,7 @@ Copy `.env.example` from the repo root and fill in the required values before st
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `DATABASE_URL` | ✅ | — | PostgreSQL connection string, e.g. `postgres://user:pass@localhost:5433/stellarlens` |
+| `REDIS_URL` | | — | Redis connection URL, e.g. `redis://localhost:6379`. Backs the throttler with Redis for distributed rate limiting across instances; falls back to in-memory storage when unset. |
 | `PORT` | | `3000` | Port the API listens on |
 | `CORS_ORIGINS` | | _(disabled)_ | Comma-separated list of origins allowed to make cross-origin requests. Leave unset to block all cross-origin access. |
 | `NODE_ENV` | | — | Set to `production` to disable Swagger UI |

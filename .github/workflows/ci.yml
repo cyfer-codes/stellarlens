@@ -10,6 +10,7 @@ jobs:
 
     env:
       DATABASE_URL: postgres://stellarlens:stellarlens@localhost:5432/stellarlens
+      REDIS_URL: redis://localhost:6379
       REGISTRY_SECRET: ci-registry-secret
 
     services:
@@ -23,6 +24,16 @@ jobs:
           - 5432:5432
         options: >-
           --health-cmd "pg_isready -U stellarlens"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -96,6 +107,7 @@ jobs:
       - run: pnpm test
         env:
           DATABASE_URL: postgres://stellarlens:stellarlens@localhost:5432/stellarlens
+          REDIS_URL: redis://localhost:6379
           SOROBAN_RPC_URL: https://soroban-testnet.stellar.org
           STELLAR_NETWORK: testnet
 
@@ -117,8 +129,19 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     env:
       DATABASE_URL: postgres://stellarlens:stellarlens@localhost:5432/stellarlens
+      REDIS_URL: redis://localhost:6379
       SOROBAN_RPC_URL: https://soroban-testnet.stellar.org
       STELLAR_NETWORK: testnet
       SEED_ADMIN_EMAIL: admin@stellarlens.local
