@@ -1,11 +1,7 @@
-import type { Contract, StellarLensClient } from "@stellarlens/sdk";
-
-const PAGE_SIZE = 100;
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
-import { StellarLensApiError, type StellarLensClient } from "@stellarlens/sdk";
+import { StellarLensApiError, type Contract, type StellarLensClient } from "@stellarlens/sdk";
 import { isValidStellarAddress } from "../strkey.js";
-import type { Contract, StellarLensClient } from "@stellarlens/sdk";
 
 /** Matches the api's `ArrayMaxSize` on `POST /contracts/bulk`. */
 export const BULK_CHUNK_SIZE = 100;
@@ -169,23 +165,6 @@ async function registerSequentially(
   }
 }
 
-/** `GET /contracts` is cursor-paginated, so follow `nextCursor` until every contract has been fetched. */
-export async function fetchAllContracts(client: StellarLensClient): Promise<Contract[]> {
-  const contracts: Contract[] = [];
-  let cursor: number | undefined;
-
-  for (;;) {
-    const page = await client.listContracts({ cursor, limit: PAGE_SIZE });
-    contracts.push(...page.data);
-    if (page.nextCursor === null) {
-      return contracts;
-    }
-    cursor = page.nextCursor;
-  }
-}
-
-export async function listContracts(client: StellarLensClient): Promise<void> {
-  const contracts = await fetchAllContracts(client);
 async function registerInBulk(
   client: StellarLensClient,
   entries: ValidEntry[],
@@ -338,20 +317,6 @@ export async function runAddContracts(
   return failed === 0;
 }
 
-/** Fetches every registered contract, following `nextCursor` until the last page. */
-async function fetchAllContracts(client: StellarLensClient): Promise<Contract[]> {
-  const contracts: Contract[] = [];
-  let cursor: number | undefined;
-  do {
-    const page = await client.listContracts({ cursor, limit: 100 });
-    contracts.push(...page.data);
-    cursor = page.nextCursor ?? undefined;
-  } while (cursor !== undefined);
-  return contracts;
-}
-
-export async function listContracts(client: StellarLensClient): Promise<void> {
-  const contracts = await fetchAllContracts(client);
 export interface ListContractsOptions {
   /** Case-insensitive substring filter on contract name. */
   name?: string;
@@ -359,11 +324,16 @@ export interface ListContractsOptions {
   network?: string;
   /** Page size used while paginating through the api (1–100). */
   pageSize?: number;
+  /** Stop after printing this many contracts, instead of following pagination to the end. */
+  limit?: number;
   /** Print the contracts as a JSON array instead of a table. */
   json?: boolean;
 }
 
-/** Prints every registered contract matching the filters, following the api's cursor pagination to the end. */
+/**
+ * Prints registered contracts matching the filters. Follows the api's cursor pagination until either
+ * every matching contract has been fetched, or `limit` contracts have been printed.
+ */
 export async function listContracts(client: StellarLensClient, options: ListContractsOptions = {}): Promise<void> {
   const rows: Record<string, string | number>[] = [];
   const contracts: Contract[] = [];
@@ -380,6 +350,9 @@ export async function listContracts(client: StellarLensClient, options: ListCont
       name: contract.name ?? "—",
       network: contract.network
     });
+    if (options.limit !== undefined && rows.length >= options.limit) {
+      break;
+    }
   }
 
   if (options.json) {

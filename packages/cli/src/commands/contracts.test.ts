@@ -238,13 +238,6 @@ describe("addContracts chunking", () => {
 
 describe("runAddContracts", () => {
   it("prints a line per address plus a summary and returns false when any fail", async () => {
-    const client = { registerContractsBulk: bulkResponder() } as unknown as StellarLensClient;
-import { afterEach, describe, expect, it, vi } from "vitest";
-import type { StellarLensClient } from "@stellarlens/sdk";
-import { addContract, listContracts } from "./contracts.js";
-
-describe("addContract", () => {
-  it("registers a contract and prints confirmation", async () => {
     const registerContract = vi.fn().mockResolvedValue({ id: 1, address: "C1", name: null, network: "testnet" });
     const client = { registerContract } as unknown as StellarLensClient;
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -324,10 +317,6 @@ describe("listContracts", () => {
   });
 
   it("prints a message when there are no contracts", async () => {
-    const client = {
-      listContracts: vi.fn().mockResolvedValue({ data: [], nextCursor: null })
-    } as unknown as StellarLensClient;
-    const client = { listContracts: vi.fn().mockResolvedValue({ data: [], nextCursor: null }) } as unknown as StellarLensClient;
     const { client } = pagedClient({ "": { data: [], nextCursor: null } });
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
@@ -337,11 +326,6 @@ describe("listContracts", () => {
   });
 
   it("prints a table when contracts exist", async () => {
-    const client = {
-      listContracts: vi
-        .fn()
-        .mockResolvedValue({ data: [{ id: 1, address: "C1", name: null, network: "testnet" }], nextCursor: null })
-    } as unknown as StellarLensClient;
     const { client } = pagedClient({
       "": { data: [{ id: 1, address: "C1", name: null, network: "testnet" }], nextCursor: null }
     });
@@ -370,41 +354,32 @@ describe("listContracts", () => {
     ]);
   });
 
-  it("follows nextCursor until every page has been fetched", async () => {
-    const listContractsMock = vi
-      .fn()
-      .mockResolvedValueOnce({ data: [{ id: 1, address: "C1", name: "one", network: "testnet" }], nextCursor: 1 })
-      .mockResolvedValueOnce({ data: [{ id: 2, address: "C2", name: null, network: "mainnet" }], nextCursor: null });
-    const client = { listContracts: listContractsMock } as unknown as StellarLensClient;
+  it("stops after --limit contracts instead of following pagination to the end", async () => {
+    const { client, listContracts: listPage } = pagedClient({
+      "": { data: [{ id: 1, address: "C1", name: "one", network: "testnet" }], nextCursor: 1 },
+      "1": { data: [{ id: 2, address: "C2", name: null, network: "mainnet" }], nextCursor: 2 }
+    });
+    const tableSpy = vi.spyOn(console, "table").mockImplementation(() => {});
+
+    await listContracts(client, { limit: 1 });
+
+    expect(listPage).toHaveBeenCalledTimes(1);
+    expect(tableSpy).toHaveBeenCalledWith([{ id: 1, address: "C1", name: "one", network: "testnet" }]);
+  });
+
+  it("omitting --limit still follows nextCursor until every page has been fetched", async () => {
+    const { client } = pagedClient({
+      "": { data: [{ id: 1, address: "C1", name: "one", network: "testnet" }], nextCursor: 1 },
+      "1": { data: [{ id: 2, address: "C2", name: null, network: "mainnet" }], nextCursor: null }
+    });
     const tableSpy = vi.spyOn(console, "table").mockImplementation(() => {});
 
     await listContracts(client);
 
-    expect(listContractsMock).toHaveBeenNthCalledWith(1, { cursor: undefined, limit: 100 });
-    expect(listContractsMock).toHaveBeenNthCalledWith(2, { cursor: 1, limit: 100 });
     expect(tableSpy).toHaveBeenCalledWith([
       { id: 1, address: "C1", name: "one", network: "testnet" },
       { id: 2, address: "C2", name: "—", network: "mainnet" }
     ]);
-    tableSpy.mockRestore();
-  });
-
-  it("follows nextCursor until every page is fetched", async () => {
-    const listContractsMock = vi
-      .fn()
-      .mockResolvedValueOnce({ data: [{ id: 1, address: "C1", name: "One", network: "testnet" }], nextCursor: 1 })
-      .mockResolvedValueOnce({ data: [{ id: 2, address: "C2", name: null, network: "mainnet" }], nextCursor: null });
-    const client = { listContracts: listContractsMock } as unknown as StellarLensClient;
-    const tableSpy = vi.spyOn(console, "table").mockImplementation(() => {});
-
-    await listContracts(client);
-
-    expect(listContractsMock.mock.calls).toEqual([[{ cursor: undefined, limit: 100 }], [{ cursor: 1, limit: 100 }]]);
-    expect(tableSpy).toHaveBeenCalledWith([
-      { id: 1, address: "C1", name: "One", network: "testnet" },
-      { id: 2, address: "C2", name: "—", network: "mainnet" }
-    ]);
-    tableSpy.mockRestore();
   });
 });
 
@@ -421,8 +396,7 @@ describe("getContract", () => {
     await getContract(client, 1);
 
     expect(getContractMock).toHaveBeenCalledWith(1);
-    const output = logSpy.mock.calls.map((call) => call[0]).join("
-");
+    const output = logSpy.mock.calls.map((call) => call[0]).join("\n");
     expect(output).toContain("id:      1");
     expect(output).toContain(`address: ${C1}`);
     expect(output).toContain("name:    My token");

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Argument, Command, InvalidArgumentError, Option } from "commander";
+import { StellarLensApiError } from "@stellarlens/sdk";
 import { createClientFromEnv } from "./client.js";
 import { StellarLensApiError } from "@stellarlens/sdk";
 import {
@@ -9,6 +10,8 @@ import {
   readContractsFile,
   runAddContracts
 } from "./commands/contracts.js";
+import { listApiKeys, revokeApiKey } from "./commands/api-keys.js";
+import { readContractsFile, runAddContracts, getContract, listContracts, type ContractEntry } from "./commands/contracts.js";
 import { runDecode } from "./commands/decode.js";
 import { DEFAULT_POLL_INTERVAL_MS, listEvents, tailEvents } from "./commands/events.js";
 import { runExport, type ExportFormat, type ExportKind } from "./commands/export.js";
@@ -98,11 +101,13 @@ contractsCommand
 
 contractsCommand
   .command("list")
-  .description("List registered contracts (follows pagination to the end)")
+  .description("List registered contracts (follows pagination to the end, unless --limit is given)")
   .option("--name <name>", "Only contracts whose name contains this (case-insensitive)")
   .option("-n, --network <network>", "Only contracts on this network")
   .option("--page-size <size>", "Contracts fetched per api request (1-100)", parsePositiveInt, 100)
   .action(async (options: { name?: string; network?: string; pageSize: number }) => {
+  .option("-l, --limit <n>", "Stop after this many contracts, instead of fetching every page", parsePositiveInt)
+  .action(async (options: { name?: string; network?: string; pageSize: number; limit?: number }) => {
     await listContracts(createClientFromEnv(), { ...options, json: jsonOutput() });
   });
 
@@ -147,6 +152,7 @@ eventsCommand
     ).conflicts("fromStart")
   )
   .addOption(new Option("--from-start", "replay every event from the beginning of history").conflicts("since"))
+  .description("Follow new events for a contract in real time")
   .option("--latest", "Skip existing events and only show ones indexed from now on")
   .option("--interval <ms>", "Poll interval in milliseconds", parsePositiveInt, DEFAULT_POLL_INTERVAL_MS)
   .action(async (contractId: string, options: { latest?: boolean; interval: number }) => {
@@ -170,6 +176,23 @@ transfersCommand
   .option("-c, --cursor <id>", "Only transfers after this transfer id (from a previous page)", parsePositiveInt)
   .action(async (contractId: number, options: { limit?: number; cursor?: number }) => {
     await listTransfers(createClientFromEnv(), contractId, options);
+  });
+
+const apiKeysCommand = program.command("api-keys").description("Manage api keys");
+
+apiKeysCommand
+  .command("list")
+  .description("List every api key (never the raw key value, which the api only returns once, at creation)")
+  .action(async () => {
+    await listApiKeys(createClientFromEnv());
+  });
+
+apiKeysCommand
+  .command("revoke")
+  .description("Revoke an api key")
+  .addArgument(new Argument("<id>", "Api key id").argParser(parsePositiveInt))
+  .action(async (id: number) => {
+    await revokeApiKey(createClientFromEnv(), id);
   });
 
 program
