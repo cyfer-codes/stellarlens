@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 import { Argument, Command, InvalidArgumentError, Option } from "commander";
-import { createClientFromEnv } from "./client.js";
-import { addContract, getContract, listContracts } from "./commands/contracts.js";
-import { runDecode } from "./commands/decode.js";
 import { StellarLensApiError } from "@stellarlens/sdk";
-import { listEvents, tailEvents } from "./commands/events.js";
+import { createClientFromEnv } from "./client.js";
+import { listApiKeys, revokeApiKey } from "./commands/api-keys.js";
+import { readContractsFile, runAddContracts, getContract, listContracts, type ContractEntry } from "./commands/contracts.js";
+import { runDecode } from "./commands/decode.js";
+import { DEFAULT_POLL_INTERVAL_MS, listEvents, tailEvents } from "./commands/events.js";
 import { runExport, type ExportFormat, type ExportKind } from "./commands/export.js";
-import { addWebhook, listenForWebhooks, listWebhooks, removeWebhook } from "./commands/webhooks.js";
-import { listTransfers } from "./commands/transfers.js";
 import { showStats } from "./commands/stats.js";
-import { listenForWebhooks } from "./commands/webhooks.js";
+import { listTransfers } from "./commands/transfers.js";
+import { addWebhook, listenForWebhooks, listWebhooks, removeWebhook } from "./commands/webhooks.js";
 
 function parsePort(value: string): number {
   const port = Number(value);
@@ -44,16 +44,6 @@ function parseContractId(value: string): number {
   }
   return id;
 }
-import { Command, Option } from "commander";
-import { Command, InvalidArgumentError } from "commander";
-import { createClientFromEnv } from "./client.js";
-import {
-  type ContractEntry,
-  listContracts,
-  readContractsFile,
-  runAddContracts
-} from "./commands/contracts.js";
-import { tailEvents } from "./commands/events.js";
 
 const program = new Command();
 
@@ -103,11 +93,12 @@ contractsCommand
 
 contractsCommand
   .command("list")
-  .description("List registered contracts (follows pagination to the end)")
+  .description("List registered contracts (follows pagination to the end, unless --limit is given)")
   .option("--name <name>", "Only contracts whose name contains this (case-insensitive)")
   .option("-n, --network <network>", "Only contracts on this network")
-  .option("--page-size <size>", "Contracts fetched per api request (1-100)", parsePageSize, 100)
-  .action(async (options: { name?: string; network?: string; pageSize: number }) => {
+  .option("--page-size <size>", "Contracts fetched per api request (1-100)", parsePositiveInt, 100)
+  .option("-l, --limit <n>", "Stop after this many contracts, instead of fetching every page", parsePositiveInt)
+  .action(async (options: { name?: string; network?: string; pageSize: number; limit?: number }) => {
     await listContracts(createClientFromEnv(), { ...options, json: jsonOutput() });
   });
 
@@ -141,19 +132,6 @@ eventsCommand
 
 eventsCommand
   .command("tail <contractId>")
-  .description(
-    "Follow new events for a contract in real time. Starts at the latest event by default, so only events " +
-      "indexed from now on are shown."
-  )
-  .addOption(
-    new Option(
-      "--since <cursor|iso-date>",
-      "start after this event id, or from the first event indexed at/after this ISO 8601 date"
-    ).conflicts("fromStart")
-  )
-  .addOption(new Option("--from-start", "replay every event from the beginning of history").conflicts("since"))
-  .action(async (contractId: string, options: { since?: string; fromStart?: boolean }) => {
-    await tailEvents(createClientFromEnv(), Number(contractId), options);
   .description("Follow new events for a contract in real time")
   .option("--latest", "Skip existing events and only show ones indexed from now on")
   .option("--interval <ms>", "Poll interval in milliseconds", parsePositiveInt, DEFAULT_POLL_INTERVAL_MS)
@@ -178,6 +156,23 @@ transfersCommand
   .option("-c, --cursor <id>", "Only transfers after this transfer id (from a previous page)", parsePositiveInt)
   .action(async (contractId: number, options: { limit?: number; cursor?: number }) => {
     await listTransfers(createClientFromEnv(), contractId, options);
+  });
+
+const apiKeysCommand = program.command("api-keys").description("Manage api keys");
+
+apiKeysCommand
+  .command("list")
+  .description("List every api key (never the raw key value, which the api only returns once, at creation)")
+  .action(async () => {
+    await listApiKeys(createClientFromEnv());
+  });
+
+apiKeysCommand
+  .command("revoke")
+  .description("Revoke an api key")
+  .addArgument(new Argument("<id>", "Api key id").argParser(parsePositiveInt))
+  .action(async (id: number) => {
+    await revokeApiKey(createClientFromEnv(), id);
   });
 
 program
@@ -269,7 +264,5 @@ webhooksCommand
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   console.error(`error: ${describeError(err)}`);
-program.parseAsync(process.argv).catch((error: unknown) => {
-  console.error(`error: ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = 1;
 });
