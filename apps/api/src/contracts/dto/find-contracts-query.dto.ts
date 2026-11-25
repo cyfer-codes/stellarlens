@@ -44,6 +44,14 @@ export class FindContractsQueryDto {
   @IsString()
   network?: string;
 
+  @ApiPropertyOptional({
+    description: "Include related data in the response, e.g. 'activity'",
+    example: "activity",
+  })
+  @IsOptional()
+  @IsString()
+  include?: string;
+
   @IsOptional()
   @IsIn(["asc", "desc"])
   order: "asc" | "desc" = "asc";

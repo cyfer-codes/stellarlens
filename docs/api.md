@@ -145,9 +145,26 @@ are reported as results rather than failing the batch.
 | `limit` | `20` | `1`–`100` |
 | `name` | — | case-insensitive substring match |
 | `network` | — | exact match |
-| `order` | `asc` | accepted but **not applied** — results are always id ascending |
+| `include` | — | relations to include; `activity` adds `eventCount`, `transferCount`, and `lastEventAt` |
+| `order` | `asc` | `asc` or `desc` |
 
 **200:** `{ "data": Contract[], "nextCursor": number | null }`
+
+When `?include=activity` is specified, each item in `data` includes an activity summary:
+
+```json
+{
+  "id": 7,
+  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4",
+  "name": "My Token",
+  "network": "testnet",
+  "decimals": 7,
+  "symbol": "TOKEN",
+  "eventCount": 42,
+  "transferCount": 18,
+  "lastEventAt": "2026-11-22T10:00:00.000Z"
+}
+```
 
 ### `GET /contracts/:id`
 

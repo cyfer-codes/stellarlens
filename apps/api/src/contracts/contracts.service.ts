@@ -1,6 +1,6 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { and, asc, eq, gt, ilike, inArray, max } from "drizzle-orm";
-import { contracts, events, indexerCheckpoints, isStellarNetwork, STELLAR_NETWORKS, type Database } from "@stellarlens/db";
+import { and, asc, count, desc, eq, gt, ilike, inArray, lt, max } from "drizzle-orm";
+import { contracts, events, tokenTransfers, indexerCheckpoints, isStellarNetwork, STELLAR_NETWORKS, type Database } from "@stellarlens/db";
 import { DATABASE } from "../database/database.module";
 import {
   BulkCreateContractsDto,
@@ -196,9 +196,10 @@ export class ContractsService {
 
   async findAll(query: FindContractsQueryDto = new FindContractsQueryDto()) {
     const conditions = [];
+    const isDesc = query.order === "desc";
 
     if (query.cursor !== undefined) {
-      conditions.push(gt(contracts.id, query.cursor));
+      conditions.push(isDesc ? lt(contracts.id, query.cursor) : gt(contracts.id, query.cursor));
     }
     if (query.name) {
       conditions.push(ilike(contracts.name, `%${query.name}%`));
@@ -211,12 +212,70 @@ export class ContractsService {
       .select()
       .from(contracts)
       .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(asc(contracts.id))
+      .orderBy(isDesc ? desc(contracts.id) : asc(contracts.id))
       .limit(query.limit + 1);
 
     const hasMore = rows.length > query.limit;
-    const data = hasMore ? rows.slice(0, query.limit) : rows;
-    const nextCursor = hasMore ? data[data.length - 1].id : null;
+    const pageRows = hasMore ? rows.slice(0, query.limit) : rows;
+    const nextCursor = hasMore ? pageRows[pageRows.length - 1].id : null;
+
+    const includes = query.include
+      ? query.include.toLowerCase().split(",").map((s) => s.trim())
+      : [];
+    const includeActivity = includes.includes("activity");
+
+    if (!includeActivity || pageRows.length === 0) {
+      return { data: pageRows, nextCursor };
+    }
+
+    const contractIds = pageRows.map((r) => r.id);
+
+    const [eventStats, transferStats] = await Promise.all([
+      this.db
+        .select({
+          contractId: events.contractId,
+          eventCount: count(events.id),
+          lastEventAt: max(events.ledgerClosedAt)
+        })
+        .from(events)
+        .where(inArray(events.contractId, contractIds))
+        .groupBy(events.contractId),
+      this.db
+        .select({
+          contractId: tokenTransfers.contractId,
+          transferCount: count(tokenTransfers.id)
+        })
+        .from(tokenTransfers)
+        .where(inArray(tokenTransfers.contractId, contractIds))
+        .groupBy(tokenTransfers.contractId)
+    ]);
+
+    const eventStatsMap = new Map(
+      eventStats.map((stat) => [
+        stat.contractId,
+        {
+          eventCount: Number(stat.eventCount),
+          lastEventAt: stat.lastEventAt ? new Date(stat.lastEventAt).toISOString() : null
+        }
+      ])
+    );
+
+    const transferStatsMap = new Map(
+      transferStats.map((stat) => [
+        stat.contractId,
+        Number(stat.transferCount)
+      ])
+    );
+
+    const data = pageRows.map((contract) => {
+      const eventInfo = eventStatsMap.get(contract.id);
+      return {
+        ...contract,
+        eventCount: eventInfo?.eventCount ?? 0,
+        transferCount: transferStatsMap.get(contract.id) ?? 0,
+        lastEventAt: eventInfo?.lastEventAt ?? null
+      };
+    });
 
     return { data, nextCursor };
   }

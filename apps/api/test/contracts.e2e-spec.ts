@@ -1,5 +1,5 @@
 import request from "supertest";
-import { indexerCheckpoints } from "@stellarlens/db";
+import { events, indexerCheckpoints, tokenTransfers } from "@stellarlens/db";
 import { beforeEach, describe, expect, it } from "vitest";
 import { contractAddress, createApiKey } from "./helpers";
 import { getApp, getTestDb } from "./setup";
@@ -424,6 +424,138 @@ describe("contracts (e2e)", () => {
         .send({ address: contractAddress("VALIDATION_ACCEPT_C"), network: "testnet" });
 
       expect(response.status).toBe(201);
+    });
+  });
+
+  describe("activity summary (?include=activity)", () => {
+    it("includes eventCount, transferCount, and lastEventAt when include=activity is specified", async () => {
+      const db = getTestDb();
+      const resA = await request(getApp().getHttpServer())
+        .post("/contracts")
+        .set("x-api-key", apiKey)
+        .send({ address: contractAddress("ACT_CONTRACT_A"), network: "testnet", name: "Contract A" });
+      const contractAId = resA.body.id as number;
+
+      const resB = await request(getApp().getHttpServer())
+        .post("/contracts")
+        .set("x-api-key", apiKey)
+        .send({ address: contractAddress("ACT_CONTRACT_B"), network: "testnet", name: "Contract B" });
+      const contractBId = resB.body.id as number;
+
+      const date1 = new Date("2026-11-20T10:00:00.000Z");
+      const date2 = new Date("2026-11-21T12:00:00.000Z");
+
+      await db.insert(events).values([
+        {
+          contractId: contractAId,
+          ledger: 100,
+          txHash: "a".repeat(64),
+          topic: JSON.stringify(["event1"]),
+          ledgerClosedAt: date1
+        },
+        {
+          contractId: contractAId,
+          ledger: 200,
+          txHash: "b".repeat(64),
+          topic: JSON.stringify(["event2"]),
+          ledgerClosedAt: date2
+        }
+      ]);
+
+      await db.insert(tokenTransfers).values({
+        contractId: contractAId,
+        from: "GBXGQJW4C5YDJVRUM26H7RNNVJ2ZRPJYWD6AZKLHSMT2UKZ35RXZWLTK",
+        to: "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+        amount: "5000000",
+        asset: "TEST",
+        txHash: "c".repeat(64),
+        ledger: 200,
+        ledgerClosedAt: date2
+      });
+
+      const response = await request(getApp().getHttpServer())
+        .get("/contracts?include=activity")
+        .set("x-api-key", apiKey);
+
+      expect(response.status).toBe(200);
+      const rowA = response.body.data.find((c: { id: number }) => c.id === contractAId);
+      const rowB = response.body.data.find((c: { id: number }) => c.id === contractBId);
+
+      expect(rowA).toBeDefined();
+      expect(rowA.eventCount).toBe(2);
+      expect(rowA.transferCount).toBe(1);
+      expect(rowA.lastEventAt).toBe(date2.toISOString());
+
+      expect(rowB).toBeDefined();
+      expect(rowB.eventCount).toBe(0);
+      expect(rowB.transferCount).toBe(0);
+      expect(rowB.lastEventAt).toBeNull();
+    });
+
+    it("omits activity fields when include=activity is not passed", async () => {
+      const res = await request(getApp().getHttpServer())
+        .post("/contracts")
+        .set("x-api-key", apiKey)
+        .send({ address: contractAddress("ACT_NO_INCLUDE"), network: "testnet" });
+
+      const response = await request(getApp().getHttpServer())
+        .get("/contracts")
+        .set("x-api-key", apiKey);
+
+      expect(response.status).toBe(200);
+      const row = response.body.data.find((c: { id: number }) => c.id === res.body.id);
+      expect(row).toBeDefined();
+      expect(row.eventCount).toBeUndefined();
+      expect(row.transferCount).toBeUndefined();
+      expect(row.lastEventAt).toBeUndefined();
+    });
+
+    it("preserves activity fields with pagination and filters", async () => {
+      const db = getTestDb();
+      for (let i = 1; i <= 3; i++) {
+        const res = await request(getApp().getHttpServer())
+          .post("/contracts")
+          .set("x-api-key", apiKey)
+          .send({ address: contractAddress(`ACT_PAGE_${i}`), network: i === 3 ? "mainnet" : "testnet", name: `Token ${i}` });
+        const cId = res.body.id as number;
+
+        await db.insert(events).values({
+          contractId: cId,
+          ledger: 1000 + i,
+          txHash: i.toString().repeat(64).slice(0, 64),
+          topic: JSON.stringify(["page_event"]),
+          ledgerClosedAt: new Date(`2026-11-2${i}T00:00:00.000Z`)
+        });
+      }
+
+      // Filter by network
+      const filtered = await request(getApp().getHttpServer())
+        .get("/contracts?network=testnet&include=activity")
+        .set("x-api-key", apiKey);
+      expect(filtered.status).toBe(200);
+      expect(filtered.body.data).toHaveLength(2);
+      for (const row of filtered.body.data) {
+        expect(row.eventCount).toBe(1);
+        expect(row.transferCount).toBe(0);
+        expect(row.lastEventAt).toBeDefined();
+      }
+
+      // Pagination with limit=1
+      const page1 = await request(getApp().getHttpServer())
+        .get("/contracts?network=testnet&include=activity&limit=1")
+        .set("x-api-key", apiKey);
+      expect(page1.status).toBe(200);
+      expect(page1.body.data).toHaveLength(1);
+      expect(page1.body.data[0].eventCount).toBe(1);
+      expect(page1.body.nextCursor).toBeDefined();
+
+      const page2 = await request(getApp().getHttpServer())
+        .get(`/contracts?network=testnet&include=activity&limit=1&cursor=${page1.body.nextCursor}`)
+        .set("x-api-key", apiKey);
+      expect(page2.status).toBe(200);
+      expect(page2.body.data).toHaveLength(1);
+      expect(page2.body.data[0].eventCount).toBe(1);
+      expect(page2.body.data[0].id).not.toBe(page1.body.data[0].id);
     });
   });
 });
