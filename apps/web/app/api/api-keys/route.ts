@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateApiKey, listApiKeys } from "@/lib/apiKeys";
+import { generateApiKey, listApiKeys, type ApiKeyScope } from "@/lib/apiKeys";
 
 export async function GET() {
   try {
@@ -13,8 +13,16 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json().catch(() => ({}))) as { name?: string };
-    const created = await generateApiKey(body.name);
+    const body = (await request.json().catch(() => ({}))) as {
+      name?: string;
+      scope?: ApiKeyScope;
+      expiresAt?: string | null;
+    };
+    const created = await generateApiKey({
+      name: body.name,
+      scope: body.scope,
+      expiresAt: body.expiresAt
+    });
     return NextResponse.json(created, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
