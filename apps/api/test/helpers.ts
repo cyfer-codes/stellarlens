@@ -2,11 +2,23 @@ import { createHash, randomBytes } from "node:crypto";
 import { StrKey } from "@stellar/stellar-sdk";
 import { apiKeys, type ApiKeyScope, type Database } from "@stellarlens/db";
 
-export async function createApiKey(db: Database, options: { scope?: ApiKeyScope } = {}): Promise<string> {
+export async function createApiKey(
+  db: Database,
+  options: { scope?: ApiKeyScope; rateLimitPerMinute?: number } = {}
+): Promise<string & { id: number }> {
   const rawKey = randomBytes(24).toString("hex");
   const keyHash = createHash("sha256").update(rawKey).digest("hex");
-  await db.insert(apiKeys).values({ keyHash, scope: options.scope ?? "full" });
-  return rawKey;
+  const [created] = await db
+    .insert(apiKeys)
+    .values({
+      keyHash,
+      scope: options.scope ?? "full",
+      rateLimitPerMinute: options.rateLimitPerMinute
+    })
+    .returning({ id: apiKeys.id });
+  const keyObj = new String(rawKey);
+  (keyObj as unknown as { id: number }).id = created.id;
+  return keyObj as unknown as string & { id: number };
 }
 
 /**

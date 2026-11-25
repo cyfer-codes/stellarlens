@@ -33,7 +33,8 @@ x-api-key: <key>
 
 **Rate limiting:** 100 requests/minute by default, counted per API key (or per client IP for the
 public health routes). A key's `rateLimitPerMinute` overrides the default. Exceeding it returns
-**429** with a `Retry-After` header (seconds).
+**429** with a `Retry-After` header (seconds). When `REDIS_URL` is configured, rate limits are
+backed by Redis storage across all API instances; otherwise storage falls back to in-memory.
 
 ## Errors
 
