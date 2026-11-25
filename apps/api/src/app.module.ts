@@ -1,6 +1,8 @@
 import { Module } from "@nestjs/common";
-import { APP_FILTER } from "@nestjs/core";
+import { APP_FILTER, APP_INTERCEPTOR } from "@nestjs/core";
 import { ApiKeysModule } from "./api-keys/api-keys.module";
+import { AuditLogInterceptor } from "./audit-log/audit-log.interceptor";
+import { AuditLogModule } from "./audit-log/audit-log.module";
 import { AuthModule } from "./auth/auth.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { ContractsModule } from "./contracts/contracts.module";
@@ -17,6 +19,7 @@ import { WebhooksModule } from "./webhooks/webhooks.module";
     DatabaseModule,
     AuthModule,
     ApiKeysModule,
+    AuditLogModule,
     ContractsModule,
     EventsModule,
     TransfersModule,
@@ -28,6 +31,10 @@ import { WebhooksModule } from "./webhooks/webhooks.module";
     {
       provide: APP_FILTER,
       useClass: AllExceptionsFilter
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditLogInterceptor
     }
   ]
 })
