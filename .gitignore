@@ -35,3 +35,7 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.cache/
+
+# test snapshots
+**/__snapshots__/
+*.snap

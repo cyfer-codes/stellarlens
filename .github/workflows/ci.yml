@@ -56,6 +56,9 @@ jobs:
 
       - run: pnpm build
 
+      - name: Smoke-test the built CLI binary
+        run: node packages/cli/dist/index.js --version && node packages/cli/dist/index.js --help
+
       # Includes the CLI end-to-end suite (packages/cli/test/e2e), which boots the built api against a
       # throwaway database on the postgres service above and drives the built CLI binary.
       # The service container is a fresh, empty database: apply every migration exactly as a
