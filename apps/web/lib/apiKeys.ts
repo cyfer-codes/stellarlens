@@ -1,10 +1,14 @@
 import { createHash, randomBytes } from "node:crypto";
 import { desc, eq } from "drizzle-orm";
-import { apiKeys, getDb } from "@stellarlens/db";
+import { apiKeys, getDb, type ApiKeyScope } from "@stellarlens/db";
+
+export type { ApiKeyScope };
 
 export interface ApiKeyRow {
   id: number;
   name: string | null;
+  scope: ApiKeyScope;
+  expiresAt: string | null;
   createdAt: string;
   revokedAt: string | null;
 }
@@ -13,12 +17,20 @@ export interface GeneratedApiKey extends ApiKeyRow {
   key: string;
 }
 
+export interface GenerateApiKeyOptions {
+  name?: string | null;
+  scope?: ApiKeyScope;
+  expiresAt?: string | Date | null;
+}
+
 export async function listApiKeys(): Promise<ApiKeyRow[]> {
   const db = getDb();
   const rows = await db
     .select({
       id: apiKeys.id,
       name: apiKeys.name,
+      scope: apiKeys.scope,
+      expiresAt: apiKeys.expiresAt,
       createdAt: apiKeys.createdAt,
       revokedAt: apiKeys.revokedAt
     })
@@ -27,22 +39,65 @@ export async function listApiKeys(): Promise<ApiKeyRow[]> {
 
   return rows.map((row) => ({
     ...row,
+    scope: (row.scope as ApiKeyScope) ?? "full",
+    expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
     createdAt: row.createdAt.toISOString(),
     revokedAt: row.revokedAt ? row.revokedAt.toISOString() : null
   }));
 }
 
-export async function generateApiKey(name?: string): Promise<GeneratedApiKey> {
+export async function generateApiKey(
+  nameOrOptions?: string | GenerateApiKeyOptions,
+  legacyScope?: ApiKeyScope,
+  legacyExpiresAt?: string | Date | null
+): Promise<GeneratedApiKey> {
   const db = getDb();
   const rawKey = randomBytes(24).toString("hex");
   const keyHash = createHash("sha256").update(rawKey).digest("hex");
 
+  let name: string | null = null;
+  let scope: ApiKeyScope = "full";
+  let expiresAt: Date | null = null;
+
+  if (typeof nameOrOptions === "object" && nameOrOptions !== null) {
+    name = nameOrOptions.name ?? null;
+    scope = nameOrOptions.scope ?? "full";
+    if (nameOrOptions.expiresAt) {
+      expiresAt = new Date(nameOrOptions.expiresAt);
+    }
+  } else {
+    name = nameOrOptions ?? null;
+    scope = legacyScope ?? "full";
+    if (legacyExpiresAt) {
+      expiresAt = new Date(legacyExpiresAt);
+    }
+  }
+
   const [created] = await db
     .insert(apiKeys)
-    .values({ keyHash, name: name ?? null })
-    .returning({ id: apiKeys.id, name: apiKeys.name, createdAt: apiKeys.createdAt });
+    .values({
+      keyHash,
+      name,
+      scope,
+      expiresAt
+    })
+    .returning({
+      id: apiKeys.id,
+      name: apiKeys.name,
+      scope: apiKeys.scope,
+      expiresAt: apiKeys.expiresAt,
+      createdAt: apiKeys.createdAt
+    });
 
-  return { ...created, createdAt: created.createdAt.toISOString(), revokedAt: null, key: rawKey };
+  return {
+    id: created.id,
+    name: created.name,
+    scope: (created.scope as ApiKeyScope) ?? "full",
+    expiresAt: created.expiresAt ? created.expiresAt.toISOString() : null,
+    createdAt: created.createdAt.toISOString(),
+    revokedAt: null,
+    key: rawKey
+  };
 }
 
 /** Returns false if no key with that id exists; otherwise revokes (idempotently) and returns true. */
