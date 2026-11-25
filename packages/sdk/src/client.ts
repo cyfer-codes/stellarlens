@@ -1,5 +1,6 @@
 import { StellarLensApiError, StellarLensHookError, StellarLensTimeoutError } from "./errors.js";
 import type {
+  ApiKey,
   BulkRegisterContractItem,
   BulkRegisterContractsResponse,
   Contract,
@@ -557,5 +558,18 @@ export class StellarLensClient {
   /** Deletes a webhook from a contract. Resolves once the api confirms (`204 No Content`). */
   removeWebhook(contractId: number, id: number): Promise<void> {
     return this.request<void>(`/contracts/${contractId}/webhooks/${id}`, { method: "DELETE" });
+  }
+
+  /** Lists every api key (`GET /api-keys`). The raw key value is never returned, only its metadata. */
+  listApiKeys(options?: RequestOptions): Promise<ApiKey[]> {
+    return this.request<ApiKey[]>("/api-keys", undefined, options);
+  }
+
+  /**
+   * Revokes an api key (`DELETE /api-keys/:id`). Resolves once the api answers `204 No Content`;
+   * idempotent, so revoking an already-revoked key succeeds.
+   */
+  revokeApiKey(id: number, options?: RequestOptions): Promise<void> {
+    return this.request<void>(`/api-keys/${id}`, { method: "DELETE" }, options);
   }
 }
